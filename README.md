@@ -46,6 +46,7 @@
 - [Windows 与 macOS 兼容要求](docs/COMPATIBILITY.md)
 - [专注安全、隐私与责任边界](docs/SAFETY_AND_PRIVACY.md)
 - [版本规划与验收](docs/ROADMAP.md)
+- [下一阶段工作流程与协作约定](docs/PROJECT_WORKFLOW.md)
 - [已确定决策及待决定事项](docs/DECISIONS.md)
 - [参与贡献](CONTRIBUTING.md)
 - [漏洞披露说明](SECURITY.md)
