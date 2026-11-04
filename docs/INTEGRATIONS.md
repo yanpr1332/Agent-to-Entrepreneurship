@@ -1,5 +1,7 @@
 # 外部平台接入与权限
 
+**范围基准**：[PRD V1.0](PRD.md)。首版 P0 要求交大 Canvas、教务与邮箱真实接入，并支持 Google Calendar、Microsoft Outlook 日历和 Notion 指定页面/数据库的合法授权读取与同步。Gmail/Outlook 专用邮件接入及复杂第三方双向写入为 P1。存在公开接口文档不表示已经获取开发者授权或完成实现。
+
 ## 上海交通大学 Canvas
 
 - 目标：课程列表、作业及截止时间、日历事件、公告、可访问的课程文件。
@@ -22,17 +24,33 @@
 
 申请与认证：https://developer.sjtu.edu.cn/api/overview.html
 
-## 通用日历
+## Google Calendar 与 Microsoft Outlook 日历（P0）
 
-- 先支持 ICS 导入/订阅及手工维护。
-- 后续根据真实需求评估第三方日历的 OAuth 双向同步。
-- 保留原始时区与重复规则，处理学期周次和例外日期。
+- Google Calendar：使用 Google OAuth 授权与 Calendar API 读取、同步事件；按最小权限申请，考虑公开应用验证；不在首版直接修改外部日程。
+- Microsoft Outlook Calendar：使用 Microsoft identity 和 Microsoft Graph 日历权限，以个人账号及实际获许可的学校/组织账号验证；组织管理员阻止授权时明确告知。
+- 均须保留来源 ID、原始时区、重复规则、增量同步游标、变更与删除标记、错误及重试状态。
+- ICS/CSV/Markdown 等开放格式支持预览、导入导出与去重；外部双向日历编辑列 P1。
+
+官方参考：
+
+- Google Calendar：https://developers.google.com/workspace/calendar/api/auth
+- Microsoft Graph：https://learn.microsoft.com/en-us/graph/api/user-list-events?view=graph-rest-1.0
+
+## Notion（P0）
+
+- 采用公开 OAuth 集成，让用户选择可访问的页面和数据库/数据源；首版读取指定范围内的页面和任务信息、更新同步及权限撤销。
+- Notion 页面、数据库字段不一定等同于本软件任务字段；需要用户可查看的字段映射、缺失字段提示和重复项规则。
+- Notion Calendar 的桌面打开链接能力与 Notion 页面/数据库 API 不是同一种服务；不能据此承诺 Notion Calendar 全功能同步。
+- 复杂的 Notion 写入和双向冲突策略列为 P1；注意 API 版本和请求限流。
+
+官方参考：https://developers.notion.com/guides/authorization/overview
 
 ## 邮件连接器（邮件模块的底层适配）
 
 - **职责边界**：本节只规定邮箱协议、授权、同步和发送适配。邮件列表、分类、事项提取、AI 拟写、草稿和监督发送的业务与界面属于独立的“邮件管理与 AI 通信”模块，不归属于个人工作台。
 - **用户目标**：授权后从一个或多个邮箱获取邮件，将有行动价值的内容转成日历/待办建议；支持 AI 拟写及用户审核后的发送、回复和转发。
-- **优先适配方向**：常见支持官方 API 的邮箱（如 Gmail API、Microsoft Graph），以及经实际验证允许第三方访问的学校邮箱；对其他服务评估 IMAP/SMTP 或其官方接口。不得预设交大邮箱一定开放某种协议或授权方式。
+- **首版 P0 适配方向**：交大邮箱真实读/发、官方 Mail API 或经验证的 IMAP/SMTP（学校官方文档列有 mail.sjtu.edu.cn / IMAP 993 / SMTP 465）；合法授权及身份配置须实测，不能只凭文档假定用户已获访问权。
+- **P1 方向**：Gmail API、Microsoft Graph Mail 的专用 OAuth 收发；注意这不影响 P0 的 Google/Outlook **日历**接入。
 - **读取接口**：最小权限、用户选择的文件夹或过滤范围、增量同步、分页与限流、邮件 ID/线程 ID、发件人、日期、主题、正文、附件元数据及原文链接。
 - **写入接口**：创建/修改草稿、回复/回复全部/转发、发送；只有在明确启用写入能力并获得独立授权后才能调用。
 - **本地流程**：邮件 → 来源与线程关联 → 提取事项候选 → 冲突/重复检查 → 用户确认 → 任务或日历。草稿 → 用户修改 → 收件人/附件/正文确认 → 发送 → 结果核验。
@@ -45,6 +63,8 @@
 - Gmail 授权范围：https://developers.google.com/workspace/gmail/api/auth/scopes
 - Microsoft Graph 读取邮件：https://learn.microsoft.com/en-us/graph/api/user-list-messages?view=graph-rest-1.0
 - Microsoft Graph 发信：https://learn.microsoft.com/en-us/graph/api/user-sendmail?view=graph-rest-1.0
+- 上海交大邮箱服务器：https://net.sjtu.edu.cn/info/1191/2699.htm
+- 上海交大 Mail API：https://developer.sjtu.edu.cn/api/mail.html
 
 详细功能和验收见 [邮件工作流](EMAIL_WORKFLOW.md)。
 
@@ -58,7 +78,7 @@
 
 ## 本地录音转写
 
-- FFmpeg + Whisper/FunASR 等作为候选处理组件；提供只转写不上传的本地模式，以及经用户同意的云端处理模式。
+- **首版 P0**：FFmpeg + Whisper/FunASR 等作为候选处理组件；提供只转写不上传的本地模式，以及经用户同意的云端处理模式。
 - Windows 和 macOS 分别构建/测试；不能要求用户安装 WSL。
 - 确认课堂录音、公开传播和第三方模型/云服务的权限与隐私风险。
 
@@ -69,3 +89,5 @@
 3. 记录错误码、限流、分页、失效令牌、断网及数据更新情况。
 4. 提供用户可理解的授权撤销和手工导入后备路径。
 5. 对邮件发送权限独立审查；执行发信前确认目标收件人、当前账号、附件以及草稿全文。
+6. Google/Outlook 日历与 Notion 分别测试真实 OAuth 授权、范围撤销、同步去重和账号类型差异；文档有接口不能替代真实验收。
+7. 所有连接器的数据读取权和 AI 外传权分别确认，不能把第三方授权当作云 AI 处理许可。
