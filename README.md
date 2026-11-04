@@ -50,7 +50,7 @@
 
 ## 开源许可证
 
-本项目计划采用 [Mozilla Public License 2.0 (MPL-2.0)](https://www.mozilla.org/en-US/MPL/2.0/)。正式仓库应在根目录加入**未经修改的官方 LICENSE 全文**。本 README 中的说明不能替代 LICENSE。
+本项目采用 [Mozilla Public License 2.0 (MPL-2.0)](https://www.mozilla.org/en-US/MPL/2.0/)。仓库根目录的 [`LICENSE`](LICENSE) 是正式的官方许可文本；本 README 中的说明不能替代 LICENSE。
 
 开源许可证包含标准的无担保及责任限制条款，但并不等于用户使用协议，也不能免除法律规定不得排除的责任。实际发布前须提供清晰的风险提示、必要的安全控制与隐私政策。
 
