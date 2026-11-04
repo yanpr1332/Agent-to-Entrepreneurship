@@ -22,8 +22,8 @@
 | 专注与自律 | 专注计时、允许列表、应用/网站限制、积分与反馈 | MVP 基础、后续增强 |
 | 小组协作 | 共享任务、认领、进度、文件、会议、沟通、角色权限 | 第二阶段 |
 | AI 辅助规划 | 工作量估算、空闲时段安排、动态重排、复习规划 | MVP 规则版、后续 AI |
-| 数据接入与扩展 | Canvas、交大开放 API、ICS、自动化、插件 | MVP 基础、后续扩展 |
-| 个人工作台 | 今日总览、统一收件箱、每日简报、每周复盘 | MVP |
+| 数据接入与扩展 | Canvas、交大开放 API、ICS、邮箱连接器、自动化、插件 | MVP 基础、后续扩展 |
+| 个人工作台 | 今日总览、统一收件箱（含邮件待处理事项）、每日简报、每周复盘 | MVP |
 
 详细内容见 [产品需求](docs/PRD.md)。
 
@@ -41,6 +41,7 @@
 - [完整产品需求 PRD](docs/PRD.md)
 - [技术架构与数据模型](docs/ARCHITECTURE.md)
 - [外部平台集成与授权](docs/INTEGRATIONS.md)
+- [邮件接入、事项提取、拟写与监督发送](docs/EMAIL_WORKFLOW.md)
 - [Windows 与 macOS 兼容要求](docs/COMPATIBILITY.md)
 - [专注安全、隐私与责任边界](docs/SAFETY_AND_PRIVACY.md)
 - [版本规划与验收](docs/ROADMAP.md)
