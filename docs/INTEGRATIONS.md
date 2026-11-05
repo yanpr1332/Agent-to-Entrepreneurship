@@ -1,5 +1,7 @@
 # 外部平台接入与权限
 
+> W2 UI/UX 补充：统一接入控制台的页面层级、授权状态、出错恢复及逐文件同步操作见 [W2 页面清单](ui-ux/01_IA_AND_PAGES.md)、[F02/F08 用户旅程](ui-ux/03_MODULE_JOURNEYS.md) 与 [统一状态](ui-ux/04_STATES_AND_PERMISSIONS.md)。本文件中的 API/服务可行性说明仍须 W3 实测，不能以模拟原型代替 P0 真实连接。
+
 **范围基准**：[PRD V1.0](PRD.md)。首版 P0 要求交大 Canvas、教务与邮箱真实接入，并支持 Google Calendar、Microsoft Outlook 日历和 Notion 指定页面/数据库的合法授权读取与同步。Gmail/Outlook 专用邮件接入及复杂第三方双向写入为 P1。存在公开接口文档不表示已经获取开发者授权或完成实现。
 
 ## 上海交通大学 Canvas
