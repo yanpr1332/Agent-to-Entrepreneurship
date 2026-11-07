@@ -96,3 +96,31 @@
 
 ## W3 Connector Engine 补充
 2026-11-07 W3-4 采用 **统一 Connector Engine + 内置适配器**，独立管理 OAuth/凭据、限流、增量游标、版本、外部 ID、断开和错误状态；由日程/知识/邮件模块负责领域行为。详见 [连接器架构](architecture/06_CONNECTOR_ARCHITECTURE.md)。Canvas、教务、交大邮箱、Google/Outlook 日历、Notion 及开放格式按原 PRD 保持 P0；Gmail/Outlook 专用邮箱维持 P1。邮件草稿与最终确认分离，发送超时结果未知时不盲重试。存在 API 文档不等于真实授权，更不代表普通用户可公开接入。
+
+
+## W4 V0.1 连接器实施决策（2026-11-07）
+
+### Canvas：可配置实例 + 两类认证 Provider
+- 用户可以配置 Canvas 实例 URL；连接器校验 HTTPS、主机和重定向，防止把 Token 发送到不可信域名。
+- 同时设计 Personal Token Provider 和 OAuth Provider。
+- **个人 Token 只允许开发者本人在本机做开发验证**；不得共享给其他团队成员、不得上传 Supabase、不得提交 GitHub、不得进入 AI 上下文或普通日志。
+- 五人多用户授权目标采用 OAuth。联系老师/Canvas 管理员申请 Developer Key、确认只读 Scope 和 Redirect URI 是最高优先级并行任务。
+- 首版真实读取课程、作业、截止时间；如权限允许，读取日历事件。保留外部 ID、来源 URL、远端更新时间和同步游标。
+- 作业映射到 M1 时，远端字段与用户个人备注/完成状态分离；重复同步不得重复创建。
+- 未取得 Developer Key 时，可用开发者本人 Token 做真实单人验证，但 OAuth/多用户接入必须标记未通过/阻塞，不能宣称五人 Canvas 授权完成。
+
+Canvas 参考：
+- https://oc.sjtu.edu.cn/doc/api/index.html
+- https://canvas.instructure.com/doc/api/
+
+### 邮箱：通用 IMAP/SMTP，优先交大邮箱
+- 用户可配置 IMAP/SMTP 主机、端口、TLS/SSL 模式、用户名及服务商允许的认证凭据。
+- 优先使用获准的上海交通大学邮箱测试账户验证真实收件和发送。
+- 官方公开配置参考：mail.sjtu.edu.cn；IMAP 993；SMTP 465。实际认证方式、第三方客户端访问权限、应用专用凭据和发送限制必须通过真实账户验证。
+- 凭据保存在 Windows Credential Manager/macOS Keychain 等系统安全存储；不放普通数据库、云端共享空间、GitHub 或模型提示词。
+- 邮件读取、AI 分析、草稿编辑、真实发送分别处理权限；真实发送逐次确认。
+- 邮件正文默认不进入团队共享空间；AI 云端分析需要独立外传授权。
+- 发送超时状态未知时先核验远端，不自动盲目重发。
+
+### 云端验证
+采用 W4-DEC-03 方案 C：先验证五人独立账号、Workspace、RLS、Realtime 和断网恢复，再决定是否使用 Supabase。Service Role Key 不得进入桌面应用。ICS 是开放格式导入/导出能力，不能冒充 Canvas、Google 或 Outlook API 真实接入。

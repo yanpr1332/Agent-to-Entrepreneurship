@@ -33,3 +33,14 @@ Mock 不能作为真实连接器通过的证据；Windows 测试不能替代 mac
 
 ## 正式发布门禁
 内部测试包必须明确标识；正式 Windows 安装包需满足适用签名与安装测试；macOS 需签名及适用公证，验证发布渠道和更新安全。证书、费用、目标 OS/芯片矩阵目前未落实，不能宣称稳定版发布。MPL-2.0 不变，维护 LICENSE、SECURITY、CONTRIBUTING、AGENTS、架构和决策文件。本归档仅文档，W4 排期与 W5 代码分别获批。
+
+
+## W4 团队开发与 Alpha 交付补充（2026-11-07）
+
+- 团队五人均为学生，按责任域和可用时间动态认领任务，不建立永久人岗映射。
+- 每个 Task 在 Issue 中记录临时 Driver、Reviewer、允许修改路径、依赖、验收步骤和证据。
+- 并行 Agent 仅处理接口已确定且文件范围不冲突的任务；公共 Schema、权限、数据库迁移和 Connector Engine 核心文件须单一 Driver。
+- 日常变更经独立分支和 PR 进入 main；PR 至少一名非作者审查。
+- main 分支保护建议见 docs/w4/08_GITHUB_GOVERNANCE.md。当前是否已启用需仓库管理员在 GitHub Settings 核验；CI 检查尚未配置前不要要求不存在的必需状态检查。
+- 2026-11-25 目标为 Windows/macOS 内部 Alpha，不是应用商店发布。Canvas 真实读取和交大邮箱真实收发是明确验收项；Supabase 先验证后选用。
+- 本次 W4 文档归档不初始化应用代码、CI、依赖或云端项目；W5 仍需单独授权。
