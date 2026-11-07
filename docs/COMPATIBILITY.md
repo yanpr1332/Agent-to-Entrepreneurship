@@ -48,3 +48,6 @@ Apple 的 App Sandbox 和文件权限会限制第三方应用的访问范围。�
 W2 已确定统一混合工作空间布局、个人/团队/AI 项目切换和通用操作流程（详见 [页面架构](ui-ux/01_IA_AND_PAGES.md) 与 [交互状态](ui-ux/04_STATES_AND_PERMISSIONS.md)）。Windows 使用 `Ctrl+K`，macOS 使用 `⌘K`；通知区域与菜单栏分别适配原生习惯，缺权限时仍保留主应用操作入口。拖拽调整工作台组件需有键盘替代，浅色/深色主题、系统缩放和文本对比度不能因 OS 差异丢失。
 
 用户在 Windows 为某 AI Project 授权 `D:\课程资料` **不等于** Mac 自动获得某路径的文件夹权限；跨设备只转移允许同步的元数据/原件，Mac 上使用前重新绑定对应本地目录。严格自律的可用操作、白名单、紧急退出及降级信息须分别按 OS 实际能力显示；HTML 原型不代替真机验收。
+
+## W3 Electron 与原生系统适配
+现选框架是 **Electron + React + TypeScript**；Rust 在必要的系统或性能功能中按需引入。见 [总体运行时](architecture/01_SYSTEM_OVERVIEW.md) 和 [Windows/macOS 能力矩阵](architecture/08_SYSTEM_ADAPTERS.md)。普通/增强专注必须保持退出及崩溃、重启、撤权后的安全恢复，不能承诺不可绕过的锁闭；监测应用并不等于强制阻断。Electron 的安全 IPC、后台资源和依赖更新为 P0；最低 macOS、Intel/Apple Silicon、Windows ARM64 支持范围尚待 W4 实测。另一 OS 或 W2 模拟原型的通过不能替代本平台真机验收。

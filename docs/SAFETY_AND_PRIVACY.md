@@ -65,3 +65,6 @@ W2 已将这些原则落实为**可验收的界面动作和恢复状态**，参�
 ## 安全发布门槛
 
 严格模式、安全权限、账号令牌、共享授权等未通过测试时，不得在正式版中启用相应功能。应制定漏洞报告和应急响应机制，见仓库根目录 `SECURITY.md`。
+
+## W3 五维权限与数据生命周期补强
+W3 集中审阅确认五维独立授权：本地文件访问、AI 项目读取、云端模型/远程嵌入/ASR 外传、云端同步、团队共享；写入/删除/发信及系统干预还需独立动作许可。OCR、摘要、切片、向量及图谱是可能含私密信息的衍生数据，应继承来源范围并在撤权后过滤/失效。Electron renderer 不开放任意 Node 或系统能力，Preload/IPC 依据 Schema 与发送者校验。团队成员撤权服务端立即拒绝新访问；离线已保存的副本不能承诺远程销毁。用户明确确认发信及专注安全恢复都是 P0 发布阻塞条件。详见 [安全模型](architecture/05_SECURITY_AND_PERMISSIONS.md)、[同步](architecture/09_SYNC_AND_COLLABORATION.md) 与 [风险](architecture/11_RISKS_AND_OPEN_QUESTIONS.md)。

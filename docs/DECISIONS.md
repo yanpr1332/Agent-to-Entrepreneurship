@@ -75,3 +75,18 @@
 - [原型走查与待验收](ui-ux/05_W2_ACCEPTANCE.md)
 
 W2 的方向获认可，不代表 W3 技术实现或 W5 编码得到批准；本轮写库仅限用户明确要求的 W2 文档、HTML 原型及相关索引更新。后续仓库写操作仍须另行获得许可。
+## W3 技术架构决策（2026-11-07）
+
+| 阶段 | 方案与已确定内容 |
+|---|---|
+| W3-1 | **B**：Electron+React+TypeScript；Rust 按需；后台资源控制与依赖升级 P0；关窗驻留/仅必要后台/完全退出 |
+| W3-2 | **C**：SQLite Local-first + 独立可替换同步层，原件逐文件选择 |
+| W3-3 | **B**：模块化单体、最小公共核心、Task 单一权威、公开接口/领域事件、图谱证据及审核可扩展 |
+| W3-4 | **B**：统一 Connector Engine + 内置适配器；真实合法授权，AI 分权，发信确认 |
+| W3-5 | **B**：本地/云模型混合、统一 AI Runtime、混合检索、知识图谱、跨文档证据、自动复习 P0 |
+| W3-6 | **B**：分级专注、Win/Mac 原生能力、安全退出/故障恢复 |
+| W3-7 | **B**：本地操作队列、增量同步、业务冲突、服务端审核、权限撤销与逐文件策略 |
+| W3-8 | **B**：Monorepo、Electron 安全、分层测试、Win/Mac 构建、迁移、签名及资源预算 |
+| 集中审阅 | **B**：采纳 R01–R10、身份/敏感信息/资源三项横向约束，未决项仍需验证 |
+
+**W3 技术设计已归档**：[总览](architecture/README.md)、[ADR](architecture/02_TECH_STACK_AND_ADR.md)、[风险](architecture/11_RISKS_AND_OPEN_QUESTIONS.md)。本节覆盖早期“Tauri 2 候选”说明，不能宣称 Tauri 为现选框架。P0/P1 与 PRD V1.0 保持一致：交大邮箱真实收发 P0，Gmail/Outlook 专用邮箱 P1，Google/Outlook 日历 P0。W2 原型最终体验签收待完成，W4/W5 未授权启动，后续仓库修改仍需明确批准。

@@ -106,3 +106,6 @@
 - **P0 / 首版**：真实交大邮箱收发、独立邮件中心、增量同步、AI 摘要与分类、主动事项/回复建议、用户审核创建日历/任务、AI 拟写/润色/回复/转发、草稿保存、逐次人工确认发送与发送状态核验。
 - **P1 / 增强**：Gmail/Outlook 专用 OAuth 邮箱连接器、更丰富的分类规则与批量处理。
 - **P2 / 后续**：复杂跨项目邮件工作流及模板；仍禁止未经逐次确认的自动发信。
+
+## W3 邮件发送协议与首版边界
+首版必须真实支持交大邮箱收发；Gmail/Outlook 专用邮箱 OAuth 仍为 P1（区别于 P0 的 Google/Outlook **日历**）。`MailDraft` 记录可编辑草稿及版本，`MailSendAttempt` 记录该次用户确认的完整账号、收件人、主题、正文、附件和回复对象快照、operationId、远端结果证据。草稿/收件/附件关键变化需重新确认。SMTP/API 请求超时可能已经投递，状态为 unknown，先核验远端，不能依据本地 requestId 假设提供商支持幂等而自动重发。详见 [接口契约](architecture/04_MODULE_INTERFACES.md) 和 [邮件连接器](architecture/06_CONNECTOR_ARCHITECTURE.md)。

@@ -6,11 +6,11 @@
 
 | 层级 | 候选 | 目的 |
 | --- | --- | --- |
-| 桌面容器 | Tauri 2 | Windows/macOS 共用一套应用框架 |
+| 桌面容器 | **Electron（W3 已选）** | Windows/macOS 桌面运行，安全 IPC 与后台资源控制为 P0 |
 | 用户界面 | React + TypeScript | 页面、交互与共享状态 |
-| 本地原生与核心 | Rust | 系统适配、任务调度、文件/数据库操作 |
+| 本地原生与核心 | **TypeScript 主导，Rust 按需引入** | 系统适配和性能敏感工作经过验证后再选择 Rust |
 | 本地结构化数据 | SQLite | 离线任务、日历、索引元数据和同步队列 |
-| 服务端 API（选型待定） | FastAPI（候选） | 独立账号、跨设备云同步、团队协作与连接器支持 |
+| 服务端 API | 可替换云端 Adapter（Supabase 等成熟服务为候选） | 独立账号、云同步、团队协作，FastAPI 非已选定方案 |
 | 云数据库（选型待定） | PostgreSQL（候选） | 团队、成员、权限及同步数据 |
 | 文件 | 本地文件 + 对象存储 | 个人资料及授权共享的团队附件 |
 | 实时协作 | WebSocket | 消息、任务状态与在线更新 |
@@ -100,13 +100,18 @@ AI 可以使用用户自备 Key 和本地模型，项目方托管体验额度不
 统一仓库（monorepo）可在真正启动编码时使用：
 
 ```text
-apps/desktop/          Tauri + React 应用
+apps/desktop/          Electron + React 应用
 packages/core/         领域模型与共享逻辑
 packages/connectors/   学校、日历、笔记平台连接器
-crates/platform/       Windows/macOS 原生适配接口
+packages/system-adapters/  Windows/macOS 原生适配接口
 services/api/          可选云端 API
 services/workers/      可选文件解析与 ASR 任务
 docs/                  需求、架构、决策、安全与验收
 ```
 
 目录结构仅为建议，尚未初始化任何代码工程。
+## W3 正式架构索引（优先于上文旧候选）
+
+> 上文仍保留部分 W3 前的技术候选背景，**具体决策以 [W3 文档总览](architecture/README.md) 为准**，不能把旧 Tauri/Rust 候选表误读为当前方案。W3 于 2026-11-07 确认 Electron + React + TypeScript，Rust 按需；SQLite Local-first、可替换云端同步层；模块化单体与唯一 Task 权威；Connector Engine；混合 AI 与可追溯知识库；分级专注/安全退出；离线 Outbox/冲突解决；分层测试和安全发布门禁。
+
+详见 [数据模型](architecture/03_DATA_MODEL.md)、[模块接口](architecture/04_MODULE_INTERFACES.md)、[安全权限](architecture/05_SECURITY_AND_PERMISSIONS.md)、[风险清单](architecture/11_RISKS_AND_OPEN_QUESTIONS.md)。上述均为设计，不代表代码、真实授权或真机测试完成。

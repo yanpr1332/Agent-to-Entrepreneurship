@@ -93,3 +93,6 @@
 5. 对邮件发送权限独立审查；执行发信前确认目标收件人、当前账号、附件以及草稿全文。
 6. Google/Outlook 日历与 Notion 分别测试真实 OAuth 授权、范围撤销、同步去重和账号类型差异；文档有接口不能替代真实验收。
 7. 所有连接器的数据读取权和 AI 外传权分别确认，不能把第三方授权当作云 AI 处理许可。
+
+## W3 Connector Engine 补充
+2026-11-07 W3-4 采用 **统一 Connector Engine + 内置适配器**，独立管理 OAuth/凭据、限流、增量游标、版本、外部 ID、断开和错误状态；由日程/知识/邮件模块负责领域行为。详见 [连接器架构](architecture/06_CONNECTOR_ARCHITECTURE.md)。Canvas、教务、交大邮箱、Google/Outlook 日历、Notion 及开放格式按原 PRD 保持 P0；Gmail/Outlook 专用邮箱维持 P1。邮件草稿与最终确认分离，发送超时结果未知时不盲重试。存在 API 文档不等于真实授权，更不代表普通用户可公开接入。
