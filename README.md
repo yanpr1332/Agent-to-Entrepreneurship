@@ -11,7 +11,7 @@
 - **目标用户**：高校学生；首批试点为上海交通大学。
 - **首发平台**：Windows 桌面优先，macOS 从第一天参与适配、构建和测试；长期可扩展到 Web/移动端。
 - **设计理念**：本地优先、跨平台、开放数据格式、可解释的 AI 建议、用户掌握最终控制权。
-- **项目阶段**：PRD V1.0 需求审阅已完成；W2 混合工作空间布局、九项核心交互及集中审阅补充建议已确认方向，详细 UI/UX 设计和可点击 HTML 原型已归档，等待最终体验验收。W3 八项架构决策与集中审阅已确认并归档，下一步为 W4 开发计划；尚无可用软件发布版。
+- **项目阶段**：W1 PRD V1.0 已审阅归档；W2 UI/UX 与 HTML 原型已归档，最终体验签收仍待完成；W3 技术架构已归档；W4 开发计划已确认并进入独立 PR 审阅。当前目标为 2026-11-25 交付 Windows/macOS 内部 Alpha；W5 代码开发尚未启动或获批。
 
 ## 八大功能模块
 
@@ -64,6 +64,7 @@
 - [版本规划与验收](docs/ROADMAP.md)
 - [下一阶段工作流程与协作约定](docs/PROJECT_WORKFLOW.md)
 - [已确定决策及待决定事项](docs/DECISIONS.md)
+- [W4 开发计划、任务 Backlog 与验收体系](docs/w4/README.md)
 - [参与贡献](CONTRIBUTING.md)
 - [漏洞披露说明](SECURITY.md)
 
@@ -79,3 +80,8 @@ W1 PRD V1.0 已获审阅确认；W2 的页面架构、交互细节、补充建�
 ## W3 技术架构归档
 
 [W3 架构总览与十二份详细技术规范](docs/architecture/README.md) · [八项架构决策](docs/architecture/02_TECH_STACK_AND_ADR.md) · [风险与开放问题](docs/architecture/11_RISKS_AND_OPEN_QUESTIONS.md)。采用 Electron + React + TypeScript，Rust 按需；SQLite Local-first、独立同步层与模块化单体。**本次仅文档归档，不代表正式软件开发或真实接口验证。**
+
+
+## W4 内部 Alpha 开发计划（2026-11-07）
+
+W1 PRD V1.0 已获审阅确认；W2 页面架构、交互细节和 HTML 原型已归档，最终体验签收仍开放；W3 技术架构已归档；W4 开发计划、Alpha Backlog、五人灵活协作边界、AI 编程流程、测试验收、里程碑和外部依赖见 [W4 总览](docs/w4/README.md)。**P0 规划不代表功能已实现或已测试；本次 PR 仅归档 W4 规划文档，不启动 W5 代码开发。**
