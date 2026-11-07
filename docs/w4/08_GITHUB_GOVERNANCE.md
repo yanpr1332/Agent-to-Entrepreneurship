@@ -1,59 +1,45 @@
 # W4-08 GitHub 分支、PR 与 main 分支保护
 
 ## 1. 目标
-在五人团队和多个 AI 编程 Agent 并行工作的情况下，保护 main 始终保持可审查、可构建、可回退。规划文档和代码都通过独立分支与 Pull Request 进入 main，不直接向 main 推送。
+main 始终通过 PR 接收变更。其他成员和 AI Agent 可以自由创建分支及 PR；仓库所有者负责最终审查。所有者自己创建的 PR 不能自我批准，因此必须保留管理员绕过审批的能力，完成自审后合并。
 
-## 2. 分支命名
-- 功能：feat/<task-id>-short-name
-- 修复：fix/<task-id>-short-name
-- 文档：docs/<topic>
-- 紧急修复：hotfix/<task-id>-short-name
+## 2. 规则
+- Require a pull request before merging：开启。
+- Require review from Code Owners：开启。
+- Required approvals：1。
+- CODEOWNERS：`.github/CODEOWNERS`，全仓库由 `@yanpr1332` 负责。
+- Dismiss stale approvals：开启。
+- Require conversation resolution：开启。
+- Block force pushes：开启。
+- Block branch deletion：开启。
+- 不设置尚未存在的 CI status checks；CI 建立后再添加。
+- 允许仓库管理员 bypass review requirements，以便所有者自己的 PR 在完成自审后合并。此权限只属于仓库管理员，不授予普通成员或 AI Agent。
+- 若 GitHub 分支规则支持 bypass list，优先只列仓库管理员；不要把普通团队成员加入 bypass list。
 
-每个分支应对应一个或一组紧密相关 Task ID。避免一个 PR 混入多个不相关模块。
+## 3. 两类 PR 的处理
+### 其他成员/Agent 创建的 PR
+1. 由 `@yanpr1332` 作为 Code Owner 审查。
+2. 所有者提交一个 Approval。
+3. Review 对话解决且其他必需检查通过后合并。
 
-## 3. Pull Request 最低要求
-每个 PR 必须说明目标和范围、关联 Task ID、PRD/W2/W3 引用、修改文件和模块、数据模型/接口变化、测试命令和真实执行结果、Windows/macOS 影响、安全/权限/数据外传/第三方依赖影响、未完成项和风险，以及截图/录屏/脱敏日志等验收证据。
+### 仓库所有者自己创建的 PR
+1. 所有者不能批准自己的 PR，GitHub 会拒绝作者自批。
+2. 所有者完成自审和测试检查。
+3. 使用仓库管理员 bypass 合并；保留 PR、diff、提交和合并记录。
+4. 不通过伪造第二个审批账号来规避 GitHub 审计。
 
-至少一名非作者成员复核。涉及安全、权限、邮件发送、Canvas OAuth、云端 RLS、数据库迁移或系统限制的 PR，必须由具备相应上下文的成员额外审查。
+## 4. GitHub 配置入口
+https://github.com/yanpr1332/Agent-to-Entrepreneurship/settings/branches
 
-## 4. main 分支保护建议
-建议在 GitHub Repository Settings → Branches（或 Rulesets）为 main 配置：
+本仓库已在本 PR 分支新增 `.github/CODEOWNERS`，内容将全仓库指定给 `@yanpr1332`。**这不等于分支保护已开启**：必须由仓库管理员在 Settings 中创建针对 `main` 的 Branch protection rule 或 Ruleset，并启用以上规则。
 
-**立即启用的基础规则**
-1. Require a pull request before merging。
-2. Require at least 1 approving review；审批者不得是 PR 作者本人。
-3. Require conversation resolution before merging。
-4. Dismiss stale approvals when new commits are pushed。
-5. Block force pushes。
-6. Block branch deletion。
-7. 管理员也应尽量遵守 PR 流程；如平台提供 bypass 选项，默认不授予日常开发 Agent。
+## 5. 验收
+- 普通成员 PR 无所有者审批时不能合并。
+- 所有者审批普通成员 PR 后可以合并。
+- 所有者自己的 PR 不要求作者自批；管理员 bypass 可用。
+- 普通成员和 Agent 无法直接推送 main、强制推送或删除 main。
+- 未解决 Review 对话阻止普通合并。
+- CI 检查只在工作流真实存在后才设为必需。
 
-**CI 建立后再增加的规则**
-- Require status checks to pass before merging。
-- 先确认工作流实际存在且稳定，再选择必需检查，例如 lint、typecheck、unit tests、integration tests、Windows build、macOS build。
-- 不要在检查尚未创建时将不存在的检查设为必需，否则会把 main 永久阻塞。
-- 根据团队实际节奏决定是否要求分支在合并前更新到最新 main。
-
-**其他建议**
-- 保留可审计的合并记录；优先使用 Squash Merge 或团队统一的合并策略。
-- 不把 GitHub Secret 写进 PR 描述或测试日志。
-- GitHub Actions 使用最小权限 Token，并固定经审查的 Action 版本。
-
-## 5. 当前状态与操作说明
-W4 采用独立文档分支和 PR 流程。当前 GitHub 自动化连接不能管理 branch-protection/ruleset 写入权限；因此本文件只定义目标规则，不宣称 main 已受保护。仓库管理员需在 GitHub Settings 中核验现状并启用规则。
-
-设置入口：https://github.com/yanpr1332/Agent-to-Entrepreneurship/settings/branches
-
-启用后，应由仓库管理员验证：
-- 直接向 main 推送是否被拒绝。
-- 无审批 PR 是否不能合并。
-- 未解决 Review 对话是否阻止合并。
-- 强制推送/删除是否被阻止。
-- CI 建立后必需检查是否按预期运行。
-
-## 6. PR 与任务协作
-- Issue 是任务状态与当前 Driver/Reviewer 的记录点；Backlog 文档是任务定义的索引。
-- 一个任务可以拆成多个 PR，但每个 PR 应保持单一主题。
-- PR 未合并前不得把任务标记为“已通过”。
-- 发生冲突时先更新分支并重新运行测试，不能直接覆盖他人提交。
-- 只有经人工 Review、必需检查通过并满足分支规则后才合并。
+## 6. PR 质量要求
+每个 PR 说明 Task ID、目标、修改范围、数据模型/接口变化、测试命令及真实结果、Windows/macOS 影响、安全与隐私影响、未完成项和验收证据。涉及权限、凭据、邮件发送、Canvas OAuth、云端 RLS、数据库迁移或系统限制的 PR 必须额外审查。
