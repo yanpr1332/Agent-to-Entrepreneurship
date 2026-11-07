@@ -1,0 +1,4 @@
+# Repository owner is the required code owner for all changes.
+# Owner-authored PRs cannot self-approve; repository admin may merge them
+# using the configured admin bypass after self-review.
+* @yanpr1332
