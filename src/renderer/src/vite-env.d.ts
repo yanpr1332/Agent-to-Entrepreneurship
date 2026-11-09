@@ -5,7 +5,7 @@ import type {
   LocalTask, UpdateTaskInput,
 } from "../../shared/local-model";
 
-import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPersonalTokenInput } from "../../shared/canvas-model";
+import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPersonalTokenInput, CanvasImportResult, CanvasSyncResult } from "../../shared/canvas-model";
 
 declare global {
   interface Window {
@@ -24,6 +24,9 @@ declare global {
         courses: () => Promise<CanvasCourse[]>;
         assignments: (courseId: number) => Promise<CanvasAssignment[]>;
         disconnect: () => Promise<{ disconnected: true }>;
+        imported: (courseId: number) => Promise<number[]>;
+        importAssignment: (courseId: number, assignmentId: number) => Promise<CanvasImportResult>;
+        syncCourse: (courseId: number) => Promise<CanvasSyncResult>;
       };
       focus: {
         list: () => Promise<FocusSession[]>;

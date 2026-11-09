@@ -4,6 +4,16 @@
  */
 export type TaskPriority = "low" | "normal" | "high";
 
+export interface CanvasTaskSource {
+  provider: "canvas";
+  instanceUrl: string;
+  accountId: number;
+  courseId: number;
+  assignmentId: number;
+  sourceUrl: string | null;
+  lastSyncedAt: string;
+}
+
 export interface LocalTask {
   id: string;
   title: string;
@@ -13,6 +23,7 @@ export interface LocalTask {
   completed: boolean;
   createdAt: string;
   updatedAt: string;
+  source: CanvasTaskSource | null;
 }
 
 export interface CreateTaskInput {

@@ -6,7 +6,7 @@ import { isTrustedRendererUrl } from "../shared/renderer-trust";
 import { LocalStore } from "./local-store";
 import { CanvasApi } from "./connectors/canvas-api";
 import { CanvasCredentialVault } from "./connectors/canvas-credentials";
-import { parseCanvasPersonalTokenInput } from "../shared/canvas-model";
+import { parseCanvasCourseId, parseCanvasPersonalTokenInput } from "../shared/canvas-model";
 
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
@@ -101,6 +101,35 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.canvasAssignments, async (event, courseId: unknown) => {
     requireTrustedSender(event);
     return (await canvasApi()).listAssignments(courseId);
+  });
+  ipcMain.handle(IPC_CHANNELS.canvasImported, async (event, courseInput: unknown) => {
+    requireTrustedSender(event);
+    const courseId = parseCanvasCourseId(courseInput);
+    const api = await canvasApi();
+    const accountId = await api.getCurrentUserId();
+    return localStore().listImportedCanvasAssignmentIds(api.origin, accountId, courseId);
+  });
+  ipcMain.handle(IPC_CHANNELS.canvasImportAssignment, async (
+    event, courseInput: unknown, assignmentInput: unknown,
+  ) => {
+    requireTrustedSender(event);
+    const courseId = parseCanvasCourseId(courseInput);
+    const assignmentId = parseCanvasCourseId(assignmentInput);
+    const api = await canvasApi();
+    const accountId = await api.getCurrentUserId();
+    // Renderer controls only IDs. Fetch the authoritative assignment from Canvas.
+    const assignments = await api.listAssignments(courseId);
+    const assignment = assignments.find((item) => item.id === assignmentId);
+    if (!assignment) throw new Error("Assignment not present in the currently authorized Canvas course");
+    return localStore().importCanvasAssignment(api.origin, accountId, assignment);
+  });
+  ipcMain.handle(IPC_CHANNELS.canvasSyncCourse, async (event, courseInput: unknown) => {
+    requireTrustedSender(event);
+    const courseId = parseCanvasCourseId(courseInput);
+    const api = await canvasApi();
+    const accountId = await api.getCurrentUserId();
+    const assignments = await api.listAssignments(courseId);
+    return localStore().syncImportedCanvasAssignments(api.origin, accountId, courseId, assignments);
   });
   ipcMain.handle(IPC_CHANNELS.canvasDisconnect, async (event) => {
     requireTrustedSender(event);

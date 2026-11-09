@@ -150,6 +150,7 @@ function TaskRow({
           <span>{formatDueDate(task.dueDate)}</span>
           <span className={`priority ${task.priority}`}>{task.priority === "high" ? "高优先级" : task.priority === "normal" ? "普通" : "低优先级"}</span>
         </div>
+        {task.source && <p className="source-mark">Canvas 来源：${task.source.instanceUrl} · 课程 ${task.source.courseId} · 作业 ${task.source.assignmentId}</p>}
         {task.description && <p>{task.description}</p>}
       </div>
       <div className="task-actions">
@@ -401,7 +402,7 @@ export default function App() {
             </>
           )}
 
-          {page === "connectors" && <CanvasConnector />}
+          {page === "connectors" && <CanvasConnector onTasksChanged={refresh} />}
 
           {!selectedModule.ready && (
             <div className="placeholder-panel"><span className="placeholder-icon">{selectedModule.icon}</span><div className="eyebrow">NEXT DEVELOPMENT SLICE</div><h1>{selectedModule.label}</h1><p>该模块属于 V0.1 开发范围，但本次工程切片尚未实现真实功能。这里不会使用模拟数据冒充已接入。</p><div className="placeholder-actions"><button className="primary-button" onClick={() => setPage("overview")}>返回工作台</button><button className="secondary-button" onClick={() => setPage("calendar")}>使用任务管理</button></div></div>

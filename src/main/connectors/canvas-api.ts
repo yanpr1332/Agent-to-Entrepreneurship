@@ -175,6 +175,28 @@ export class CanvasApi {
     return items;
   }
 
+  /** Current Canvas user ID scopes local task provenance to a specific account. */
+  async getCurrentUserId(): Promise<number> {
+    const url = this.validatePageUrl(new URL("/api/v1/users/self", this.origin).href);
+    const response = await this.fetcher(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${this.token}`, Accept: "application/json" },
+      redirect: "error",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (response.status === 401) throw new Error("Canvas token is invalid or expired");
+    if (response.status === 403) throw new Error("Canvas user identification is not authorized");
+    if (!response.ok) throw new Error(`Canvas user identification failed (HTTP ${response.status})`);
+    const body = await response.text();
+    if (body.length > 100_000) throw new Error("Canvas identity response is too large");
+    let parsed: unknown;
+    try { parsed = JSON.parse(body); } catch { throw new Error("Canvas identity response is invalid"); }
+    const data = asRecord(parsed);
+    const id = data && safePositiveId(data.id);
+    if (!id) throw new Error("Canvas returned an invalid user identifier");
+    return id;
+  }
+
   async listCourses(): Promise<CanvasCourse[]> {
     const rows = await this.requestPages("/api/v1/courses?enrollment_state=active&per_page=50");
     return parseCourses(rows);

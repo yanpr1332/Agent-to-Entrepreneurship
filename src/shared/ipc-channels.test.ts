@@ -5,7 +5,8 @@ describe("IPC channel contract", () => {
   it("exposes only the approved narrow application actions", () => {
     expect(Object.values(IPC_CHANNELS).sort()).toEqual([
       "app:get-version", "app:ping", "canvas:assignments", "canvas:connect",
-      "canvas:courses", "canvas:disconnect", "canvas:status", "focus:finish", "focus:list",
+      "canvas:courses", "canvas:disconnect", "canvas:import-assignment",
+      "canvas:imported", "canvas:status", "canvas:sync-course", "focus:finish", "focus:list",
       "focus:summary", "tasks:create", "tasks:list", "tasks:remove",
       "tasks:update",
     ]);

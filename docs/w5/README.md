@@ -72,3 +72,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## Canvas 真实接口开发验证
 
 本轮新增 Canvas Personal Token **仅限开发者本人本地** 的真实只读连接器：课程/作业浏览、安全分页、主进程凭据加密、断开连接。实现方式、真实账号验收条件和未完成 OAuth/增量同步事项见 [03_CANVAS_CONNECTOR.md](03_CANVAS_CONNECTOR.md)。不把 CI mock 误报为学校接口已测试通过；不增加 npm 依赖。
+
+
+## Canvas 导入任务与来源追踪
+
+新增 Canvas 作业的用户主动导入、SQLite v2 来源映射、按真实账号隔离的去重与同步、个人任务字段保护。见 [04_CANVAS_TASK_SYNC.md](04_CANVAS_TASK_SYNC.md)。尚需真实学校账号、设备验收；CI 模拟响应不等于学校 API 已验证。
