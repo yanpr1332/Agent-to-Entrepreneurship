@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import { IPC_CHANNELS } from "./ipc-channels";
 
 describe("IPC channel contract", () => {
-  it("exposes only approved application channels", () => {
-    expect(Object.values(IPC_CHANNELS).sort()).toEqual(["app:get-version", "app:ping"]);
+  it("exposes only the approved narrow application actions", () => {
+    expect(Object.values(IPC_CHANNELS).sort()).toEqual([
+      "app:get-version", "app:ping", "focus:finish", "focus:list",
+      "focus:summary", "tasks:create", "tasks:list", "tasks:remove",
+      "tasks:update",
+    ]);
   });
-  it("does not expose arbitrary Node or shell capabilities", () => {
-    expect(Object.values(IPC_CHANNELS).join(" ")).not.toMatch(/(exec|shell|filesystem|ipcRenderer)/i);
+  it("does not expose arbitrary Node, filesystem or SQL operations", () => {
+    expect(Object.values(IPC_CHANNELS).join(" ")).not.toMatch(/(exec|shell|filesystem|sql|ipcRenderer)/i);
   });
 });

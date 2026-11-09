@@ -62,3 +62,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 - Windows 本机此前执行的 npm install、typecheck、Vitest 与 electron-vite build 曾通过；安全信任校验代码新增后，必须由 CI 对最新 PR head 重新执行，旧结果不作为新代码的完整验收证据。
 - GitHub Actions 应分别通过 Windows 与 macOS 的 typecheck、unit tests、production bundle build。
 - macOS 原生安装包、签名、公证仍需单独验收。
+
+
+## 下一轮开发：本地任务、日历、专注与工作台
+
+已启动独立 PR 实现 W5-1 的 SQLite 初始迁移与本地持久化、W5-2 的任务与日历基础闭环、专注记录与积分、真实个人工作台摘要。技术方案、验收步骤、风险和未完成项见 [02_LOCAL_WORKFLOWS.md](02_LOCAL_WORKFLOWS.md)。本轮无新增 npm 依赖，不安装任何项目依赖到用户电脑；GitHub CI 将负责对已锁定依赖的跨平台构建与测试验证。

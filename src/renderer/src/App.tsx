@@ -1,74 +1,411 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import type { FocusSession, FocusSummary, LocalTask, TaskPriority } from "../../shared/local-model";
+import { formatDueDate, localDateKey, monthCells } from "./calendar";
 
+type Page = "overview" | "calendar" | "knowledge" | "focus" | "team" | "ai" | "connectors" | "mail";
+type TaskFilter = "day" | "all" | "undated";
 type RuntimeStatus = "checking" | "connected" | "unavailable";
-const modules = [
-  ["01", "日历与任务", "课程、截止时间与每日安排", "基础框架"],
-  ["02", "个人知识库", "资料、知识关联与复习", "待开发"],
-  ["03", "专注与自律", "专注计时与执行反馈", "待开发"],
-  ["04", "小组协作", "团队任务、验收与共享", "待开发"],
-  ["05", "AI 辅助规划", "项目授权与计划建议", "待开发"],
-  ["06", "数据接入", "Canvas 与外部日历", "待开发"],
-  ["07", "邮件管理", "收件、草稿与确认发送", "待开发"],
-  ["08", "个人工作台", "个性化布局与快捷入口", "基础框架"],
+
+const menu: { page: Page; icon: string; label: string; ready: boolean }[] = [
+  { page: "overview", icon: "◫", label: "个人工作台", ready: true },
+  { page: "calendar", icon: "▦", label: "日历与任务", ready: true },
+  { page: "knowledge", icon: "◇", label: "个人知识库", ready: false },
+  { page: "focus", icon: "◷", label: "专注与自律", ready: true },
+  { page: "team", icon: "⌘", label: "小组协作", ready: false },
+  { page: "ai", icon: "✳", label: "AI 辅助规划", ready: false },
+  { page: "connectors", icon: "⇄", label: "数据接入", ready: false },
+  { page: "mail", icon: "✉", label: "邮件管理", ready: false },
 ];
 
+const emptySummary: FocusSummary = {
+  sessions: 0, completedSessions: 0, totalMinutes: 0, points: 0,
+};
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "操作失败，请稍后再试";
+}
+
+function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
+  const [plannedMinutes, setPlannedMinutes] = useState(25);
+  const [remaining, setRemaining] = useState(25 * 60);
+  const [phase, setPhase] = useState<"idle" | "running" | "paused" | "finished">("idle");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const deadline = useRef(0);
+  const sessionId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (phase !== "running") return;
+    const tick = () => {
+      const seconds = Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000));
+      setRemaining(seconds);
+      if (seconds === 0) setPhase("finished");
+    };
+    tick();
+    const handle = setInterval(tick, 500);
+    return () => clearInterval(handle);
+  }, [phase]);
+
+  function reset(): void {
+    setPhase("idle");
+    setRemaining(plannedMinutes * 60);
+    sessionId.current = null;
+  }
+
+  function begin(): void {
+    setError("");
+    if (phase === "idle") {
+      sessionId.current = crypto.randomUUID();
+      setRemaining(plannedMinutes * 60);
+      deadline.current = Date.now() + plannedMinutes * 60_000;
+    } else if (phase === "paused") {
+      deadline.current = Date.now() + remaining * 1000;
+    }
+    setPhase("running");
+  }
+
+  function pause(): void {
+    setRemaining(Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000)));
+    setPhase("paused");
+  }
+
+  async function finish(): Promise<void> {
+    if (!sessionId.current || saving) return;
+    const left = phase === "running"
+      ? Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000))
+      : remaining;
+    setSaving(true);
+    setError("");
+    try {
+      await window.desktop.focus.finish({
+        sessionId: sessionId.current,
+        plannedMinutes,
+        elapsedSeconds: plannedMinutes * 60 - left,
+      });
+      await onSaved();
+      reset();
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
+  const ss = String(remaining % 60).padStart(2, "0");
+
+  return (
+    <section className="panel timer-panel">
+      <div className="eyebrow">FOCUS SESSION</div>
+      <h2>开始一段专注时间</h2>
+      <p className="help-text">完成预定时长后可获得同等分钟数的积分，提前结束不奖励积分。</p>
+      <div className="timer-display" role="timer" aria-live="off">{mm}:{ss}</div>
+      <div className="timer-presets">
+        {[1, 15, 25, 50].map((minutes) => (
+          <button
+            className={minutes === plannedMinutes ? "chip selected" : "chip"}
+            key={minutes}
+            disabled={phase !== "idle" || saving}
+            onClick={() => { setPlannedMinutes(minutes); setRemaining(minutes * 60); }}
+          >{minutes} 分钟</button>
+        ))}
+      </div>
+      <div className="button-row centered">
+        {phase === "idle" && <button className="primary-button" onClick={begin}>开始专注</button>}
+        {phase === "running" && <button className="secondary-button" onClick={pause}>暂停</button>}
+        {phase === "paused" && <button className="primary-button" onClick={begin}>继续计时</button>}
+        {phase === "finished" && <span className="success-text">计时完成，可以保存并领取积分</span>}
+        {phase !== "idle" && (
+          <button className={phase === "finished" ? "primary-button" : "secondary-button"} disabled={saving} onClick={() => void finish()}>
+            {saving ? "保存中…" : phase === "finished" ? "记录完成" : "结束并记录"}
+          </button>
+        )}
+        {phase !== "idle" && <button className="ghost-button" disabled={saving} onClick={reset}>取消本次</button>}
+      </div>
+      {error && <p className="error-message" role="alert">{error}</p>}
+      <p className="privacy-note">计时和积分保存在本机。当前不限制其他应用或网站。</p>
+    </section>
+  );
+}
+
+function TaskRow({
+  task, onToggle, onEdit, onRemove, busy,
+}: {
+  task: LocalTask;
+  onToggle: (task: LocalTask) => void;
+  onEdit: (task: LocalTask) => void;
+  onRemove: (task: LocalTask) => void;
+  busy: boolean;
+}) {
+  return (
+    <li className={task.completed ? "task-item completed" : "task-item"}>
+      <input
+        type="checkbox" aria-label={`完成任务：${task.title}`} checked={task.completed}
+        disabled={busy} onChange={() => onToggle(task)}
+      />
+      <div className="task-copy">
+        <strong>{task.title}</strong>
+        <div className="task-meta">
+          <span>{formatDueDate(task.dueDate)}</span>
+          <span className={`priority ${task.priority}`}>{task.priority === "high" ? "高优先级" : task.priority === "normal" ? "普通" : "低优先级"}</span>
+        </div>
+        {task.description && <p>{task.description}</p>}
+      </div>
+      <div className="task-actions">
+        <button disabled={busy} onClick={() => onEdit(task)} aria-label={`编辑${task.title}`}>编辑</button>
+        <button disabled={busy} onClick={() => onRemove(task)} aria-label={`删除${task.title}`}>删除</button>
+      </div>
+    </li>
+  );
+}
+
 export default function App() {
+  const today = localDateKey(new Date());
+  const [page, setPage] = useState<Page>("overview");
   const [runtime, setRuntime] = useState<RuntimeStatus>("checking");
   const [version, setVersion] = useState("—");
+  const [tasks, setTasks] = useState<LocalTask[]>([]);
+  const [sessions, setSessions] = useState<FocusSession[]>([]);
+  const [summary, setSummary] = useState<FocusSummary>(emptySummary);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState(today);
+  const [priority, setPriority] = useState<TaskPriority>("normal");
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [filter, setFilter] = useState<TaskFilter>("day");
+  const [dark, setDark] = useState(() => window.localStorage.getItem("ate.theme") === "dark");
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    window.localStorage.setItem("ate.theme", dark ? "dark" : "light");
+  }, [dark]);
+
   useEffect(() => {
     let active = true;
-    Promise.all([window.desktop.ping(), window.desktop.getVersion()])
-      .then(([, appVersion]) => {
-        if (!active) return;
-        setVersion(appVersion);
-        setRuntime("connected");
-      }).catch(() => { if (active) setRuntime("unavailable"); });
+    Promise.all([
+      window.desktop.ping(), window.desktop.getVersion(),
+      window.desktop.tasks.list(), window.desktop.focus.list(), window.desktop.focus.summary(),
+    ]).then(([, appVersion, localTasks, localSessions, localSummary]) => {
+      if (!active) return;
+      setVersion(appVersion);
+      setTasks(localTasks);
+      setSessions(localSessions);
+      setSummary(localSummary);
+      setRuntime("connected");
+    }).catch((reason: unknown) => {
+      if (!active) return;
+      setError(errorMessage(reason));
+      setRuntime("unavailable");
+    });
     return () => { active = false; };
   }, []);
 
-  return <div className="app-shell">
-    <aside className="sidebar">
-      <div className="brand"><div className="brand-mark">A</div><div><strong>AtE Workspace</strong><span>个人学习与协作空间</span></div></div>
-      <div className="workspace-switch"><span className="workspace-dot" />个人工作空间 <span className="chevron">⌄</span></div>
-      <div className="nav-label">工作空间</div>
-      <nav>
-        <a className="nav-item active" href="#overview">◫　总览</a>
-        <a className="nav-item" href="#calendar">▦　日历与任务</a>
-        <a className="nav-item" href="#knowledge">◇　个人知识库</a>
-        <a className="nav-item" href="#focus">◷　专注与自律</a>
-        <a className="nav-item" href="#team">⌘　小组协作</a>
-      </nav>
-      <div className="nav-label">智能与连接</div>
-      <nav>
-        <a className="nav-item" href="#ai">✳　AI 辅助规划</a>
-        <a className="nav-item" href="#connectors">⇄　数据接入</a>
-        <a className="nav-item" href="#mail">✉　邮件管理</a>
-      </nav>
-      <div className="sidebar-bottom"><div className="avatar">U</div><div><strong>本地用户</strong><span>数据优先保存在本机</span></div><span className="settings">⚙</span></div>
-    </aside>
-    <main className="main-area">
-      <header className="topbar"><div className="breadcrumb">个人工作空间 <span>/</span> 总览</div><div className="top-actions"><div className="search-button">⌕　搜索工作空间　<kbd>⌘ K</kbd></div><div className="avatar small">U</div></div></header>
-      <section className="content" id="overview">
-        <div className="welcome-row"><div><div className="eyebrow">YOUR WORKSPACE</div><h1>把重要的事情，<em>一步步做好。</em></h1><p>这是你的个人学习与协作空间。先从清晰地安排今天开始。</p></div><div className="date-card"><span>当前版本</span><strong>{version}</strong><small>桌面工程基础版</small></div></div>
-        <div className="status-banner"><div className="status-icon">✦</div><div className="status-copy"><strong>工程底座已启动</strong><span>当前是早期开发原型。模块入口用于展示产品结构，尚未接入真实业务数据。</span></div><div className="runtime-status"><i className={runtime === "connected" ? "online" : runtime === "unavailable" ? "offline" : ""} />{runtime === "connected" ? "桌面主进程已连接" : runtime === "checking" ? "正在检查运行环境" : "运行环境不可用"}</div></div>
-        <div className="section-heading"><div><div className="eyebrow">YOUR TOOLKIT</div><h2>工作空间</h2></div><button className="text-button">自定义工作台 ↗</button></div>
-        <div className="module-grid">{modules.map(([number,name,description,status]) => <article className="module-card" key={number}><div className="module-top"><span className="module-number">{number}</span><span className="module-status">{status}</span></div><h3>{name}</h3><p>{description}</p><div className="module-arrow">↗</div></article>)}</div>
-        <div className="bottom-grid">
-          <section className="panel"><div className="eyebrow">GETTING STARTED</div><h2>接下来</h2>
-            <div className="step-row"><span className="step-check">✓</span><div><strong>建立跨平台桌面工程</strong><p>Electron、React 与 TypeScript 基础结构</p></div><span className="step-state done">已完成</span></div>
-            <div className="step-row"><span className="step-number">2</span><div><strong>建立本地数据与迁移层</strong><p>SQLite、数据模型与备份恢复</p></div><span className="step-state">规划中</span></div>
-            <div className="step-row"><span className="step-number">3</span><div><strong>接入真实外部服务</strong><p>Canvas 授权与交大邮箱验证</p></div><span className="step-state">等待授权</span></div>
-          </section>
-          <section className="panel runtime-panel"><div className="eyebrow">SYSTEM STATUS</div><h2>运行状态</h2>
-            <div className="runtime-line"><span>Electron 主进程</span><strong>{runtime === "connected" ? "正常" : runtime === "checking" ? "检查中" : "异常"}</strong></div>
-            <div className="runtime-line"><span>本地数据存储</span><strong className="not-ready">尚未初始化</strong></div>
-            <div className="runtime-line"><span>云端协作</span><strong className="not-ready">尚未连接</strong></div>
-            <div className="runtime-line"><span>AI Runtime</span><strong className="not-ready">尚未配置</strong></div>
-            <p className="privacy-note">◈ 连接器、AI 外传与团队同步均需独立授权。</p>
-          </section>
+  async function refresh(): Promise<void> {
+    const [localTasks, localSessions, localSummary] = await Promise.all([
+      window.desktop.tasks.list(), window.desktop.focus.list(), window.desktop.focus.summary(),
+    ]);
+    setTasks(localTasks);
+    setSessions(localSessions);
+    setSummary(localSummary);
+  }
+
+  function resetTaskForm(): void {
+    setEditingId(null);
+    setTitle("");
+    setDescription("");
+    setDueDate(selectedDate);
+    setPriority("normal");
+  }
+
+  function editTask(task: LocalTask): void {
+    setPage("calendar");
+    setEditingId(task.id);
+    setTitle(task.title);
+    setDescription(task.description);
+    setDueDate(task.dueDate ?? "");
+    setPriority(task.priority);
+  }
+
+  async function saveTask(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (busy) return;
+    setError("");
+    setBusy(true);
+    try {
+      if (editingId) {
+        await window.desktop.tasks.update({
+          id: editingId, title, description, dueDate: dueDate || null, priority,
+        });
+      } else {
+        await window.desktop.tasks.create({
+          title, description, dueDate: dueDate || null, priority,
+        });
+      }
+      await refresh();
+      resetTaskForm();
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleTask(task: LocalTask): Promise<void> {
+    setBusy(true);
+    setError("");
+    try {
+      await window.desktop.tasks.update({ id: task.id, completed: !task.completed });
+      await refresh();
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeTask(task: LocalTask): Promise<void> {
+    if (!window.confirm(`确定删除「${task.title}」？删除后无法撤销。`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await window.desktop.tasks.remove(task.id);
+      await refresh();
+      if (editingId === task.id) resetTaskForm();
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const pendingTasks = tasks.filter((task) => !task.completed);
+  const todayTasks = pendingTasks.filter((task) => task.dueDate === today);
+  const visibleTasks = tasks.filter((task) =>
+    filter === "all" || (filter === "day" && task.dueDate === selectedDate) ||
+    (filter === "undated" && task.dueDate === null),
+  );
+  const calendar = monthCells(month.getFullYear(), month.getMonth());
+  const nextTasks = pendingTasks.slice(0, 5);
+  const selectedModule = menu.find((item) => item.page === page)!;
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand"><div className="brand-mark">A</div><div><strong>AtE Workspace</strong><span>个人学习与协作空间</span></div></div>
+        <div className="workspace-switch"><span className="workspace-dot" />个人工作空间 <span className="chevron">⌄</span></div>
+        <div className="nav-label">工作空间</div>
+        <nav aria-label="应用导航">
+          {menu.map((item) => (
+            <button
+              key={item.page}
+              className={page === item.page ? "nav-item active" : "nav-item"}
+              onClick={() => setPage(item.page)}
+              aria-current={page === item.page ? "page" : undefined}
+            ><span className="nav-icon">{item.icon}</span><span>{item.label}</span>{!item.ready && <span className="nav-pending">·</span>}</button>
+          ))}
+        </nav>
+        <div className="sidebar-bottom"><div className="avatar">U</div><div><strong>本地用户</strong><span>个人数据只保存在本机</span></div>
+          <button className="icon-button" title="切换主题" aria-label="切换浅色或深色主题" onClick={() => setDark(!dark)}>{dark ? "☀" : "☾"}</button>
         </div>
-        <footer>Agent-to-Entrepreneurship　·　Local-first by design　·　内部开发原型</footer>
-      </section>
-    </main>
-  </div>;
+      </aside>
+
+      <main className="main-area">
+        <header className="topbar">
+          <div className="breadcrumb">个人工作空间 <span>/</span> {selectedModule.label}</div>
+          <div className="top-actions"><span className="local-label">◈ 本地优先</span><div className="avatar small">U</div></div>
+        </header>
+        <div className="content">
+          {error && <div className="error-banner" role="alert"><strong>操作未完成：</strong> {error}<button onClick={() => setError("")}>关闭</button></div>}
+
+          {page === "overview" && (
+            <>
+              <div className="welcome-row"><div><div className="eyebrow">YOUR WORKSPACE</div><h1>把重要的事情，<em>一步步做好。</em></h1><p>日程、任务与专注记录已接入本地数据库，重启后可以恢复。</p></div><div className="date-card"><span>当前版本</span><strong>{version}</strong><small>内部开发原型</small></div></div>
+              <div className="status-banner"><div className="status-icon">✦</div><div className="status-copy"><strong>{runtime === "connected" ? "本地工作空间已连接" : "正在检查本地工作空间"}</strong><span>个人任务与专注记录仅存储在本机。Canvas、邮箱和云端协作尚未接入。</span></div>
+                <div className="runtime-status"><i className={runtime === "connected" ? "online" : runtime === "unavailable" ? "offline" : ""} />{runtime === "connected" ? "SQLite 已连接" : runtime === "checking" ? "检查中" : "不可用"}</div>
+              </div>
+              <div className="metric-grid">
+                <div className="metric-card"><span>今日待办</span><strong>{todayTasks.length}</strong><small>今天截止且未完成</small></div>
+                <div className="metric-card"><span>全部待办</span><strong>{pendingTasks.length}</strong><small>未完成的个人任务</small></div>
+                <div className="metric-card"><span>专注分钟</span><strong>{summary.totalMinutes}</strong><small>累计专注记录</small></div>
+                <div className="metric-card"><span>专注积分</span><strong>{summary.points}</strong><small>已完成专注获得</small></div>
+              </div>
+              <div className="section-heading"><div><div className="eyebrow">READY TO USE</div><h2>马上开始</h2></div></div>
+              <div className="quick-grid"><button className="quick-card" onClick={() => setPage("calendar")}><span>▦</span><strong>管理我的任务</strong><small>创建、编辑、完成和查看日历</small></button><button className="quick-card" onClick={() => setPage("focus")}><span>◷</span><strong>开始专注</strong><small>计时、历史和积分</small></button></div>
+              <div className="bottom-grid">
+                <section className="panel"><div className="panel-heading"><div><div className="eyebrow">UP NEXT</div><h2>接下来的任务</h2></div><button className="text-button" onClick={() => { setPage("calendar"); setFilter("all"); }}>查看全部 →</button></div>
+                  {nextTasks.length ? <ul className="compact-task-list">{nextTasks.map((task) => <li key={task.id}><span className="task-dot" /><div><strong>{task.title}</strong><small>{formatDueDate(task.dueDate)}</small></div><button onClick={() => editTask(task)}>编辑</button></li>)}</ul> : <p className="empty-state">暂无待办。创建第一条任务，开始整理今天。</p>}
+                </section>
+                <section className="panel runtime-panel"><div className="eyebrow">SYSTEM STATUS</div><h2>运行状态</h2>
+                  <div className="runtime-line"><span>Electron / 本地 SQLite</span><strong>{runtime === "connected" ? "可用" : runtime === "checking" ? "检查中" : "异常"}</strong></div>
+                  <div className="runtime-line"><span>个人任务与日历</span><strong>{runtime === "connected" ? "可用" : "未连接"}</strong></div>
+                  <div className="runtime-line"><span>云端协作</span><strong className="not-ready">尚未接入</strong></div>
+                  <div className="runtime-line"><span>Canvas 与邮箱</span><strong className="not-ready">尚未接入</strong></div>
+                  <p className="privacy-note">个人任务与专注数据不会自动上传云端。</p>
+                </section>
+              </div>
+            </>
+          )}
+
+          {page === "calendar" && (
+            <>
+              <div className="page-heading"><div><div className="eyebrow">PERSONAL CALENDAR</div><h1>日历与任务</h1><p>创建和安排个人任务，所有变更保存在本机 SQLite。</p></div><span className="count-chip">{tasks.length} 条任务</span></div>
+              <div className="calendar-layout">
+                <div className="calendar-column">
+                  <section className="panel calendar-panel">
+                    <div className="calendar-header"><h2>{month.getFullYear()} 年 {month.getMonth() + 1} 月</h2><div className="button-row"><button className="icon-button" aria-label="上个月" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>‹</button><button className="small-button" onClick={() => { setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); setSelectedDate(today); setFilter("day"); }}>今天</button><button className="icon-button" aria-label="下个月" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>›</button></div></div>
+                    <div className="weekday-row">{["一", "二", "三", "四", "五", "六", "日"].map((day) => <span key={day}>{day}</span>)}</div>
+                    <div className="calendar-grid">{calendar.map((day) => {
+                      const hasTasks = tasks.some((task) => task.dueDate === day.key);
+                      return <button key={day.key} className={["calendar-day", day.currentMonth ? "" : "muted-day", day.key === selectedDate ? "selected-day" : "", day.key === today ? "today-day" : ""].join(" ")}
+                        onClick={() => { setSelectedDate(day.key); setFilter("day"); if (!day.currentMonth) { const [y, m] = day.key.split("-").map(Number); setMonth(new Date(y, m - 1, 1)); } }} aria-label={day.key}>
+                        <span>{day.day}</span>{hasTasks && <i className="day-dot" />}
+                      </button>;
+                    })}</div>
+                  </section>
+                  <section className="panel task-list-panel"><div className="panel-heading"><div><div className="eyebrow">MY TASKS</div><h2>{filter === "day" ? formatDueDate(selectedDate) : filter === "undated" ? "未安排日期" : "全部任务"}</h2></div><span className="muted-tag">{visibleTasks.length} 条</span></div>
+                    <div className="filter-tabs"><button className={filter === "day" ? "chip selected" : "chip"} onClick={() => setFilter("day")}>选中日期</button><button className={filter === "all" ? "chip selected" : "chip"} onClick={() => setFilter("all")}>全部</button><button className={filter === "undated" ? "chip selected" : "chip"} onClick={() => setFilter("undated")}>无日期</button></div>
+                    {visibleTasks.length ? <ul className="task-list">{visibleTasks.map((task) => <TaskRow key={task.id} task={task} busy={busy} onToggle={(t) => void toggleTask(t)} onEdit={editTask} onRemove={(t) => void removeTask(t)} />)}</ul> : <p className="empty-state">这里还没有任务。可以在右侧创建一条。</p>}
+                  </section>
+                </div>
+                <section className="panel task-editor"><div className="eyebrow">TASK EDITOR</div><h2>{editingId ? "编辑任务" : "新建任务"}</h2>
+                  <form onSubmit={(event) => void saveTask(event)}>
+                    <label>任务名称<input required maxLength={120} autoComplete="off" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：完成项目报告" /></label>
+                    <label>备注<textarea rows={4} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="补充信息（可选）" /></label>
+                    <label>截止日期<input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
+                    <label>优先级<select value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)}><option value="low">低</option><option value="normal">普通</option><option value="high">高</option></select></label>
+                    <button className="primary-button full-width" disabled={busy || runtime !== "connected"} type="submit">{busy ? "保存中…" : editingId ? "保存修改" : "创建任务"}</button>
+                    {editingId && <button className="secondary-button full-width" type="button" onClick={resetTaskForm}>取消编辑</button>}
+                  </form>
+                  <p className="privacy-note">任务仅保存在此设备。团队共享将在独立授权后接入。</p>
+                </section>
+              </div>
+            </>
+          )}
+
+          {page === "focus" && (
+            <>
+              <div className="page-heading"><div><div className="eyebrow">FOCUS & REWARD</div><h1>专注与自律</h1><p>按自己的节奏执行计划，每次专注均留下本地记录。</p></div><span className="count-chip">{summary.points} 积分</span></div>
+              <div className="focus-layout"><FocusTimer onSaved={refresh} />
+                <div className="focus-side"><section className="panel"><div className="eyebrow">YOUR PROGRESS</div><h2>累计成绩</h2>
+                  <div className="focus-summary"><div><strong>{summary.completedSessions}</strong><span>完成场次</span></div><div><strong>{summary.totalMinutes}</strong><span>专注分钟</span></div><div><strong>{summary.points}</strong><span>已获积分</span></div></div>
+                </section>
+                <section className="panel"><div className="eyebrow">HISTORY</div><h2>最近记录</h2>
+                  {sessions.length ? <ul className="history-list">{sessions.slice(0, 8).map((session) => <li key={session.id}><div><strong>{session.completed ? "已完成" : "提前结束"} · {Math.floor(session.elapsedSeconds / 60)} 分钟</strong><small>{new Date(session.endedAt).toLocaleString("zh-CN")}</small></div><span>+{session.points}</span></li>)}</ul> : <p className="empty-state">暂无专注记录。</p>}
+                </section></div>
+              </div>
+            </>
+          )}
+
+          {!selectedModule.ready && (
+            <div className="placeholder-panel"><span className="placeholder-icon">{selectedModule.icon}</span><div className="eyebrow">NEXT DEVELOPMENT SLICE</div><h1>{selectedModule.label}</h1><p>该模块属于 V0.1 开发范围，但本次工程切片尚未实现真实功能。这里不会使用模拟数据冒充已接入。</p><div className="placeholder-actions"><button className="primary-button" onClick={() => setPage("overview")}>返回工作台</button><button className="secondary-button" onClick={() => setPage("calendar")}>使用任务管理</button></div></div>
+          )}
+          <footer>Agent-to-Entrepreneurship · Local-first by design · 内部开发原型</footer>
+        </div>
+      </main>
+    </div>
+  );
 }
