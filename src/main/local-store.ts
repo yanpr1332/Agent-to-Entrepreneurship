@@ -176,7 +176,8 @@ export class LocalStore {
     );
     const row = this.db.prepare(
       "SELECT * FROM focus_sessions WHERE id = ?",
-    ).get(session.sessionId) as FocusRow;
+    ).get(session.sessionId) as unknown as FocusRow | undefined;
+    if (!row) throw new Error("Focus record could not be loaded");
     return focusFromRow(row);
   }
 
