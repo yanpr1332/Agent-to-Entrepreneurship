@@ -9,6 +9,11 @@ export const IPC_CHANNELS = {
   focusList: "focus:list",
   focusFinish: "focus:finish",
   focusSummary: "focus:summary",
+  canvasStatus: "canvas:status",
+  canvasConnect: "canvas:connect",
+  canvasCourses: "canvas:courses",
+  canvasAssignments: "canvas:assignments",
+  canvasDisconnect: "canvas:disconnect",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

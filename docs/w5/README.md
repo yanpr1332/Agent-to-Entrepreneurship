@@ -67,3 +67,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## 下一轮开发：本地任务、日历、专注与工作台
 
 已启动独立 PR 实现 W5-1 的 SQLite 初始迁移与本地持久化、W5-2 的任务与日历基础闭环、专注记录与积分、真实个人工作台摘要。技术方案、验收步骤、风险和未完成项见 [02_LOCAL_WORKFLOWS.md](02_LOCAL_WORKFLOWS.md)。本轮无新增 npm 依赖，不安装任何项目依赖到用户电脑；GitHub CI 将负责对已锁定依赖的跨平台构建与测试验证。
+
+
+## Canvas 真实接口开发验证
+
+本轮新增 Canvas Personal Token **仅限开发者本人本地** 的真实只读连接器：课程/作业浏览、安全分页、主进程凭据加密、断开连接。实现方式、真实账号验收条件和未完成 OAuth/增量同步事项见 [03_CANVAS_CONNECTOR.md](03_CANVAS_CONNECTOR.md)。不把 CI mock 误报为学校接口已测试通过；不增加 npm 依赖。

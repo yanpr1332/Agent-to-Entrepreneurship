@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { FocusSession, FocusSummary, LocalTask, TaskPriority } from "../../shared/local-model";
 import { formatDueDate, localDateKey, monthCells } from "./calendar";
+import CanvasConnector from "./CanvasConnector";
 
 type Page = "overview" | "calendar" | "knowledge" | "focus" | "team" | "ai" | "connectors" | "mail";
 type TaskFilter = "day" | "all" | "undated";
@@ -13,7 +14,7 @@ const menu: { page: Page; icon: string; label: string; ready: boolean }[] = [
   { page: "focus", icon: "◷", label: "专注与自律", ready: true },
   { page: "team", icon: "⌘", label: "小组协作", ready: false },
   { page: "ai", icon: "✳", label: "AI 辅助规划", ready: false },
-  { page: "connectors", icon: "⇄", label: "数据接入", ready: false },
+  { page: "connectors", icon: "⇄", label: "数据接入", ready: true },
   { page: "mail", icon: "✉", label: "邮件管理", ready: false },
 ];
 
@@ -399,6 +400,8 @@ export default function App() {
               </div>
             </>
           )}
+
+          {page === "connectors" && <CanvasConnector />}
 
           {!selectedModule.ready && (
             <div className="placeholder-panel"><span className="placeholder-icon">{selectedModule.icon}</span><div className="eyebrow">NEXT DEVELOPMENT SLICE</div><h1>{selectedModule.label}</h1><p>该模块属于 V0.1 开发范围，但本次工程切片尚未实现真实功能。这里不会使用模拟数据冒充已接入。</p><div className="placeholder-actions"><button className="primary-button" onClick={() => setPage("overview")}>返回工作台</button><button className="secondary-button" onClick={() => setPage("calendar")}>使用任务管理</button></div></div>
