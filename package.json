@@ -20,6 +20,7 @@
     "dist:mac": "npm run build && electron-builder --mac"
   },
   "dependencies": {
+    "pdfjs-dist": "6.5.438",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },

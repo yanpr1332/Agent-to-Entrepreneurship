@@ -1,13 +1,13 @@
 import { basename, extname } from "node:path";
 import { lstat, readFile, realpath } from "node:fs/promises";
-import type { KnowledgeFormat } from "../shared/knowledge-model";
+import { readSelectedKnowledgePdf,type SelectedKnowledgePdf } from "./pdf-extract";
 
 export const MAX_KNOWLEDGE_FILE_BYTES=2*1024*1024;
 
 export interface SelectedKnowledgeText {
   sourcePath:string;
   title:string;
-  format:KnowledgeFormat;
+  format:"markdown"|"text";
   text:string;
 }
 
@@ -41,4 +41,10 @@ export async function readSelectedKnowledgeText(path:string):Promise<SelectedKno
     format:extension===".txt"?"text":"markdown",
     text,
   };
+}
+
+/** All paths originate from a trusted native Electron file picker. */
+export async function readSelectedKnowledgeFile(path:string):Promise<SelectedKnowledgeText|SelectedKnowledgePdf>{
+  if(extname(path).toLowerCase()===".pdf")return readSelectedKnowledgePdf(path);
+  return readSelectedKnowledgeText(path);
 }

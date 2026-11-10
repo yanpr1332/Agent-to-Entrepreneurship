@@ -16,7 +16,7 @@ import { classifyMailSubject, parseMailCandidateChoice } from "../shared/mail-ca
 import type { MailCandidate } from "../shared/mail-candidates";
 import { KnowledgeStore } from "./knowledge-store";
 import { PlanningStore } from "./planning-store";
-import { readSelectedKnowledgeText } from "./knowledge-import";
+import { readSelectedKnowledgeFile } from "./knowledge-import";
 import { createLocalBackup, backupBeforeMigration } from "./local-backup";
 import { AIKeyVault } from "./ai/ai-vault";
 import { AIUsageLedger } from "./ai/ai-usage";
@@ -194,18 +194,22 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return knowledge().getDocument(id);
   });
+  ipcMain.handle(IPC_CHANNELS.knowledgePassage,(event,id:unknown,ordinal:unknown)=>{
+    requireTrustedSender(event);
+    return knowledge().getPassage(id,ordinal);
+  });
   ipcMain.handle(IPC_CHANNELS.knowledgeImport, async event => {
     requireTrustedSender(event);
     const owner=BrowserWindow.fromWebContents(event.sender);
     if(!owner || owner.isDestroyed())throw new Error("Knowledge import requires a trusted window");
     const selection=await dialog.showOpenDialog(owner,{
-      title:"选择 Markdown 或 UTF-8 文本资料",
+      title:"选择 PDF、Markdown 或 UTF-8 文本资料",
       properties:["openFile"],
-      filters:[{name:"Markdown / UTF-8 TXT",extensions:["md","markdown","txt"]}],
+      filters:[{name:"PDF / Markdown / UTF-8 TXT",extensions:["pdf","md","markdown","txt"]}],
     });
     if(selection.canceled || !selection.filePaths.length)return null;
-    const source=await readSelectedKnowledgeText(selection.filePaths[0]);
-    return knowledge().importText(source);
+    const source=await readSelectedKnowledgeFile(selection.filePaths[0]);
+    return source.format==="pdf" ? knowledge().importPdf(source) : knowledge().importText(source);
   });
   ipcMain.handle(IPC_CHANNELS.knowledgeDelete, (event,id:unknown) => {
     requireTrustedSender(event);
@@ -509,7 +513,7 @@ app.whenReady().then(async () => {
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
     await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",4);
-    await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",1);
+    await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",2);
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
     knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "ate-knowledge.sqlite"));
     planningStore = new PlanningStore(join(app.getPath("userData"), "ate-plans.sqlite"));

@@ -19,7 +19,7 @@ import type {
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult,
+  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage,
 } from "../shared/knowledge-model";
 
 import type {
@@ -143,6 +143,8 @@ const desktopApi = Object.freeze({
   knowledge: Object.freeze({
     documents: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeDocuments) as Promise<KnowledgeDocument[]>,
     get: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeGet,id) as Promise<KnowledgeSnapshot>,
+    passage: (id: string, ordinal: number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgePassage,id,ordinal) as Promise<KnowledgePassage>,
     importFile: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeImport) as Promise<{document:KnowledgeDocument;changed:boolean}|null>,
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeDelete,id) as Promise<boolean>,
     search: (query: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeSearch,query) as Promise<KnowledgeSearchHit[]>,

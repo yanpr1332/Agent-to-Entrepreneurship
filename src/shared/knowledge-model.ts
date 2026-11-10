@@ -1,4 +1,4 @@
-export type KnowledgeFormat = "markdown" | "text";
+export type KnowledgeFormat = "markdown" | "text" | "pdf";
 export interface KnowledgeDocument {
   id: string;
   title: string;
@@ -9,6 +9,8 @@ export interface KnowledgeDocument {
   importedAt: string;
   updatedAt: string;
   revision: number;
+  /** Actual PDF page count; null for Markdown/TXT. */
+  pageCount: number | null;
 }
 export interface KnowledgeSnapshot extends KnowledgeDocument {
   /** An indexed local copy; the original on disk is never rewritten. */
@@ -21,6 +23,15 @@ export interface KnowledgeSearchHit {
   documentRevision: number;
   ordinal: number;
   excerpt: string;
+  pageNumber: number | null;
+}
+export interface KnowledgePassage {
+  documentId: string;
+  documentTitle: string;
+  revision: number;
+  ordinal: number;
+  pageNumber: number | null;
+  body: string;
 }
 export type ReviewRating = "again" | "hard" | "good" | "easy";
 export interface KnowledgeReviewCard {
@@ -30,6 +41,7 @@ export interface KnowledgeReviewCard {
   sourceOrdinal: number;
   evidence: string;
   sourceHash: string;
+  sourcePage: number | null;
   needsReview: boolean;
   question: string;
   answer: string;

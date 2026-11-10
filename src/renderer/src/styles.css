@@ -293,3 +293,6 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
 .ai-task-picker span{flex:1;overflow-wrap:anywhere}
 .ai-task-picker small{font-size:10px;color:var(--muted);white-space:nowrap}
 .ai-planning-section .ai-question-preview{max-height:350px}
+
+/* PDF source anchors refer to the PDF's physical page order, not printed labels. */
+.kb-page-citation{font-size:11px;color:var(--accent);font-weight:600;margin:4px 0 9px}
