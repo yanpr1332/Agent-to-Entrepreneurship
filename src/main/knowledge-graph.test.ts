@@ -30,7 +30,8 @@ describe("source-cited local knowledge graph v3",()=>{
     expect(na.evidence).toContain("biological facts");
     const edge=store.createGraphEdge({sourceId:na.id,targetId:nb.id,relation:"related",note:"human note"});
     expect(edge.status).toBe("confirmed");
-    expect(store.graph()).toMatchObject({nodes:[{id:na.id},{id:nb.id}],edges:[{id:edge.id}]});
+    expect(store.graph().nodes.map(n=>n.id).sort()).toEqual([na.id,nb.id].sort());
+    expect(store.graph().edges.map(e=>e.id)).toEqual([edge.id]);
     expect(store.createGraphNode(nodeInput(da.id,"DNA")).id).toBe(na.id);
     expect(store.createGraphEdge({sourceId:na.id,targetId:nb.id,relation:"related",note:"human note"}).id)
       .toBe(edge.id);
