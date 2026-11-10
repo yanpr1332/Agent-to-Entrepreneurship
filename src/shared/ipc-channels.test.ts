@@ -52,6 +52,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "knowledge:documents",
       "knowledge:get",
       "knowledge:import",
+      "knowledge:passage",
       "knowledge:remove-card",
       "knowledge:review-card",
       "knowledge:review-progress",
@@ -83,7 +84,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
   it("preserves all mail and cloud handlers without overlap", () => {
     const all = Object.values(IPC_CHANNELS);
     expect(new Set(all).size).toBe(all.length);
-    expect(all.filter((name) => name.startsWith("mail:"))).toHaveLength(10);
+    expect(all.filter((name) => name.startsWith("mail:"))).toHaveLength(11);
     expect(all.filter((name) => name.startsWith("cloud:"))).toHaveLength(15);
   });
 

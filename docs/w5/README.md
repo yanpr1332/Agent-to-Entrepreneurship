@@ -107,3 +107,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## W6-13 AI 结构化学习规划的人工审核闭环
 
 在 PR #12 的用户授权与付费保护基础上增加「逐项选择个人任务 → 完整外发预览 → 明确确认 API → 严格校验 JSON 时间块 → 现有人工审阅/选择性应用/撤销」。默认离线规划照旧可用。参见 [11_AI_PLANNING_REVIEW.md](11_AI_PLANNING_REVIEW.md)。PR #13 依赖 PR #12，二者需依序审阅合并。
+
+
+## W6-15 可追溯 PDF 知识库
+
+本地知识库支持原生文件选取 PDF 的纯文字逐页解析，全文搜索和复习卡记录 PDF 物理页码。SQLite 由 v1 安全备份后升级至 v2；只保留提取后的文字/来源记录而非 PDF 原文件。OCR、复杂公式校验、原文 PDF 内嵌阅读器和 AI 引用问答留待后续。参见 [12_PDF_KNOWLEDGE_CITATIONS.md](12_PDF_KNOWLEDGE_CITATIONS.md)。
