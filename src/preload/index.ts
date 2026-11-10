@@ -30,6 +30,8 @@ import type {
   AIConnectInput, AIStatus, AIPreview, AIAnswer,
 } from "../shared/ai-model";
 
+import type { AIPlanPrepareInput, AIPlanAccepted } from "../shared/ai-plan-model";
+
 const desktopApi = Object.freeze({
   ping: () => ipcRenderer.invoke(IPC_CHANNELS.appPing) as Promise<{ ok: true }>,
   getVersion: () => ipcRenderer.invoke(IPC_CHANNELS.appGetVersion) as Promise<string>,
@@ -123,6 +125,10 @@ const desktopApi = Object.freeze({
     confirm: (approvalId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.aiConfirm,approvalId) as Promise<AIAnswer>,
     cancel: () => ipcRenderer.invoke(IPC_CHANNELS.aiCancel) as Promise<AIStatus>,
+    planPrepare: (selection: AIPlanPrepareInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.aiPlanPrepare,selection) as Promise<AIPreview>,
+    planConfirm: (approvalId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.aiPlanConfirm,approvalId) as Promise<AIPlanAccepted>,
   }),
   planning: Object.freeze({
     generate: (settings: PlanningSettings) =>

@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, backup } from "node:sqlite";
 import type { LocalTask } from "../shared/local-model";
+import type { AIPlanSlot } from "../shared/ai-plan-model";
 import {
   dayOffset, eligiblePlanningTasks, parsePlanApply, parsePlanningSettings, parseMinute,
   validCivilDay,
@@ -132,17 +133,73 @@ export class PlanningStore {
       });
     }
     const proposal:PlanProposal={id,createdAt:now.toISOString(),settings,blocks:planned,skipped};
+    this.persistProposal(proposal);
+    return proposal;
+  }
+
+  /**
+   * The model can ONLY choose proposed time slots for pre-approved task IDs.
+   * There is no pathway to edit local tasks or commit the schedule here.
+   */
+  proposeFromAI(
+    rawSettings:unknown, selectedTasks:LocalTask[], slots:AIPlanSlot[],now=new Date(),
+  ):PlanProposal{
+    const settings=parsePlanningSettings(rawSettings);
+    if(!Array.isArray(slots) || slots.length<1 || slots.length>5)
+      throw Error("AI returned an invalid number of schedule blocks");
+    const today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),
+      String(now.getDate()).padStart(2,"0")].join("-");
+    if(settings.startDate<today)throw Error("Planning window is already in the past");
+    const taskMap=new Map(selectedTasks.filter(t=>t.visible&&!t.completed).map(t=>[t.id,t]));
+    const known=new Set<string>();
+    const already=this.listCommitted();
+    const planned:PlanBlock[]=[];
+    const lastDay=dayOffset(settings.startDate,settings.days-1);
+    const start=parseMinute(settings.dailyStart),end=parseMinute(settings.dailyEnd);
+    for(const item of slots){
+      if(!item || typeof item.taskId!=="string" || !taskMap.has(item.taskId) ||
+         known.has(item.taskId))throw Error("AI referenced an unknown or duplicate task");
+      if(!validCivilDay(item.day) || item.day<settings.startDate || item.day>lastDay ||
+         !Number.isSafeInteger(item.startMinute) || item.startMinute%15!==0 ||
+         item.startMinute<start || item.startMinute+settings.minutesPerTask>end)
+        throw Error("AI suggested a time outside the selected planning window");
+      const task=taskMap.get(item.taskId)!;
+      if(task.dueDate && item.day>task.dueDate)throw Error("AI suggested a slot after a task deadline");
+      if(already.some(block=>block.taskId===task.id))
+        throw Error("AI tried to schedule a task that was already planned");
+      const proposed={day:item.day,startMinute:item.startMinute,durationMinutes:settings.minutesPerTask};
+      if([...already,...planned].some(block=>overlaps(proposed,block)))
+        throw Error("AI suggested overlapping schedule blocks");
+      known.add(task.id);
+      planned.push({
+        id:randomUUID(),taskId:task.id,taskTitle:task.title,
+        taskUpdatedAt:task.updatedAt,taskDueDate:task.dueDate,
+        day:item.day,startMinute:item.startMinute,durationMinutes:settings.minutesPerTask,
+        rationale:"AI 建议：仅根据你明确选择的任务与规划时间窗生成；请核对真实课程和其他日程",
+        state:"proposed",batchId:null,
+      });
+    }
+    const skipped=selectedTasks.filter(t=>!known.has(t.id))
+      .map(t=>({taskId:t.id,reason:"AI 未为此任务提供符合规则的安排"}));
+    const proposal:PlanProposal={
+      id:randomUUID(),createdAt:now.toISOString(),settings,blocks:planned,skipped,
+    };
+    this.persistProposal(proposal);
+    return proposal;
+  }
+
+  private persistProposal(proposal:PlanProposal):void {
+    const {id,createdAt,settings,skipped,blocks:planned}=proposal;
     this.db.exec("BEGIN IMMEDIATE");
     try{
       this.db.prepare("INSERT INTO plan_proposals(id,created_at,settings_json,skipped_json) VALUES(?,?,?,?)")
-        .run(id,proposal.createdAt,JSON.stringify(settings),JSON.stringify(skipped));
+        .run(id,createdAt,JSON.stringify(settings),JSON.stringify(skipped));
       const insert=this.db.prepare(`INSERT INTO plan_blocks(
         id,proposal_id,task_id,task_title,task_updated_at,task_due_date,
         day,start_minute,duration_minutes,rationale,state,batch_id
       ) VALUES(?,?,?,?,?,?,?,?,?,?,'proposed',NULL)`);
       for(const b of planned)insert.run(b.id,id,b.taskId,b.taskTitle,b.taskUpdatedAt,
         b.taskDueDate,b.day,b.startMinute,b.durationMinutes,b.rationale);
-      // Retain only latest 15 proposals; applied blocks keep their batch history.
       const stale=this.db.prepare(`SELECT id FROM plan_proposals ORDER BY created_at DESC
         LIMIT -1 OFFSET ?`).all(MAX_PROPOSALS) as {id:string}[];
       for(const row of stale){
@@ -152,7 +209,6 @@ export class PlanningStore {
       }
       this.db.exec("COMMIT");
     }catch(e){this.db.exec("ROLLBACK");throw e;}
-    return proposal;
   }
 
   /** Atomic selected application. Reject stale tasks, forged IDs and overlaps. */

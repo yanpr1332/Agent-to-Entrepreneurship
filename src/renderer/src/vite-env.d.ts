@@ -30,6 +30,8 @@ import type {
   AIConnectInput, AIStatus, AIPreview, AIAnswer,
 } from "../../shared/ai-model";
 
+import type { AIPlanPrepareInput, AIPlanAccepted } from "../../shared/ai-plan-model";
+
 declare global {
   interface Window {
     desktop: {
@@ -93,6 +95,8 @@ declare global {
         prepare: (prompt: string) => Promise<AIPreview>;
         confirm: (approvalId: string) => Promise<AIAnswer>;
         cancel: () => Promise<AIStatus>;
+        planPrepare: (selection: AIPlanPrepareInput) => Promise<AIPreview>;
+        planConfirm: (approvalId: string) => Promise<AIPlanAccepted>;
       };
       planning: {
         generate: (settings: PlanningSettings) => Promise<PlanProposal>;

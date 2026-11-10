@@ -102,3 +102,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## W6-12 OpenAI Provider 安全接入
 
 新增独立的 AI 学习助手：个人 Key 系统加密、单轮问题预览与两分钟一次性确认、固定 HTTPS Responses API、无自动工具/任务写入、每日请求预算与本地脱敏 token 用量。尚不把 AI 自动接入规划或知识库，也不需要开发阶段的真实 API Key。详见 [10_AI_PROVIDER_SECURITY.md](10_AI_PROVIDER_SECURITY.md)。
+
+
+## W6-13 AI 结构化学习规划的人工审核闭环
+
+在 PR #12 的用户授权与付费保护基础上增加「逐项选择个人任务 → 完整外发预览 → 明确确认 API → 严格校验 JSON 时间块 → 现有人工审阅/选择性应用/撤销」。默认离线规划照旧可用。参见 [11_AI_PLANNING_REVIEW.md](11_AI_PLANNING_REVIEW.md)。PR #13 依赖 PR #12，二者需依序审阅合并。

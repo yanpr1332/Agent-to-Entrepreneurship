@@ -25,6 +25,8 @@ export const IPC_CHANNELS = {
   aiPrepare: "ai:prepare",
   aiConfirm: "ai:confirm",
   aiCancel: "ai:cancel",
+  aiPlanPrepare: "ai:plan-prepare",
+  aiPlanConfirm: "ai:plan-confirm",
   tasksList: "tasks:list",
   tasksCreate: "tasks:create",
   tasksUpdate: "tasks:update",
