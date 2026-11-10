@@ -14,6 +14,9 @@ export const IPC_CHANNELS = {
   canvasCourses: "canvas:courses",
   canvasAssignments: "canvas:assignments",
   canvasDisconnect: "canvas:disconnect",
+  canvasImported: "canvas:imported",
+  canvasImportAssignment: "canvas:import-assignment",
+  canvasSyncCourse: "canvas:sync-course",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

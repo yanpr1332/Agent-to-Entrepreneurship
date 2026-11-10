@@ -72,3 +72,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## Canvas 真实接口开发验证
 
 本轮新增 Canvas Personal Token **仅限开发者本人本地** 的真实只读连接器：课程/作业浏览、安全分页、主进程凭据加密、断开连接。实现方式、真实账号验收条件和未完成 OAuth/增量同步事项见 [03_CANVAS_CONNECTOR.md](03_CANVAS_CONNECTOR.md)。不把 CI mock 误报为学校接口已测试通过；不增加 npm 依赖。
+
+
+## Canvas 自动同步与统一外部接入同步原则
+
+产品决策：Canvas 当前课程作业默认自动同步；用户逐条控制显示/隐藏；隐藏数据本地保留六个月并提醒到期清理。邮箱、日历、文件等接入遵循授权后按范围定时增量同步的统一模型，不要求所有条目手动导入。详见 [04_CANVAS_TASK_SYNC.md](04_CANVAS_TASK_SYNC.md)。该文档包含目标验收标准，不代表当前 PR 代码已经全部实现。

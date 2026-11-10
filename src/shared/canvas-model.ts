@@ -49,3 +49,16 @@ export function parseCanvasCourseId(value: unknown): number {
   }
   return value;
 }
+
+export interface CanvasImportResult {
+  taskId: string;
+  created: boolean;
+  updatedFields: string[];
+}
+
+export interface CanvasSyncResult {
+  imported: number;
+  changed: number;
+  missing: number;
+  preserved: number;
+}

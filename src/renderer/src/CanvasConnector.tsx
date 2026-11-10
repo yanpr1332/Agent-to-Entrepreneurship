@@ -15,7 +15,7 @@ function errorText(error: unknown): string {
  * Dedicated connector view. No token is persisted in React storage or sent
  * anywhere except the narrow connect IPC call to the Electron main process.
  */
-export default function CanvasConnector() {
+export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: () => Promise<void> }) {
   const [status, setStatus] = useState<CanvasConnectionStatus>(disconnected);
   const [baseUrl, setBaseUrl] = useState("https://oc.sjtu.edu.cn");
   const [token, setToken] = useState("");
@@ -23,6 +23,8 @@ export default function CanvasConnector() {
   const [courseId, setCourseId] = useState<number | null>(null);
   const [assignments, setAssignments] = useState<CanvasAssignment[]>([]);
   const [loading, setLoading] = useState(false);
+  const [importedIds, setImportedIds] = useState<number[]>([]);
+  const [savingAssignmentId, setSavingAssignmentId] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -58,6 +60,7 @@ export default function CanvasConnector() {
       setToken("");
       setCourseId(null);
       setAssignments([]);
+      setImportedIds([]);
       setNotice("课程读取成功。开发者个人 Token 仅加密保存在本机。");
     } catch (reason) {
       setError(errorText(reason));
@@ -73,6 +76,7 @@ export default function CanvasConnector() {
       setCourses(await window.desktop.canvas.courses());
       setCourseId(null);
       setAssignments([]);
+      setImportedIds([]);
     } catch (reason) {
       setError(errorText(reason));
     } finally {
@@ -85,8 +89,48 @@ export default function CanvasConnector() {
     setError("");
     setCourseId(id);
     setAssignments([]);
+    setImportedIds([]);
     try {
-      setAssignments(await window.desktop.canvas.assignments(id));
+      const [remote, imported] = await Promise.all([
+        window.desktop.canvas.assignments(id), window.desktop.canvas.imported(id),
+      ]);
+      setAssignments(remote);
+      setImportedIds(imported);
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function importAssignment(assignmentId: number): Promise<void> {
+    if (courseId === null || loading || savingAssignmentId !== null) return;
+    setSavingAssignmentId(assignmentId);
+    setError("");
+    setNotice("");
+    try {
+      const result = await window.desktop.canvas.importAssignment(courseId, assignmentId);
+      setImportedIds((ids) => ids.includes(assignmentId) ? ids : [...ids, assignmentId]);
+      await onTasksChanged();
+      setNotice(result.created ? "作业已导入本地任务，可在日历中查看。" : "此作业已导入，无需重复创建。");
+    } catch (reason) {
+      setError(errorText(reason));
+    } finally {
+      setSavingAssignmentId(null);
+    }
+  }
+
+  async function syncImported(): Promise<void> {
+    if (courseId === null || loading || savingAssignmentId !== null) return;
+    setLoading(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await window.desktop.canvas.syncCourse(courseId);
+      await onTasksChanged();
+      setNotice(`已检查 ${result.imported} 条已导入作业；更新 ${result.changed} 条；保留个人修改 ${result.preserved} 条；远端未找到 ${result.missing} 条（本地不会删除）。`);
+      const imported = await window.desktop.canvas.imported(courseId);
+      setImportedIds(imported);
     } catch (reason) {
       setError(errorText(reason));
     } finally {
@@ -104,6 +148,7 @@ export default function CanvasConnector() {
       setToken("");
       setCourses([]);
       setAssignments([]);
+      setImportedIds([]);
       setCourseId(null);
       setNotice("已断开 Canvas，本机加密 Token 文件已删除。");
     } catch (reason) {
@@ -189,7 +234,10 @@ export default function CanvasConnector() {
       {status.connected && courseId !== null && (
         <section className="panel connector-assignments">
           <div className="eyebrow">COURSE ASSIGNMENTS</div>
-          <h2>{courses.find((course) => course.id === courseId)?.name ?? "课程"} · 作业</h2>
+          <div className="panel-heading">
+            <h2>{courses.find((course) => course.id === courseId)?.name ?? "课程"} · 作业</h2>
+            <button className="secondary-button" disabled={loading || savingAssignmentId !== null} onClick={() => void syncImported()}>同步已导入作业</button>
+          </div>
           {loading ? <p className="empty-state">正在读取作业…</p> :
             assignments.length === 0 ? <p className="empty-state">当前没有读取到作业。</p> :
             <ul className="connector-list">
@@ -204,12 +252,14 @@ export default function CanvasConnector() {
                       {assignment.pointsPossible === null ? "" : ` · ${assignment.pointsPossible} 分`}
                     </small>
                   </div>
-                  <span className="muted-tag">Canvas #{assignment.id}</span>
+                  <button className="secondary-button" disabled={loading || savingAssignmentId !== null || importedIds.includes(assignment.id)} onClick={() => void importAssignment(assignment.id)}>
+                    {savingAssignmentId === assignment.id ? "导入中…" : importedIds.includes(assignment.id) ? "已导入" : "导入任务"}
+                  </button>
                 </li>
               ))}
             </ul>}
           <p className="privacy-note">
-            当前提供真实只读浏览。作业导入任务、增量去重与 OAuth 将作为独立开发任务实现。
+            只有点击「导入任务」的作业才会写入本机日历；「同步已导入作业」不会自动导入其他作业，也不会删除本地任务。个人备注、完成状态及手动修改的标题/截止日期会保留。OAuth 仍须学校 Developer Key。
           </p>
         </section>
       )}
