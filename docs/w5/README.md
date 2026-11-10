@@ -121,4 +121,4 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 
 ## W6 固定课程与 ICS
 
-支持本机固定课程/一次性与手动按周展开、受控 ICS 文件导入预览与导出、学习规划和 AI 建议的固定事项避让。具体支持格式与时区限制见 [14_ICS_FIXED_CALENDAR.md](14_ICS_FIXED_CALENDAR.md)。
+支持本机固定课程/按周展开、IANA TZID 与有限周 RRULE 的安全 ICS 导入预览、单次编辑/整组删除、ICS 导出，以及学习规划和 AI 建议的固定事项避让。具体支持格式与时区限制见 [14_ICS_FIXED_CALENDAR.md](14_ICS_FIXED_CALENDAR.md)。
