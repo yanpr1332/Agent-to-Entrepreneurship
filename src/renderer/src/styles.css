@@ -258,3 +258,27 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
 .planned-day-list{list-style:none;padding:0;margin:9px 0}
 .planned-day-list strong{font-size:11px;overflow-wrap:anywhere}
 @media(max-width:1170px){.planner-layout{grid-template-columns:1fr}}
+
+/* PR12: secure OpenAI Responses API, explicit one-shot opt-in requests. */
+.ai-page{display:grid;gap:16px}
+.ai-layout{display:grid;grid-template-columns:minmax(260px,.78fr) minmax(440px,1.35fr);gap:14px;align-items:start}
+.ai-config-form{display:grid;gap:13px;margin-top:15px}
+.ai-config-form label{display:grid;gap:7px;color:var(--muted);font-size:11px}
+.ai-config-form input,.ai-config-form textarea{width:100%;background:var(--surface);color:var(--ink);
+ border:1px solid var(--line);border-radius:8px;padding:11px;resize:vertical;overflow-wrap:anywhere}
+.ai-connection{display:grid;gap:7px;margin:14px 0}
+.ai-connection p{font-size:11px;color:var(--muted);margin:0;overflow-wrap:anywhere}
+.ai-char-count{text-align:right;font-size:10px;color:var(--muted)}
+.ai-preview{display:grid;gap:11px;border:1px solid var(--line);border-radius:8px;background:var(--canvas);
+ padding:16px;font-size:12px}
+.ai-preview p{margin:0;line-height:1.65}
+.ai-question-preview{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:260px;
+ overflow:auto;border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:12px}
+.ai-answer-list{display:grid;gap:14px;margin:13px 0;max-height:550px;overflow:auto}
+.ai-answer{border:1px solid var(--line);border-radius:8px;padding:13px;background:var(--canvas);
+ display:grid;gap:8px}
+.ai-answer p,.ai-answer-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.7}
+.ai-answer p{margin:0}
+.ai-answer-text{background:var(--surface);padding:12px;border-radius:7px}
+.ai-answer small{color:var(--muted);font-size:10px}
+@media(max-width:1100px){.ai-layout{grid-template-columns:1fr}}

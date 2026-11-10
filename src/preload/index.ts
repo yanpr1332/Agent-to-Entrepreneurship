@@ -26,6 +26,10 @@ import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
 } from "../shared/planning-model";
 
+import type {
+  AIConnectInput, AIStatus, AIPreview, AIAnswer,
+} from "../shared/ai-model";
+
 const desktopApi = Object.freeze({
   ping: () => ipcRenderer.invoke(IPC_CHANNELS.appPing) as Promise<{ ok: true }>,
   getVersion: () => ipcRenderer.invoke(IPC_CHANNELS.appGetVersion) as Promise<string>,
@@ -109,6 +113,16 @@ const desktopApi = Object.freeze({
     imported: (courseId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasImported, courseId) as Promise<number[]>,
     importAssignment: (courseId: number, assignmentId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasImportAssignment, courseId, assignmentId) as Promise<CanvasImportResult>,
     syncCourse: (courseId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasSyncCourse, courseId) as Promise<CanvasSyncResult>,
+  }),
+  ai: Object.freeze({
+    status: () => ipcRenderer.invoke(IPC_CHANNELS.aiStatus) as Promise<AIStatus>,
+    connect: (settings: AIConnectInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.aiConnect,settings) as Promise<AIStatus>,
+    disconnect: () => ipcRenderer.invoke(IPC_CHANNELS.aiDisconnect) as Promise<AIStatus>,
+    prepare: (prompt: string) => ipcRenderer.invoke(IPC_CHANNELS.aiPrepare,prompt) as Promise<AIPreview>,
+    confirm: (approvalId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.aiConfirm,approvalId) as Promise<AIAnswer>,
+    cancel: () => ipcRenderer.invoke(IPC_CHANNELS.aiCancel) as Promise<AIStatus>,
   }),
   planning: Object.freeze({
     generate: (settings: PlanningSettings) =>
