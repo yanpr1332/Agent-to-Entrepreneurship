@@ -7,6 +7,11 @@ import type {
 
 import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPersonalTokenInput, CanvasImportResult, CanvasSyncResult, CanvasAutoSyncSummary, CanvasCourseSetting } from "../../shared/canvas-model";
 
+import type {
+  CloudCredentials, CloudProjectConfig, CloudSessionStatus,
+  SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
+} from "../../shared/cloud-model";
+
 declare global {
   interface Window {
     desktop: {
@@ -18,6 +23,23 @@ declare global {
         update: (input: UpdateTaskInput) => Promise<LocalTask>;
         remove: (id: string) => Promise<boolean>;
         visibility: (id: string, visible: boolean) => Promise<boolean>;
+      };
+      cloud: {
+        status: () => Promise<CloudSessionStatus>;
+        configure: (input: CloudProjectConfig) => Promise<CloudSessionStatus>;
+        login: (input: CloudCredentials) => Promise<CloudSessionStatus>;
+        signup: (input: CloudCredentials) => Promise<{emailVerificationRequired:true}>;
+        logout: () => Promise<CloudSessionStatus>;
+        workspaces: () => Promise<SharedWorkspace[]>;
+        createWorkspace: (name: string, displayName: string) => Promise<string>;
+        createInvite: (workspaceId: string) => Promise<string>;
+        joinWorkspace: (token: string, displayName: string) => Promise<string>;
+        members: (workspaceId: string) => Promise<SharedMember[]>;
+        messages: (workspaceId: string) => Promise<SharedMessage[]>;
+        sendMessage: (workspaceId: string, body: string) => Promise<SharedMessage>;
+        tasks: (workspaceId: string) => Promise<SharedTask[]>;
+        createTask: (workspaceId: string, input: SharedTaskInput) => Promise<SharedTask>;
+        markTask: (workspaceId: string, taskId: string, completed: boolean) => Promise<SharedTask>;
       };
       canvas: {
         status: () => Promise<CanvasConnectionStatus>;

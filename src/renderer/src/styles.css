@@ -123,3 +123,38 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
 .hidden-expiry{color:#b66d43!important;font-weight:600}
 .retention-banner{background:var(--tint);color:var(--ink);padding:11px;border-radius:8px;font-size:11px;line-height:1.6}
 .retention-warning{background:#fff3e5;color:#8a542d;border:1px solid #ead2b6;border-radius:8px;padding:11px;font-size:11px}
+
+/* Cloud collaboration PoC: only explicit team records reach the external service. */
+.cloud-page{display:grid;gap:17px}
+.cloud-setup,.cloud-auth{max-width:680px}
+.cloud-form{display:grid;gap:13px}
+.cloud-form h3{font-size:12px;margin:11px 0 2px}
+.cloud-form label{display:grid;gap:6px;color:var(--muted);font-size:11px}
+.cloud-form input,.cloud-form textarea,.cloud-form select,.cloud-message-form textarea{
+  width:100%;border:1px solid var(--line);border-radius:8px;background:var(--surface);
+  color:var(--ink);padding:10px;resize:vertical
+}
+.cloud-session-row{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:12px}
+.cloud-layout{display:grid;grid-template-columns:minmax(240px,.68fr) minmax(470px,1.4fr);gap:14px;align-items:start}
+.cloud-workspaces{display:grid;gap:14px}
+.cloud-workspace-list{display:flex;gap:7px;flex-wrap:wrap}
+.cloud-main{display:grid;gap:14px}
+.cloud-members{display:flex;flex-wrap:wrap;gap:7px;margin:9px 0 15px}
+.cloud-invite{display:grid;gap:9px}
+.cloud-invite-secret{background:var(--canvas);border:1px solid var(--line);padding:10px;border-radius:8px;display:grid;gap:6px;font-size:10px}
+.cloud-invite-secret code{font-size:12px;overflow-wrap:anywhere;user-select:all}
+.cloud-invite-secret small{color:var(--muted);font-size:10px}
+.cloud-message-list,.cloud-task-list{list-style:none;padding:0;margin:9px 0;max-height:330px;overflow-y:auto}
+.cloud-message-list li{padding:9px 0;border-bottom:1px solid var(--line)}
+.cloud-message-list li>div{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.cloud-message-list strong{font-size:11px}
+.cloud-message-list small{color:var(--muted);font-size:10px}
+.cloud-message-list p{margin:7px 0 3px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+.cloud-message-form{display:grid;gap:10px}
+.cloud-task-list li{display:flex;align-items:flex-start;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.cloud-task-list input{accent-color:var(--accent);margin-top:3px}
+.cloud-task-list strong,.cloud-task-list small{display:block}
+.cloud-task-list strong{font-size:12px}
+.cloud-task-list .done{text-decoration:line-through;color:var(--muted)}
+.cloud-task-list small{font-size:10px;color:var(--muted);margin-top:4px}
+@media(max-width:1180px){.cloud-layout{grid-template-columns:1fr}}

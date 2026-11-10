@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe,expect,it } from "vitest";
 import { IPC_CHANNELS } from "./ipc-channels";
 
-describe("IPC channel contract", () => {
-  it("exposes only the explicitly reviewed and narrow application channels", () => {
+describe("approved IPC allowlist",()=>{
+  it("exposes only narrow reviewed calls",()=>{
     expect(Object.values(IPC_CHANNELS).sort()).toEqual([
           "app:get-version",
           "app:ping",
@@ -19,6 +19,21 @@ describe("IPC channel contract", () => {
           "canvas:sync-now",
           "canvas:sync-status",
           "canvas:sync-updated",
+          "cloud:configure",
+          "cloud:create-invite",
+          "cloud:create-task",
+          "cloud:create-workspace",
+          "cloud:join-workspace",
+          "cloud:login",
+          "cloud:logout",
+          "cloud:mark-task",
+          "cloud:members",
+          "cloud:messages",
+          "cloud:send-message",
+          "cloud:signup",
+          "cloud:status",
+          "cloud:tasks",
+          "cloud:workspaces",
           "focus:finish",
           "focus:list",
           "focus:summary",
@@ -29,7 +44,7 @@ describe("IPC channel contract", () => {
           "tasks:visibility"
     ]);
   });
-  it("does not expose arbitrary Node, filesystem or SQL operations", () => {
+  it("does not expose generic database, filesystem or shell APIs",()=>{
     expect(Object.values(IPC_CHANNELS).join(" ")).not.toMatch(/(exec|shell|filesystem|sql|ipcRenderer)/i);
   });
 });

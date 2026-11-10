@@ -13,8 +13,10 @@
 - `src/main/cloud/supabase-client.test.ts`：模拟 HTTPS 授权、项目身份、消息与任务 REST 请求；断言不会把原始错误体传回 Renderer。
 - `src/main/cloud/rls-schema.test.ts`：检查迁移文件存在 RLS、成员条件、受限制的 RPC 和明确授权。
 - `scripts/rls-smoke-test.mjs`：**手动运行**的真实三账号隔离烟雾测试脚本（不在 CI 自动运行），A 创建工作空间并邀请 B；B 可看到 A 的消息；未加入的 C 不可读写。
+- `src/main/index.ts`、`src/preload/index.ts`：15 个明确命名的受信任云端 IPC handler 和类型化能力边界。
+- `src/renderer/src/CloudWorkspace.tsx`：项目配置、独立账号登录/注册、小组创建/邀请码加入、消息、共享任务、成员列表；不包含 service_role Key，也不自动上传个人本地数据。
 
-此 PR 不接入 Electron 主进程 IPC / React 云端页面；没有真实项目凭据时，不能声称五人已经可以登录聊天。该部分将在验证 RLS/帐号后继续接入。
+此 PR **也已接入 Electron Main 窄 IPC 与 React「小组协作」页面**，用户可手动配置自己控制的隔离 Supabase 测试项目，使用独立账号注册/登录、创建/加入小组、查看成员、共享消息与任务。消息采用每 10 秒轮询（不是 Realtime 推送）。**没有真实项目凭据和 SQL 部署时，不能声称已成功进行过五人联机聊天。**
 
 ## 服务端数据模型
 
@@ -66,7 +68,7 @@ CI 可以证明：
 **不能证明**：
 - SQL 确实可以在目标 Supabase 项目部署；
 - RLS 策略对真实独立用户能够隔离数据；
-- 五人消息实时传输、离线冲突、邀请实际成功；
+- 五人真实联机消息、10 秒轮询端到端行为、离线冲突、邀请码在实际项目中是否成功；
 - Supabase 服务可达、邮件确认正常或费用限制可接受。
 
 这些都需要独立的云端联机验收；一旦遇到此阶段，我会明确提出最小验收步骤，不在未经授权情况下操作外部云服务。
@@ -74,8 +76,8 @@ CI 可以证明：
 ## 下一步开发
 
 - 完成测试项目 RLS 验证和所有者批准方案 C；
-- 将客户端接入 Electron Main 的窄 IPC、实现团队空间 React UI；
-- 提供实时消息（Supabase Realtime 或经审查的轮询方案）、成员在线/离线状态、任务归属；
+- 在真实 Supabase 测试项目验证当前已接入的 Main IPC 与 React 团队空间 UI；
+- 当前消息通过 10 秒轮询更新；后续评估 Supabase Realtime 推送、成员在线/离线状态及更低延迟同步；
 - 增加审计、私有资料隔离、可靠退出与云端撤销会话机制；
 - 实测 Windows 和 macOS 各自独立账号跨互联网共享工作空间。
 

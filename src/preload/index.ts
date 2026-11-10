@@ -7,6 +7,11 @@ import type {
 
 import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPersonalTokenInput, CanvasImportResult, CanvasSyncResult, CanvasAutoSyncSummary, CanvasCourseSetting } from "../shared/canvas-model";
 
+import type {
+  CloudCredentials, CloudProjectConfig, CloudSessionStatus,
+  SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
+} from "../shared/cloud-model";
+
 const desktopApi = Object.freeze({
   ping: () => ipcRenderer.invoke(IPC_CHANNELS.appPing) as Promise<{ ok: true }>,
   getVersion: () => ipcRenderer.invoke(IPC_CHANNELS.appGetVersion) as Promise<string>,
@@ -20,6 +25,35 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.tasksRemove, id) as Promise<boolean>,
     visibility: (id: string, visible: boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.tasksVisibility, { id, visible }) as Promise<boolean>,
+  }),
+  cloud: Object.freeze({
+    status: () => ipcRenderer.invoke(IPC_CHANNELS.cloudStatus) as Promise<CloudSessionStatus>,
+    configure: (input: CloudProjectConfig) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudConfigure, input) as Promise<CloudSessionStatus>,
+    login: (input: CloudCredentials) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudLogin, input) as Promise<CloudSessionStatus>,
+    signup: (input: CloudCredentials) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudSignup, input) as Promise<{emailVerificationRequired:true}>,
+    logout: () => ipcRenderer.invoke(IPC_CHANNELS.cloudLogout) as Promise<CloudSessionStatus>,
+    workspaces: () => ipcRenderer.invoke(IPC_CHANNELS.cloudWorkspaces) as Promise<SharedWorkspace[]>,
+    createWorkspace: (name: string, displayName: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudCreateWorkspace, name, displayName) as Promise<string>,
+    createInvite: (workspaceId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudCreateInvite, workspaceId) as Promise<string>,
+    joinWorkspace: (token: string, displayName: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudJoinWorkspace, token, displayName) as Promise<string>,
+    members: (workspaceId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudMembers, workspaceId) as Promise<SharedMember[]>,
+    messages: (workspaceId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudMessages, workspaceId) as Promise<SharedMessage[]>,
+    sendMessage: (workspaceId: string, body: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudSendMessage, workspaceId, body) as Promise<SharedMessage>,
+    tasks: (workspaceId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudTasks, workspaceId) as Promise<SharedTask[]>,
+    createTask: (workspaceId: string, input: SharedTaskInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudCreateTask, workspaceId, input) as Promise<SharedTask>,
+    markTask: (workspaceId: string, taskId: string, completed: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudMarkTask, workspaceId, taskId, completed) as Promise<SharedTask>,
   }),
   canvas: Object.freeze({
     status: () => ipcRenderer.invoke(IPC_CHANNELS.canvasStatus) as Promise<CanvasConnectionStatus>,
