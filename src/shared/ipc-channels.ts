@@ -23,6 +23,14 @@ export const IPC_CHANNELS = {
   canvasSetCourseEnabled: "canvas:set-course-enabled",
   canvasSyncUpdated: "canvas:sync-updated",
   tasksVisibility: "tasks:visibility",
+  mailStatus: "mail:status",
+  mailConnect: "mail:connect",
+  mailList: "mail:list",
+  mailSyncNow: "mail:sync-now",
+  mailDisconnect: "mail:disconnect",
+  mailPrepareSend: "mail:prepare-send",
+  mailConfirmSend: "mail:confirm-send",
+  mailSyncUpdated: "mail:sync-updated",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

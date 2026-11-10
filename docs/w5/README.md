@@ -77,3 +77,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## Canvas 自动同步与统一外部接入同步原则
 
 产品决策：Canvas 当前课程作业默认自动同步；用户逐条控制显示/隐藏；隐藏数据本地保留六个月并提醒到期清理。邮箱、日历、文件等接入遵循授权后按范围定时增量同步的统一模型，不要求所有条目手动导入。详见 [04_CANVAS_TASK_SYNC.md](04_CANVAS_TASK_SYNC.md)。该文档包含目标验收标准，不代表当前 PR 代码已经全部实现。
+
+
+## 上海交大 IMAP/SMTP 邮件连接器
+
+开发验证版新增 `mail.sjtu.edu.cn` 的 TLS IMAP 只读收件头同步（每 10 分钟）、本地加密凭据、纯文本草稿与两阶段人工确认 SMTP 发送。详细设计、服务器参数、隐私与真实账号验收见 [05_SJTU_MAIL_CONNECTOR.md](05_SJTU_MAIL_CONNECTOR.md)。未对学校邮箱执行真实连接，CI 通过不等于实际收发完成验收。
