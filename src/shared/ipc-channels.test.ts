@@ -84,7 +84,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "tasks:remove",
       "tasks:update",
       "tasks:visibility"
-    ]);
+    ].sort());
   });
 
   it("preserves all mail and cloud handlers without overlap", () => {
