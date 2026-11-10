@@ -14,7 +14,7 @@ describe("strict opt-in local ICS support",()=>{
       {sourceUid:"course-1",title:"Course, Lab",day:"2026-11-11",startMinute:540,durationMinutes:60},
       {sourceUid:"all-day",day:"2026-11-12",startMinute:0,durationMinutes:1440},
     ]);
-    const folded=wrap(sameDay.replace("Course\\, Lab","Course\\,\r\n Lab"));
+    const folded=wrap(sameDay.replace("Course\\, Lab","Course\\, \r\n Lab"));
     expect(parseICS(folded)[0].title).toBe("Course, Lab");
   });
   it("exports a portable floating-time ICS and imports the exact same slots",()=>{
