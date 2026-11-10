@@ -23,6 +23,8 @@ export const IPC_CHANNELS = {
   fixedCalendarList: "calendar:fixed-list",
   fixedCalendarCreate: "calendar:fixed-create",
   fixedCalendarDelete: "calendar:fixed-delete",
+  fixedCalendarEdit: "calendar:fixed-edit",
+  fixedCalendarDeleteSeries: "calendar:fixed-delete-series",
   fixedCalendarPreviewICS: "calendar:ics-preview",
   fixedCalendarConfirmICS: "calendar:ics-confirm",
   fixedCalendarCancelICS: "calendar:ics-cancel",
