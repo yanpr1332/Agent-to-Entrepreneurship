@@ -99,7 +99,7 @@ export function validateCloudProject(input:unknown):CloudProjectConfig {
     const parts=key.split(".");
     if(parts.length!==3)throw Error("Expected a Supabase publishable or legacy anon key");
     try {
-      const payload=JSON.parse(Buffer.from(parts[1],"base64url").toString("utf8"));
+      const payload=JSON.parse(atob(parts[1].replace(/-/g,"+").replace(/_/g,"/")));
       if(payload.role!=="anon")throw Error("Only anon keys are permitted");
     } catch {throw Error("Only anon keys are permitted");}
   }
