@@ -1,5 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, type IpcMainInvokeEvent } from "electron";
-import { join } from "node:path";
+import { join,basename,extname } from "node:path";
+import { randomUUID } from "node:crypto";
+import { lstat,readFile,writeFile } from "node:fs/promises";
+import { FixedCalendarStore } from "./fixed-calendar-store";
+import { parseICS,exportICS } from "../shared/ics-calendar";
+import type { ICSPreview,FixedEventDraft } from "../shared/fixed-calendar-model";
 import { pathToFileURL } from "node:url";
 import { IPC_CHANNELS } from "../shared/ipc-channels";
 import { isTrustedRendererUrl } from "../shared/renderer-trust";
@@ -27,6 +32,12 @@ let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
 let knowledgeStore: KnowledgeStore | null = null;
 let planningStore: PlanningStore | null = null;
+let fixedCalendarStore: FixedCalendarStore | null = null;
+let pendingICS:{id:string;expires:number;filename:string;events:FixedEventDraft[]}|null=null;
+function fixedCalendar():FixedCalendarStore{
+  if(!fixedCalendarStore)throw new Error("Fixed calendar database is unavailable");
+  return fixedCalendarStore;
+}
 let aiService: AIService | null = null;
 let aiPlanning: AIPlanningCoordinator | null = null;
 function aiPlanner():AIPlanningCoordinator{
@@ -128,6 +139,67 @@ function registerIpcHandlers(): void {
       throw new Error("Invalid task visibility request");
     }
     return localStore().setCanvasTaskVisibility(data.id, data.visible);
+  });
+  ipcMain.handle(IPC_CHANNELS.fixedCalendarList,event=>{
+    requireTrustedSender(event);
+    return fixedCalendar().list();
+  });
+  ipcMain.handle(IPC_CHANNELS.fixedCalendarCreate,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return fixedCalendar().create(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.fixedCalendarDelete,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return fixedCalendar().delete(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.fixedCalendarPreviewICS,async event=>{
+    requireTrustedSender(event);
+    const owner=BrowserWindow.fromWebContents(event.sender);
+    if(!owner||owner.isDestroyed())throw Error("Calendar import requires a trusted window");
+    pendingICS=null;
+    const chosen=await dialog.showOpenDialog(owner,{
+      title:"选择本机 ICS 日历",
+      properties:["openFile"],filters:[{name:"iCalendar",extensions:["ics"]}],
+    });
+    if(chosen.canceled||chosen.filePaths.length!==1)return null;
+    const path=chosen.filePaths[0];
+    if(extname(path).toLowerCase()!==".ics")throw Error("Only .ics files can be imported");
+    const stat=await lstat(path);
+    if(!stat.isFile()||stat.isSymbolicLink()||stat.size>512*1024)
+      throw Error("ICS import requires a regular file of at most 512 KiB");
+    const buffer=await readFile(path);
+    if(buffer.byteLength>512*1024)throw Error("ICS file grew beyond the import limit");
+    const content=new TextDecoder("utf-8",{fatal:true}).decode(buffer);
+    const events=parseICS(content);
+    const id=randomUUID(),expires=Date.now()+120_000,filename=basename(path);
+    pendingICS={id,expires,filename,events};
+    return {approvalId:id,expiresAt:new Date(expires).toISOString(),
+      filename,events} satisfies ICSPreview;
+  });
+  ipcMain.handle(IPC_CHANNELS.fixedCalendarConfirmICS,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    const pending=pendingICS;
+    pendingICS=null; // Confirmation is one-use, even on error.
+    if(!pending||id!==pending.id||Date.now()>pending.expires)
+      throw Error("ICS preview expired; select and review the file again");
+    return fixedCalendar().import(pending.events);
+  });
+  ipcMain.handle(IPC_CHANNELS.fixedCalendarExportICS,async event=>{
+    requireTrustedSender(event);
+    const owner=BrowserWindow.fromWebContents(event.sender);
+    if(!owner||owner.isDestroyed())throw Error("Calendar export requires a trusted window");
+    const events=fixedCalendar().list();
+    const selection=await dialog.showSaveDialog(owner,{
+      title:"导出本机日历（仅固定事件，不含个人任务）",
+      defaultPath:"ate-calendar.ics",
+      filters:[{name:"iCalendar",extensions:["ics"]}],
+    });
+    if(selection.canceled||!selection.filePath)return {saved:false,eventCount:0};
+    if(extname(selection.filePath).toLowerCase()!==".ics")
+      throw Error("Export destination must end in .ics");
+    // Never overwrite an existing file or follow an existing symlink.
+    await writeFile(selection.filePath,exportICS(events),{encoding:"utf8",flag:"wx",mode:0o600});
+    return {saved:true,eventCount:events.length};
   });
   ipcMain.handle(IPC_CHANNELS.planningGenerate,(event,input:unknown)=>{
     requireTrustedSender(event);
@@ -271,6 +343,7 @@ function registerIpcHandlers(): void {
       {name:"mail",store:mailStore},
       {name:"knowledge",store:knowledge()},
       {name:"planning",store:planner()},
+      {name:"calendar",store:fixedCalendar()},
     ]);
   });
   ipcMain.handle(IPC_CHANNELS.focusList, (event) => {
@@ -540,7 +613,12 @@ app.whenReady().then(async () => {
     await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",3);
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
     knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "ate-knowledge.sqlite"));
-    planningStore = new PlanningStore(join(app.getPath("userData"), "ate-plans.sqlite"));
+    fixedCalendarStore = new FixedCalendarStore(
+      join(app.getPath("userData"),"ate-fixed-calendar.sqlite"),
+      ()=>planningStore?.listCommitted()??[],
+    );
+    planningStore = new PlanningStore(join(app.getPath("userData"), "ate-plans.sqlite"),
+      ()=>fixedCalendar().busySlots());
     aiLedger = new AIUsageLedger(join(app.getPath("userData"), "ate-ai-usage.sqlite"));
     aiService = new AIService(
       new AIKeyVault(join(app.getPath("userData"), "ai-personal.enc"), safeStorage),
@@ -606,8 +684,11 @@ app.on("before-quit", () => {
   aiService = null;
   aiLedger?.close();
   aiLedger = null;
+  pendingICS=null;
   planningStore?.close();
   planningStore = null;
+  fixedCalendarStore?.close();
+  fixedCalendarStore=null;
   knowledgeStore?.close();
   knowledgeStore = null;
   store?.close();
