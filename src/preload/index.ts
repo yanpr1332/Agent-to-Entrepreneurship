@@ -22,6 +22,10 @@ import type {
   KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult,
 } from "../shared/knowledge-model";
 
+import type {
+  PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
+} from "../shared/planning-model";
+
 const desktopApi = Object.freeze({
   ping: () => ipcRenderer.invoke(IPC_CHANNELS.appPing) as Promise<{ ok: true }>,
   getVersion: () => ipcRenderer.invoke(IPC_CHANNELS.appGetVersion) as Promise<string>,
@@ -105,6 +109,16 @@ const desktopApi = Object.freeze({
     imported: (courseId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasImported, courseId) as Promise<number[]>,
     importAssignment: (courseId: number, assignmentId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasImportAssignment, courseId, assignmentId) as Promise<CanvasImportResult>,
     syncCourse: (courseId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasSyncCourse, courseId) as Promise<CanvasSyncResult>,
+  }),
+  planning: Object.freeze({
+    generate: (settings: PlanningSettings) =>
+      ipcRenderer.invoke(IPC_CHANNELS.planningGenerate,settings) as Promise<PlanProposal>,
+    proposals: () => ipcRenderer.invoke(IPC_CHANNELS.planningProposals) as Promise<PlanProposal[]>,
+    blocks: () => ipcRenderer.invoke(IPC_CHANNELS.planningBlocks) as Promise<PlanBlock[]>,
+    batches: () => ipcRenderer.invoke(IPC_CHANNELS.planningBatches) as Promise<AppliedPlanBatch[]>,
+    apply: (selection: ApplyPlanRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.planningApply,selection) as Promise<AppliedPlanBatch>,
+    undo: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.planningUndo,id) as Promise<boolean>,
   }),
   knowledge: Object.freeze({
     documents: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeDocuments) as Promise<KnowledgeDocument[]>,
