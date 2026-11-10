@@ -444,7 +444,7 @@ export default function App() {
                     </ul>:<p className="empty-state">这一天尚无已确认的规划时间。可以在「学习规划」生成建议。</p>}
                     <p className="privacy-note">这些是单独确认的学习时间，不等于任务截止时间；规划不会修改原任务。</p>
                   </section>
-                  <FixedCalendarPanel day={selectedDate} events={fixedEvents} onChanged={refreshCalendar}/>
+                  <FixedCalendarPanel day={selectedDate} events={fixedEvents} studyBlocks={plannedBlocks} onChanged={refreshCalendar}/>
                   <section className="panel task-list-panel"><div className="panel-heading"><div><div className="eyebrow">MY TASKS</div><h2>{showHidden ? "隐藏的 Canvas 任务" : filter === "day" ? formatDueDate(selectedDate) : filter === "undated" ? "未安排日期" : "全部任务"}</h2></div><span className="muted-tag">{visibleTasks.length} 条</span></div>
                     <div className="filter-tabs">
                       <button className={!showHidden && filter === "day" ? "chip selected" : "chip"} onClick={() => { setShowHidden(false); setFilter("day"); }}>选中日期</button>
