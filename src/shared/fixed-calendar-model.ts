@@ -3,6 +3,7 @@ import { dayOffset,validCivilDay } from "./planning-model";
 export interface FixedEvent {
   id:string;
   sourceUid:string|null;
+  seriesId:string|null;
   title:string;
   day:string;
   startMinute:number;
@@ -10,7 +11,7 @@ export interface FixedEvent {
   source:"manual"|"ics";
   createdAt:string;
 }
-export type FixedEventDraft=Pick<FixedEvent,"title"|"day"|"startMinute"|"durationMinutes"> & {sourceUid:string|null};
+export type FixedEventDraft=Pick<FixedEvent,"title"|"day"|"startMinute"|"durationMinutes"> & {sourceUid:string|null;seriesKey?:string|null};
 export interface CreateFixedEventInput {
   title:string;
   day:string;
@@ -18,6 +19,7 @@ export interface CreateFixedEventInput {
   durationMinutes:number;
   weeks:number;
 }
+export interface EditFixedEventInput {id:string;title:string;day:string;startMinute:number;durationMinutes:number;}
 export interface BusySlot {day:string;startMinute:number;durationMinutes:number}
 export interface ICSPreview {
   approvalId:string;
@@ -56,6 +58,16 @@ export function weeklyOccurrences(input:CreateFixedEventInput):FixedEventDraft[]
     title:input.title,day:dayOffset(input.day,i*7),
     startMinute:input.startMinute,durationMinutes:input.durationMinutes,sourceUid:null,
   }));
+}
+export function parseEditFixedEvent(value:unknown):EditFixedEventInput{
+  if(!value||typeof value!=="object"||Array.isArray(value))
+    throw Error("Invalid calendar event edit");
+  const x=value as Record<string,unknown>;
+  if(Object.keys(x).sort().join(",")!=="day,durationMinutes,id,startMinute,title"||
+    typeof x.id!=="string"||!/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(x.id))
+    throw Error("Invalid calendar event edit");
+  return {id:x.id,title:validateFixedTitle(x.title),
+    ...validateFixedSlot(x.day,x.startMinute,x.durationMinutes)};
 }
 export function timesOverlap(a:BusySlot,b:BusySlot):boolean {
   return a.day===b.day&&a.startMinute<b.startMinute+b.durationMinutes&&
