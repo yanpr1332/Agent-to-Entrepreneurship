@@ -4,6 +4,8 @@ import type {
 } from "../../shared/planning-model";
 import { dayOffset, minuteString, parseMinute } from "../../shared/planning-model";
 import { localDateKey } from "./calendar";
+import type { LocalTask } from "../../shared/local-model";
+import type { AIStatus, AIPreview } from "../../shared/ai-model";
 
 function readable(e:unknown):string{
   return e instanceof Error?e.message:"无法完成规划操作，请重新生成建议";
@@ -21,6 +23,10 @@ export default function StudyPlanner({onChanged}:{
   const [edits,setEdits]=useState<Record<string,{day:string;startMinute:number}>>({});
   const [blocks,setBlocks]=useState<PlanBlock[]>([]);
   const [batches,setBatches]=useState<AppliedPlanBatch[]>([]);
+  const [aiTasks,setAiTasks]=useState<LocalTask[]>([]);
+  const [aiStatus,setAiStatus]=useState<AIStatus|null>(null);
+  const [aiTaskIds,setAiTaskIds]=useState<string[]>([]);
+  const [aiPreview,setAiPreview]=useState<AIPreview|null>(null);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
@@ -47,6 +53,55 @@ export default function StudyPlanner({onChanged}:{
     }).catch(e=>{if(active)setError(readable(e));});
     return()=>{active=false;};
   },[]);
+
+  useEffect(()=>{
+    let active=true;
+    void Promise.all([window.desktop.tasks.list(),window.desktop.ai.status()])
+      .then(([tasks,status])=>{
+        if(!active)return;
+        setAiTasks(tasks.filter(task=>task.visible&&!task.completed));
+        setAiStatus(status);
+      }).catch(()=>{});
+    return()=>{active=false;};
+  },[]);
+
+  async function previewAI():Promise<void>{
+    await run(async()=>{
+      setAiPreview(await window.desktop.ai.planPrepare({taskIds:aiTaskIds,settings}));
+      setNotice("已生成外发预览，尚未调用外部模型。");
+    });
+  }
+  async function confirmAI():Promise<void>{
+    if(!aiPreview)return;
+    const id=aiPreview.approvalId;
+    await run(async()=>{
+      try{
+        const result=await window.desktop.ai.planConfirm(id);
+        setProposal(result.proposal);
+        setSelected(result.proposal.blocks.map(b=>b.id));
+        setEdits({});
+        setNotice(`AI 生成了 ${result.proposal.blocks.length} 段待审核建议；
+只有你在上方手工确认应用后才会写入日历。此次调用可能产生费用。`);
+      }finally{
+        setAiPreview(null);
+        const state=await window.desktop.ai.status().catch(()=>null);
+        if(state)setAiStatus(state);
+      }
+    });
+  }
+  async function discardAI():Promise<void>{
+    await run(async()=>{
+      setAiStatus(await window.desktop.ai.cancel());
+      setAiPreview(null);
+      setNotice("已取消外发确认，本次没有调用模型。");
+    });
+  }
+  function chooseAITask(id:string,checked:boolean):void{
+    if(checked&&aiTaskIds.length>=5){
+      setError("一次最多允许选择五条任务。");return;
+    }
+    setAiTaskIds(prev=>checked?[...prev,id]:prev.filter(x=>x!==id));
+  }
 
   async function run(callback:()=>Promise<void>):Promise<void>{
     if(busy)return;
@@ -110,9 +165,10 @@ export default function StudyPlanner({onChanged}:{
       <span className="count-chip">{blocks.length} 段已确认计划</span>
     </div>
     <div className="connector-warning" role="note">
-      <strong>当前为离线规则规划，不是云端 AI。</strong>
-      只读取本机当前可见且未完成的任务，按截止日期和优先级排序。不会读取邮件正文、
-      搜索文件夹、调用模型、移动锁定课程或修改任务截止日期。没有外部课表冲突信息；
+      <strong>默认仍使用离线规则规划；也可手动选择特定任务请求 AI 建议。</strong>
+      默认规则规划不调用模型。可选 AI 规划仅将你明确勾选的任务 ID、标题、
+      优先级、截止日期和所选时间窗发送到外部模型；不会上传任务备注、邮件正文、
+      Canvas Token、知识库全文或未经选择的任务，也不会直接修改截止日期。没有外部课表冲突信息；
       请在应用前核对自己的固定课程和其他日程。时间按照当前设备的本地日历日期显示。
     </div>
     {error&&<div className="error-banner" role="alert"><span>{error}</span>
@@ -199,6 +255,52 @@ export default function StudyPlanner({onChanged}:{
         </>}
       </section>
     </div>
+
+    <section className="panel ai-planning-section">
+      <div className="eyebrow">OPTIONAL EXTERNAL AI PLAN</div>
+      <h2>AI 学习时间建议 · 先授权后审核</h2>
+      <p className="privacy-note">可选付费功能。勾选要共享的任务、预览完整外发文本、
+        再确认调用模型。结果需经本地验证，并进入上方现有人工审核区。
+        <strong> AI 没有直接写入日历的权限。</strong>
+      </p>
+      <p className="privacy-note">{aiStatus?.connected
+        ? `已连接 ${aiStatus.model}，今日剩余 ${aiStatus.remainingToday} 次请求（非金额上限）。`
+        : "请先到「AI 学习助手」连接个人 API Key，默认离线规划仍可使用。"}
+      </p>
+      <div className="ai-task-picker">
+        <strong>明确选择愿意发送给模型的任务（最多五条，默认不勾选）</strong>
+        {aiTasks.slice(0,60).map(task=><label key={task.id}>
+          <input type="checkbox" checked={aiTaskIds.includes(task.id)}
+            disabled={busy||!!aiPreview}
+            onChange={event=>chooseAITask(task.id,event.target.checked)}/>
+          <span>{task.title}</span>
+          <small>{task.dueDate?`截止 ${task.dueDate}`:"无截止日期"}</small>
+        </label>)}
+        {!aiTasks.length&&<p className="empty-state">暂无可选的可见、未完成任务。</p>}
+        {aiTasks.length>60&&<p className="privacy-note">仅展示前 60 条任务。</p>}
+      </div>
+      {!aiPreview ?
+        <button className="secondary-button" disabled={busy||!aiStatus?.connected||
+          aiStatus.remainingToday===0||aiTaskIds.length===0}
+          onClick={()=>void previewAI()}>
+          预览将发送的 {aiTaskIds.length} 条任务摘要（不会收费）
+        </button>:
+        <div className="ai-preview" role="region" aria-label="AI 规划外发确认">
+          <strong>核对将发送给 OpenAI 的完整内容</strong>
+          <p>模型：{aiPreview.model}。以下文本会离开本设备：</p>
+          <div className="ai-question-preview">{aiPreview.prompt}</div>
+          <p className="privacy-note">确认有效至 {new Date(aiPreview.expiresAt).toLocaleString("zh-CN")}。
+            调用可能产生费用；时间建议仍必须审核，不会自动应用。</p>
+          <div className="button-row">
+            <button className="primary-button" disabled={busy} onClick={()=>void confirmAI()}>
+              确认发送并生成待审核建议
+            </button>
+            <button className="secondary-button" disabled={busy} onClick={()=>void discardAI()}>
+              取消外发
+            </button>
+          </div>
+        </div>}
+    </section>
 
     <section className="panel">
       <div className="eyebrow">COMMITTED SCHEDULE</div><h2>已确认学习时间</h2>
