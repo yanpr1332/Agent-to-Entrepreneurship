@@ -3,7 +3,6 @@ import {validateFixedTitle,validateFixedSlot,type FixedEvent,type FixedEventDraf
 
 const MAX_ICS_BYTES=512*1024;
 const MAX_ICS_EVENTS=250;
-const DAY_MS=86_400_000;
 
 function decodeText(value:string):string{
   return value.replace(/\\([nN,;\\])/g,(_,x:string)=>x==="n"||x==="N"?"\n":x);
@@ -68,8 +67,10 @@ function parseEvent(fields:Map<string,string>):FixedEventDraft{
     if(b.day!==dayOffset(a.day,1))throw Error("Only one-day all-day ICS events are supported");
     duration=1440;
   }else{
-    if(a.day!==b.day||b.minute<=a.minute)throw Error("Only same-day timed ICS events are supported");
-    duration=b.minute-a.minute;
+    const endsMidnight=b.day===dayOffset(a.day,1)&&b.minute===0;
+    if(!endsMidnight&&(a.day!==b.day||b.minute<=a.minute))
+      throw Error("Only same-day timed ICS events are supported");
+    duration=endsMidnight?1440-a.minute:b.minute-a.minute;
   }
   const slot=validateFixedSlot(a.day,a.minute,duration);
   return {...slot,title,sourceUid:uid};
@@ -148,8 +149,9 @@ export function exportICS(events:ReadonlyArray<FixedEvent>):string{
       lines.push("DTSTART;VALUE=DATE:"+formatDate(slot.day),
         "DTEND;VALUE=DATE:"+formatDate(dayOffset(slot.day,1)));
     }else{
+      const end=slot.startMinute+slot.durationMinutes;
       lines.push("DTSTART:"+formatDate(slot.day)+"T"+formatMinute(slot.startMinute),
-        "DTEND:"+formatDate(slot.day)+"T"+formatMinute(slot.startMinute+slot.durationMinutes));
+        "DTEND:"+formatDate(end===1440?dayOffset(slot.day,1):slot.day)+"T"+formatMinute(end===1440?0:end));
     }
     lines.push("END:VEVENT");
   }
