@@ -19,7 +19,7 @@ const menu: { page: Page; icon: string; label: string; ready: boolean }[] = [
   { page: "knowledge", icon: "◇", label: "个人知识库", ready: true },
   { page: "focus", icon: "◷", label: "专注与自律", ready: true },
   { page: "team", icon: "⌘", label: "小组协作", ready: true },
-  { page: "ai", icon: "✳", label: "学习规划（离线规则）", ready: true },
+  { page: "ai", icon: "✳", label: "学习规划（规则 + AI 可选）", ready: true },
   { page: "assistant", icon: "✧", label: "AI 学习助手", ready: true },
   { page: "connectors", icon: "⇄", label: "数据接入", ready: true },
   { page: "mail", icon: "✉", label: "邮件管理", ready: true },
