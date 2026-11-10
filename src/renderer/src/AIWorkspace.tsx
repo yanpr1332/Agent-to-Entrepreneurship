@@ -3,6 +3,8 @@ import {
   AI_DEFAULT_MODEL, AI_MAX_PROMPT_CHARS,
   type AIAnswer, type AIPreview, type AIStatus,
 } from "../../shared/ai-model";
+import type { LocalTask } from "../../shared/local-model";
+import { eligibleAIPlanTasks, buildAIPlanPrompt, parseAIPlanDraft, type AIPlanSuggestion } from "../../shared/ai-planning";
 
 const empty:AIStatus={
   connected:false,running:false,provider:"openai",model:null,usedToday:0,
@@ -26,12 +28,21 @@ export default function AIWorkspace(){
   const [sending,setSending]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
+  const [tasks,setTasks]=useState<LocalTask[]>([]);
+  const [chosen,setChosen]=useState<string[]>([]);
+  const [planStart,setPlanStart]=useState(()=>new Date().toLocaleDateString("en-CA"));
+  const [previewMode,setPreviewMode]=useState<"chat"|"plan">("chat");
+  const [planDraft,setPlanDraft]=useState<AIPlanSuggestion[]|null>(null);
+  const [planNames,setPlanNames]=useState<Record<string,string>>({});
+  const [planSnapshot,setPlanSnapshot]=useState<LocalTask[]>([]);
 
   useEffect(()=>{
     let active=true;
     void window.desktop.ai.status().then(next=>{
       if(active){setStatus(next);if(next.model)setModel(next.model);}
     }).catch(e=>{if(active)setError(describeError(e));});
+    void window.desktop.tasks.list().then(value=>{if(active)setTasks(value);})
+      .catch(e=>{if(active)setError(describeError(e));});
     return()=>{active=false;};
   },[]);
 
@@ -54,7 +65,7 @@ export default function AIWorkspace(){
     setBusy(true);setError("");
     try{
       setStatus(await window.desktop.ai.disconnect());
-      setPreview(null);setQuestion("");setAnswers([]);
+      setPreview(null);setQuestion("");setAnswers([]);setPlanDraft(null);
       setNotice("本地加密 Key 已清除。已使用的每日请求次数不会重置。");
     }catch(e){setError(describeError(e));}
     finally{setBusy(false);}
@@ -66,6 +77,23 @@ export default function AIWorkspace(){
     setBusy(true);setError("");setNotice("");
     try{
       setPreview(await window.desktop.ai.prepare(question));
+      setPreviewMode("chat");
+    }catch(e){setError(describeError(e));}
+    finally{setBusy(false);}
+  }
+
+  async function preparePlan():Promise<void>{
+    if(busy||sending||preview)return;
+    setBusy(true);setError("");setNotice("");setPlanDraft(null);
+    try{
+      const latest=await window.desktop.tasks.list();
+      setTasks(latest);
+      const eligible=eligibleAIPlanTasks(latest,chosen);
+      const prompt=buildAIPlanPrompt(latest,chosen,planStart);
+      const next=await window.desktop.ai.prepare(prompt);
+      setPlanSnapshot(eligible);
+      setPlanNames(Object.fromEntries(eligible.map(t=>[t.id,t.title])));
+      setPreview(next);setPreviewMode("plan");
     }catch(e){setError(describeError(e));}
     finally{setBusy(false);}
   }
@@ -84,11 +112,20 @@ export default function AIWorkspace(){
     setSending(true);setError("");setNotice("");
     try{
       const answer=await window.desktop.ai.confirm(accepted.approvalId);
-      setAnswers(items=>[...items,{
-        id:Date.now(),question:accepted.prompt,answer,
-      }].slice(-12));
-      setQuestion("");
-      setNotice("已收到本次单轮回答。回答未自动写入日历、任务、知识库或邮件。");
+      if(previewMode==="plan"){
+        try{
+          const result=parseAIPlanDraft(answer.text,planSnapshot,planStart);
+          setPlanDraft(result);
+          setNotice("AI 结构化建议已通过格式和范围验证；仅供参考，尚未写入正式任务或日历。");
+        }catch(e){
+          setPlanDraft(null);
+          setError(describeError(e));
+        }
+      }else{
+        setAnswers(items=>[...items,{id:Date.now(),question:accepted.prompt,answer}].slice(-12));
+        setQuestion("");
+        setNotice("已收到本次单轮回答。回答未自动写入日历、任务、知识库或邮件。");
+      }
     }catch(e){setError(describeError(e));}
     finally{
       setPreview(null);setSending(false);
@@ -117,7 +154,7 @@ export default function AIWorkspace(){
       每日最多 {status.dailyRequestLimit} 次请求、每次最多 {status.maxOutputTokens} 个输出 token；
       这是软件端限额，<strong>不是费用金额上限</strong>，其他设备和平台用量不受此限额控制。
       API 请求指定不保存响应供模型会话使用，但服务商仍会依其 API 数据处理政策处理请求。
-      当前不会自动读取 Canvas、邮箱、知识库、私人任务或云端小组数据，也不允许模型调用工具或写入日历。
+      普通提问不会自动读取个人数据；下方规划功能仅在你逐项勾选任务并确认原文后，才会发送所选任务的标题、截止日、优先级和标识，不发送描述、Canvas 链接、邮箱或知识库。模型不能调用工具或写入日历。
       请勿在聊天或 GitHub 中分享 API Key。
     </div>
     {error&&<div className="error-banner" role="alert"><span>{error}</span>
@@ -192,5 +229,37 @@ export default function AIWorkspace(){
           onClick={()=>void cancelRequest()}>尝试中止当前请求（可能仍产生费用）</button>}
       </section>
     </div>
+    <section className="panel">
+      <div className="eyebrow">OPT-IN STRUCTURED PLANNING DRAFT</div>
+      <h2>AI 学习时间草稿（不自动应用）</h2>
+      <p className="privacy-note">只选择你愿意外传的任务。预览会完整展示实际发送内容；AI 结果只做格式与范围验证，不作为已确认时间块，也不自动查询课表。请不要勾选包含敏感信息的标题。</p>
+      <label>建议开始日期（连续七天）
+        <input type="date" value={planStart} min={new Date().toLocaleDateString("en-CA")}
+          disabled={busy||sending||!!preview} onChange={event=>setPlanStart(event.target.value)}/>
+      </label>
+      <div className="planner-candidates">
+        {tasks.filter(t=>t.visible&&!t.completed).slice(0,50).map(task=>
+          <label key={task.id} className="planner-select">
+            <input type="checkbox" disabled={busy||sending||!!preview}
+              checked={chosen.includes(task.id)}
+              onChange={event=>setChosen(v=>event.target.checked
+                ? v.length<8?[...v,task.id]:v : v.filter(id=>id!==task.id))}/>
+            <span>{task.title} · 截止 {task.dueDate??"未设置"} · {task.priority}</span>
+          </label>
+        )}
+      </div>
+      <p className="privacy-note">已选 {chosen.length}/8 项；隐藏或完成的任务不可选择，任务描述和来源 URL 不会发送。</p>
+      <button className="primary-button" disabled={busy||sending||!!preview||!status.connected||status.remainingToday===0||chosen.length===0}
+        onClick={()=>void preparePlan()}>预览选中任务的 AI 规划请求</button>
+      {planDraft!==null&&<div className="ai-answer-list" role="region" aria-label="AI 学习草稿">
+        <h3>待人工核对的 AI 建议 · {planDraft.length} 段</h3>
+        {planDraft.length===0?<p>模型未安排任何时间块。</p>:
+          <ul>{planDraft.map((block,i)=><li key={i}>
+            <strong>{planNames[block.taskId]}</strong> · {block.day} {block.start} · {block.minutes} 分钟
+            <p>{block.reason}</p>
+          </li>)}</ul>}
+        <p className="privacy-note">当前仅供阅读，不会静默创建任务、修改截止日期或写入计划；使用现有离线学习规划界面执行已验证的选择性应用流程。</p>
+      </div>}
+    </section>
   </section>;
 }
