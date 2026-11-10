@@ -202,7 +202,10 @@ export default function KnowledgeGraph({onOpenSource}:{
           })}
           {visible.map(node=>{
             const p=coords.get(node.id)!;
-            return <g key={node.id} className={node.needsReview?"kg-node-stale":"kg-node-current"}>
+            return <g key={node.id} className={node.needsReview?"kg-node-stale":"kg-node-current"}
+              role="button" tabIndex={0} aria-label={`查看知识节点 ${node.title} 的来源`}
+              onClick={()=>selectNode(node)}
+              onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();selectNode(node);}}}>
               <circle cx={p.x} cy={p.y} r={40}/>
               <text x={p.x} y={p.y-3} textAnchor="middle">{node.title.slice(0,8)}</text>
               <text x={p.x} y={p.y+15} textAnchor="middle" className="kg-node-sub">{node.documentTitle.slice(0,9)}</text>
