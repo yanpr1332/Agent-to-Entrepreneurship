@@ -17,6 +17,11 @@ import type {
   SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
 } from "../shared/cloud-model";
 
+import type {
+  KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
+  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult,
+} from "../shared/knowledge-model";
+
 const desktopApi = Object.freeze({
   ping: () => ipcRenderer.invoke(IPC_CHANNELS.appPing) as Promise<{ ok: true }>,
   getVersion: () => ipcRenderer.invoke(IPC_CHANNELS.appGetVersion) as Promise<string>,
@@ -100,6 +105,22 @@ const desktopApi = Object.freeze({
     imported: (courseId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasImported, courseId) as Promise<number[]>,
     importAssignment: (courseId: number, assignmentId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasImportAssignment, courseId, assignmentId) as Promise<CanvasImportResult>,
     syncCourse: (courseId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasSyncCourse, courseId) as Promise<CanvasSyncResult>,
+  }),
+  knowledge: Object.freeze({
+    documents: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeDocuments) as Promise<KnowledgeDocument[]>,
+    get: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeGet,id) as Promise<KnowledgeSnapshot>,
+    importFile: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeImport) as Promise<{document:KnowledgeDocument;changed:boolean}|null>,
+    delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeDelete,id) as Promise<boolean>,
+    search: (query: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeSearch,query) as Promise<KnowledgeSearchHit[]>,
+    cards: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCards) as Promise<KnowledgeReviewCard[]>,
+    createCard: (input: ReviewCardInput) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCreateCard,input) as Promise<KnowledgeReviewCard>,
+    removeCard: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeRemoveCard,id) as Promise<boolean>,
+    reviewCard: (id: string, rating: ReviewRating) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeReviewCard,id,rating) as Promise<KnowledgeReviewCard>,
+    progress: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeReviewProgress) as Promise<ReviewProgress>,
+  }),
+  backup: Object.freeze({
+    create: () => ipcRenderer.invoke(IPC_CHANNELS.backupCreate) as Promise<BackupResult>,
   }),
   focus: Object.freeze({
     list: () => ipcRenderer.invoke(IPC_CHANNELS.focusList) as Promise<FocusSession[]>,

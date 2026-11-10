@@ -4,6 +4,7 @@ import { formatDueDate, localDateKey, monthCells } from "./calendar";
 import CanvasConnector from "./CanvasConnector";
 import CloudWorkspace from "./CloudWorkspace";
 import CampusMail from "./CampusMail";
+import KnowledgeBase from "./KnowledgeBase";
 
 type Page = "overview" | "calendar" | "knowledge" | "focus" | "team" | "ai" | "connectors" | "mail";
 type TaskFilter = "day" | "all" | "undated";
@@ -12,7 +13,7 @@ type RuntimeStatus = "checking" | "connected" | "unavailable";
 const menu: { page: Page; icon: string; label: string; ready: boolean }[] = [
   { page: "overview", icon: "◫", label: "个人工作台", ready: true },
   { page: "calendar", icon: "▦", label: "日历与任务", ready: true },
-  { page: "knowledge", icon: "◇", label: "个人知识库", ready: false },
+  { page: "knowledge", icon: "◇", label: "个人知识库", ready: true },
   { page: "focus", icon: "◷", label: "专注与自律", ready: true },
   { page: "team", icon: "⌘", label: "小组协作", ready: true },
   { page: "ai", icon: "✳", label: "AI 辅助规划", ready: false },
@@ -453,6 +454,7 @@ export default function App() {
             </>
           )}
 
+          {page === "knowledge" && <KnowledgeBase />}
           {page === "connectors" && <CanvasConnector onTasksChanged={refresh} />}
           {page === "team" && <CloudWorkspace />}
           {page === "mail" && <CampusMail />}

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, backup } from "node:sqlite";
 import type { CanvasAssignment, CanvasImportResult, CanvasSyncResult } from "../shared/canvas-model";
 import type { MailCandidateAction, MailCandidateChoiceResult, MailCandidateDecision } from "../shared/mail-candidates";
 import { suggestedTaskTitle } from "../shared/mail-candidates";
@@ -179,6 +179,10 @@ export class LocalStore {
 
   close(): void {
     this.db.close();
+  }
+
+  async backupTo(path: string): Promise<number> {
+    return backup(this.db,path);
   }
 
   private readonly taskSelect = `SELECT t.*, l.instance_origin, l.account_id, l.course_id,

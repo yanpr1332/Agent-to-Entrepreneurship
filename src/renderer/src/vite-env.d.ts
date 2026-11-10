@@ -17,6 +17,11 @@ import type {
   SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
 } from "../../shared/cloud-model";
 
+import type {
+  KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
+  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult,
+} from "../../shared/knowledge-model";
+
 declare global {
   interface Window {
     desktop: {
@@ -73,6 +78,19 @@ declare global {
         importAssignment: (courseId: number, assignmentId: number) => Promise<CanvasImportResult>;
         syncCourse: (courseId: number) => Promise<CanvasSyncResult>;
       };
+      knowledge: {
+        documents: () => Promise<KnowledgeDocument[]>;
+        get: (id: string) => Promise<KnowledgeSnapshot>;
+        importFile: () => Promise<{document:KnowledgeDocument;changed:boolean}|null>;
+        delete: (id: string) => Promise<boolean>;
+        search: (query: string) => Promise<KnowledgeSearchHit[]>;
+        cards: () => Promise<KnowledgeReviewCard[]>;
+        createCard: (input: ReviewCardInput) => Promise<KnowledgeReviewCard>;
+        removeCard: (id: string) => Promise<boolean>;
+        reviewCard: (id: string, rating: ReviewRating) => Promise<KnowledgeReviewCard>;
+        progress: () => Promise<ReviewProgress>;
+      };
+      backup: { create: () => Promise<BackupResult> };
       focus: {
         list: () => Promise<FocusSession[]>;
         finish: (input: FocusCompletionInput) => Promise<FocusSession>;

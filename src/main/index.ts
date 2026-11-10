@@ -14,9 +14,18 @@ import { CampusMailVault } from "./connectors/mail-vault";
 import { CampusMailService } from "./connectors/mail-service";
 import { classifyMailSubject, parseMailCandidateChoice } from "../shared/mail-candidates";
 import type { MailCandidate } from "../shared/mail-candidates";
+import { KnowledgeStore } from "./knowledge-store";
+import { readSelectedKnowledgeText } from "./knowledge-import";
+import { createLocalBackup, backupBeforeMigration } from "./local-backup";
 
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
+let knowledgeStore: KnowledgeStore | null = null;
+
+function knowledge(): KnowledgeStore {
+  if(!knowledgeStore)throw new Error("Local knowledge database is unavailable");
+  return knowledgeStore;
+}
 let canvasVault: CanvasCredentialVault | null = null;
 let canvasSync: CanvasSyncService | null = null;
 let mailStore: CampusMailStore | null = null;
@@ -98,6 +107,64 @@ function registerIpcHandlers(): void {
       throw new Error("Invalid task visibility request");
     }
     return localStore().setCanvasTaskVisibility(data.id, data.visible);
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeDocuments, event => {
+    requireTrustedSender(event);
+    return knowledge().listDocuments();
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeGet, (event,id:unknown) => {
+    requireTrustedSender(event);
+    return knowledge().getDocument(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeImport, async event => {
+    requireTrustedSender(event);
+    const owner=BrowserWindow.fromWebContents(event.sender);
+    if(!owner || owner.isDestroyed())throw new Error("Knowledge import requires a trusted window");
+    const selection=await dialog.showOpenDialog(owner,{
+      title:"选择 Markdown 或 UTF-8 文本资料",
+      properties:["openFile"],
+      filters:[{name:"Markdown / UTF-8 TXT",extensions:["md","markdown","txt"]}],
+    });
+    if(selection.canceled || !selection.filePaths.length)return null;
+    const source=await readSelectedKnowledgeText(selection.filePaths[0]);
+    return knowledge().importText(source);
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeDelete, (event,id:unknown) => {
+    requireTrustedSender(event);
+    return knowledge().deleteDocument(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeSearch, (event,query:unknown) => {
+    requireTrustedSender(event);
+    return knowledge().search(query);
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeCards, event => {
+    requireTrustedSender(event);
+    return knowledge().listCards();
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeCreateCard, (event,body:unknown) => {
+    requireTrustedSender(event);
+    return knowledge().createCard(body);
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeRemoveCard, (event,id:unknown) => {
+    requireTrustedSender(event);
+    return knowledge().removeCard(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeReviewCard, (event,id:unknown,rating:unknown) => {
+    requireTrustedSender(event);
+    return knowledge().reviewCard(id,rating);
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeReviewProgress, event => {
+    requireTrustedSender(event);
+    return knowledge().progress();
+  });
+  ipcMain.handle(IPC_CHANNELS.backupCreate, async event => {
+    requireTrustedSender(event);
+    if(!mailStore)throw new Error("Mail database is unavailable");
+    return createLocalBackup(app.getPath("userData"),[
+      {name:"tasks",store:localStore()},
+      {name:"mail",store:mailStore},
+      {name:"knowledge",store:knowledge()},
+    ]);
   });
   ipcMain.handle(IPC_CHANNELS.focusList, (event) => {
     requireTrustedSender(event);
@@ -359,9 +426,13 @@ function createWindow(): void {
   mainWindow.on("closed", () => { mainWindow = null; });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   try {
+    // Back up older local schemas BEFORE the constructor runs migrations.
+    await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",4);
+    await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",1);
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
+    knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "ate-knowledge.sqlite"));
     canvasVault = new CanvasCredentialVault(join(app.getPath("userData"), "canvas-personal.enc"), safeStorage);
     mailStore = new CampusMailStore(join(app.getPath("userData"), "ate-mail.sqlite"));
     const mailVault = new CampusMailVault(join(app.getPath("userData"), "campus-mail.enc"), safeStorage);
@@ -412,6 +483,8 @@ app.on("before-quit", () => {
   canvasSync?.stop();
   canvasSync = null;
   // Sync promises may be finishing; the coordinator aborts before further writes.
+  knowledgeStore?.close();
+  knowledgeStore = null;
   store?.close();
   store = null;
 });

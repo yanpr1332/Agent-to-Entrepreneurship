@@ -87,3 +87,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## 邮件自动整理待办候选
 
 邮件已支持在既有自动同步基础上，自动识别疑似作业、考试、报名等候选，并在本地提供创建个人任务、忽略及恢复审阅；用户确认后才创建任务，SQLite v4 保证去重与事务一致性。见 [07_MAIL_TASK_CANDIDATES.md](07_MAIL_TASK_CANDIDATES.md)，CI 验证和真实校邮箱验收分别记录。
+
+
+## 本地知识库与离线复习
+
+已在独立 PR 建设 Markdown/TXT 原文导入、本机 FTS5 全文检索、可溯源手工复习卡、离线评分调度与 SQLite 在线备份。资料只在用户选定后处理，不默认上传，真实设备验收仍待进行。边界与验收见 [08_LOCAL_KNOWLEDGE_REVIEW.md](08_LOCAL_KNOWLEDGE_REVIEW.md)。
