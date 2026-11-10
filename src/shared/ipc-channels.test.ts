@@ -58,6 +58,12 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "mail:status",
       "mail:sync-now",
       "mail:sync-updated",
+      "planning:apply",
+      "planning:batches",
+      "planning:blocks",
+      "planning:generate",
+      "planning:proposals",
+      "planning:undo",
       "tasks:create",
       "tasks:list",
       "tasks:remove",
@@ -71,6 +77,10 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
     expect(new Set(all).size).toBe(all.length);
     expect(all.filter((name) => name.startsWith("mail:"))).toHaveLength(10);
     expect(all.filter((name) => name.startsWith("cloud:"))).toHaveLength(15);
+  });
+
+  it("exposes only six explicit planning actions",()=>{
+    expect(Object.values(IPC_CHANNELS).filter(x=>x.startsWith("planning:"))).toHaveLength(6);
   });
 
   it("keeps knowledge and backup operations narrowly allowlisted", () => {

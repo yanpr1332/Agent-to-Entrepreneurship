@@ -225,3 +225,36 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
 .kb-review-list small{font-size:10px;color:var(--muted)}
 @media(max-width:1150px){.kb-layout{grid-template-columns:1fr}}
 @media(max-width:680px){.kb-search-row{flex-wrap:wrap}.kb-search-row button{width:100%}}
+
+/* Offline study planning: explicit preview, edit, selective apply and batch undo. */
+.planner-page{display:grid;gap:16px}
+.planner-layout{display:grid;grid-template-columns:minmax(260px,.7fr) minmax(500px,1.3fr);gap:14px;align-items:start}
+.planner-form{display:grid;gap:12px;margin-top:15px}
+.planner-form label,.planner-edit-row label{display:grid;gap:6px;font-size:11px;color:var(--muted)}
+.planner-form input,.planner-form select,.planner-edit-row input{
+  width:100%;background:var(--surface);color:var(--ink);
+  border:1px solid var(--line);border-radius:8px;padding:9px
+}
+.planner-candidates,.planner-committed{list-style:none;padding:0;margin:10px 0;max-height:550px;overflow-y:auto}
+.planner-candidate{padding:12px 0;border-bottom:1px solid var(--line)}
+.planner-select{display:flex;gap:9px;align-items:center}
+.planner-select input{accent-color:var(--accent)}
+.planner-select strong{font-size:12px;overflow-wrap:anywhere}
+.planner-candidate p{font-size:10px;color:var(--muted);line-height:1.6}
+.planner-edit-row{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
+.planner-edit-row label{min-width:130px;flex:1}
+.planner-edit-row .muted-tag{margin-bottom:8px}
+.planner-skipped{margin:12px 0;font-size:11px;color:var(--muted)}
+.planner-skipped summary{cursor:pointer}
+.planner-skipped li{padding:5px 0}
+.planner-committed li,.planned-day-list li{
+  display:flex;justify-content:space-between;gap:12px;align-items:center;
+  padding:10px 0;border-bottom:1px solid var(--line);font-size:12px
+}
+.planner-committed span,.planned-day-list span{color:var(--muted);font-size:11px;white-space:nowrap}
+.planner-history{display:grid;gap:10px;margin-top:18px}
+.planner-batch{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border-top:1px solid var(--line);padding:10px 0;font-size:11px}
+.planned-day-list{list-style:none;padding:0;margin:9px 0}
+.planned-day-list strong{font-size:11px;overflow-wrap:anywhere}
+@media(max-width:1170px){.planner-layout{grid-template-columns:1fr}}

@@ -92,3 +92,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## 本地知识库与离线复习
 
 已在独立 PR 建设 Markdown/TXT 原文导入、本机 FTS5 全文检索、可溯源手工复习卡、离线评分调度与 SQLite 在线备份。资料只在用户选定后处理，不默认上传，真实设备验收仍待进行。边界与验收见 [08_LOCAL_KNOWLEDGE_REVIEW.md](08_LOCAL_KNOWLEDGE_REVIEW.md)。
+
+
+## 离线学习规划与人工应用
+
+独立 PR 实现从本机个人任务生成可编辑的时间块候选、按用户选择部分应用、检查已确认时间冲突与批次撤销，并在日历中查看。该切片明确属于离线规则规划，**不冒充已接入 AI Provider**。详见 [09_OFFLINE_PLANNING_REVIEW.md](09_OFFLINE_PLANNING_REVIEW.md)。

@@ -5,6 +5,8 @@ import CanvasConnector from "./CanvasConnector";
 import CloudWorkspace from "./CloudWorkspace";
 import CampusMail from "./CampusMail";
 import KnowledgeBase from "./KnowledgeBase";
+import StudyPlanner from "./StudyPlanner";
+import { minuteString, type PlanBlock } from "../../shared/planning-model";
 
 type Page = "overview" | "calendar" | "knowledge" | "focus" | "team" | "ai" | "connectors" | "mail";
 type TaskFilter = "day" | "all" | "undated";
@@ -16,7 +18,7 @@ const menu: { page: Page; icon: string; label: string; ready: boolean }[] = [
   { page: "knowledge", icon: "◇", label: "个人知识库", ready: true },
   { page: "focus", icon: "◷", label: "专注与自律", ready: true },
   { page: "team", icon: "⌘", label: "小组协作", ready: true },
-  { page: "ai", icon: "✳", label: "AI 辅助规划", ready: false },
+  { page: "ai", icon: "✳", label: "学习规划（离线规则）", ready: true },
   { page: "connectors", icon: "⇄", label: "数据接入", ready: true },
   { page: "mail", icon: "✉", label: "邮件管理", ready: true },
 ];
@@ -186,6 +188,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(today);
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [filter, setFilter] = useState<TaskFilter>("day");
+  const [plannedBlocks,setPlannedBlocks]=useState<PlanBlock[]>([]);
   const [showHidden, setShowHidden] = useState(false);
   const [retentionNotice, setRetentionNotice] = useState("");
   const [dark, setDark] = useState(() => window.localStorage.getItem("ate.theme") === "dark");
@@ -223,6 +226,13 @@ export default function App() {
     setSessions(localSessions);
     setSummary(localSummary);
   }, []);
+
+  const refreshPlanning=useCallback(async():Promise<void>=>{
+    setPlannedBlocks(await window.desktop.planning.blocks());
+  },[]);
+  useEffect(()=>{
+    void refreshPlanning().catch(()=>{});
+  },[refreshPlanning,page]);
 
   // Main-process scheduled syncs must refresh the workbench even if the
   // connection settings page is not currently open.
@@ -405,12 +415,24 @@ export default function App() {
                     <div className="calendar-header"><h2>{month.getFullYear()} 年 {month.getMonth() + 1} 月</h2><div className="button-row"><button className="icon-button" aria-label="上个月" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>‹</button><button className="small-button" onClick={() => { setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); setSelectedDate(today); setFilter("day"); }}>今天</button><button className="icon-button" aria-label="下个月" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>›</button></div></div>
                     <div className="weekday-row">{["一", "二", "三", "四", "五", "六", "日"].map((day) => <span key={day}>{day}</span>)}</div>
                     <div className="calendar-grid">{calendar.map((day) => {
-                      const hasTasks = shownTasks.some((task) => task.dueDate === day.key);
+                      const hasTasks = shownTasks.some((task) => task.dueDate === day.key) || plannedBlocks.some(block=>block.day===day.key);
                       return <button key={day.key} className={["calendar-day", day.currentMonth ? "" : "muted-day", day.key === selectedDate ? "selected-day" : "", day.key === today ? "today-day" : ""].join(" ")}
                         onClick={() => { setSelectedDate(day.key); setFilter("day"); setShowHidden(false); if (!day.currentMonth) { const [y, m] = day.key.split("-").map(Number); setMonth(new Date(y, m - 1, 1)); } }} aria-label={day.key}>
                         <span>{day.day}</span>{hasTasks && <i className="day-dot" />}
                       </button>;
                     })}</div>
+                  </section>
+                  <section className="panel planned-day-panel">
+                    <div className="eyebrow">CONFIRMED STUDY SCHEDULE</div>
+                    <h2>{formatDueDate(selectedDate)} · 学习时间块</h2>
+                    {plannedBlocks.filter(b=>b.day===selectedDate).length ?
+                    <ul className="planned-day-list">
+                      {plannedBlocks.filter(b=>b.day===selectedDate).map(block=><li key={block.id}>
+                        <span>{minuteString(block.startMinute)} – {minuteString(block.startMinute+block.durationMinutes)}</span>
+                        <strong>{block.taskTitle}</strong>
+                      </li>)}
+                    </ul>:<p className="empty-state">这一天尚无已确认的规划时间。可以在「学习规划」生成建议。</p>}
+                    <p className="privacy-note">这些是单独确认的学习时间，不等于任务截止时间；规划不会修改原任务。</p>
                   </section>
                   <section className="panel task-list-panel"><div className="panel-heading"><div><div className="eyebrow">MY TASKS</div><h2>{showHidden ? "隐藏的 Canvas 任务" : filter === "day" ? formatDueDate(selectedDate) : filter === "undated" ? "未安排日期" : "全部任务"}</h2></div><span className="muted-tag">{visibleTasks.length} 条</span></div>
                     <div className="filter-tabs">
@@ -455,6 +477,7 @@ export default function App() {
           )}
 
           {page === "knowledge" && <KnowledgeBase />}
+          {page === "ai" && <StudyPlanner onChanged={refreshPlanning} />}
           {page === "connectors" && <CanvasConnector onTasksChanged={refresh} />}
           {page === "team" && <CloudWorkspace />}
           {page === "mail" && <CampusMail />}

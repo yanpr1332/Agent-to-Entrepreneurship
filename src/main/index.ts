@@ -15,12 +15,18 @@ import { CampusMailService } from "./connectors/mail-service";
 import { classifyMailSubject, parseMailCandidateChoice } from "../shared/mail-candidates";
 import type { MailCandidate } from "../shared/mail-candidates";
 import { KnowledgeStore } from "./knowledge-store";
+import { PlanningStore } from "./planning-store";
 import { readSelectedKnowledgeText } from "./knowledge-import";
 import { createLocalBackup, backupBeforeMigration } from "./local-backup";
 
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
 let knowledgeStore: KnowledgeStore | null = null;
+let planningStore: PlanningStore | null = null;
+function planner():PlanningStore{
+  if(!planningStore)throw new Error("Planning database is unavailable");
+  return planningStore;
+}
 
 function knowledge(): KnowledgeStore {
   if(!knowledgeStore)throw new Error("Local knowledge database is unavailable");
@@ -108,6 +114,30 @@ function registerIpcHandlers(): void {
     }
     return localStore().setCanvasTaskVisibility(data.id, data.visible);
   });
+  ipcMain.handle(IPC_CHANNELS.planningGenerate,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return planner().propose(input,localStore().listTasks());
+  });
+  ipcMain.handle(IPC_CHANNELS.planningProposals,event=>{
+    requireTrustedSender(event);
+    return planner().proposals();
+  });
+  ipcMain.handle(IPC_CHANNELS.planningBlocks,event=>{
+    requireTrustedSender(event);
+    return planner().listCommitted();
+  });
+  ipcMain.handle(IPC_CHANNELS.planningBatches,event=>{
+    requireTrustedSender(event);
+    return planner().batches();
+  });
+  ipcMain.handle(IPC_CHANNELS.planningApply,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return planner().apply(input,localStore().listTasks());
+  });
+  ipcMain.handle(IPC_CHANNELS.planningUndo,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return planner().undo(id);
+  });
   ipcMain.handle(IPC_CHANNELS.knowledgeDocuments, event => {
     requireTrustedSender(event);
     return knowledge().listDocuments();
@@ -164,6 +194,7 @@ function registerIpcHandlers(): void {
       {name:"tasks",store:localStore()},
       {name:"mail",store:mailStore},
       {name:"knowledge",store:knowledge()},
+      {name:"planning",store:planner()},
     ]);
   });
   ipcMain.handle(IPC_CHANNELS.focusList, (event) => {
@@ -433,6 +464,7 @@ app.whenReady().then(async () => {
     await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",1);
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
     knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "ate-knowledge.sqlite"));
+    planningStore = new PlanningStore(join(app.getPath("userData"), "ate-plans.sqlite"));
     canvasVault = new CanvasCredentialVault(join(app.getPath("userData"), "canvas-personal.enc"), safeStorage);
     mailStore = new CampusMailStore(join(app.getPath("userData"), "ate-mail.sqlite"));
     const mailVault = new CampusMailVault(join(app.getPath("userData"), "campus-mail.enc"), safeStorage);
@@ -483,6 +515,8 @@ app.on("before-quit", () => {
   canvasSync?.stop();
   canvasSync = null;
   // Sync promises may be finishing; the coordinator aborts before further writes.
+  planningStore?.close();
+  planningStore = null;
   knowledgeStore?.close();
   knowledgeStore = null;
   store?.close();

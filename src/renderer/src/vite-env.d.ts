@@ -22,6 +22,10 @@ import type {
   KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult,
 } from "../../shared/knowledge-model";
 
+import type {
+  PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
+} from "../../shared/planning-model";
+
 declare global {
   interface Window {
     desktop: {
@@ -77,6 +81,14 @@ declare global {
         imported: (courseId: number) => Promise<number[]>;
         importAssignment: (courseId: number, assignmentId: number) => Promise<CanvasImportResult>;
         syncCourse: (courseId: number) => Promise<CanvasSyncResult>;
+      };
+      planning: {
+        generate: (settings: PlanningSettings) => Promise<PlanProposal>;
+        proposals: () => Promise<PlanProposal[]>;
+        blocks: () => Promise<PlanBlock[]>;
+        batches: () => Promise<AppliedPlanBatch[]>;
+        apply: (selection: ApplyPlanRequest) => Promise<AppliedPlanBatch>;
+        undo: (id: string) => Promise<boolean>;
       };
       knowledge: {
         documents: () => Promise<KnowledgeDocument[]>;
