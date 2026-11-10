@@ -117,3 +117,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## W6 本地知识图谱
 
 新增带真实原文片段与 PDF 页码来源的知识节点、人工跨文档关系、SQLite v3 迁移和只读关系图展示。原文重新导入后旧节点标记待复核，旧来源不自动重绑定；无需云端或 AI。开发范围、测试和边界见 [13_KNOWLEDGE_GRAPH.md](13_KNOWLEDGE_GRAPH.md)。
+
+
+## W6 固定课程与 ICS
+
+支持本机固定课程/一次性与手动按周展开、受控 ICS 文件导入预览与导出、学习规划和 AI 建议的固定事项避让。具体支持格式与时区限制见 [14_ICS_FIXED_CALENDAR.md](14_ICS_FIXED_CALENDAR.md)。
