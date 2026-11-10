@@ -72,7 +72,7 @@ export class FixedCalendarStore {
     try{
       const put=this.db.prepare(
         "INSERT INTO fixed_events(id,source_uid,series_id,title,day,start_minute,duration_minutes,source,created_at)"+
-        " VALUES(?,NULL,?,?,?,?,'manual',?)");
+        " VALUES(?,NULL,?,?,?,?,?,'manual',?)");
       for(const candidate of candidates){
         const id=randomUUID(),stamp=now.toISOString();
         put.run(id,seriesId,candidate.title,candidate.day,candidate.startMinute,candidate.durationMinutes,stamp);
