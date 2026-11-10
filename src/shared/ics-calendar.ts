@@ -12,11 +12,16 @@ function encodeText(value:string):string{
   return value.replace(/\\/g,"\\\\").replace(/\n/g,"\\n").replace(/,/g,"\\,").replace(/;/g,"\\;");
 }
 function localStamp(date:Date):{day:string;minute:number}{
+  // Civil-day-only storage cannot distinguish the two occurrences of a fall-back clock hour.
+  const deviceZone=Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const resolved=resolveIanaTime(date.getFullYear(),date.getMonth()+1,date.getDate(),
+    date.getHours(),date.getMinutes(),date.getSeconds(),deviceZone);
+  if(resolved.getTime()!==date.getTime())throw Error("Ambiguous device-local ICS time");
   const day=[date.getFullYear(),String(date.getMonth()+1).padStart(2,"0"),
     String(date.getDate()).padStart(2,"0")].join("-");
   return {day,minute:date.getHours()*60+date.getMinutes()};
 }
-function parseStamp(raw:string,property:string):{day:string;minute:number;allDay:boolean}{
+function parseStamp(raw:string,property:string):{day:string;minute:number;allDay:boolean;instant:number|null}{
   const key=property.toUpperCase();
   const zone=/;TZID=([^;]+)$/i.exec(property)?.[1];
   const dateOnly=key==="DTSTART;VALUE=DATE"||key==="DTEND;VALUE=DATE";
@@ -24,7 +29,7 @@ function parseStamp(raw:string,property:string):{day:string;minute:number;allDay
     if(!/^\d{8}$/.test(raw))throw Error("Invalid all-day ICS date");
     const day=raw.slice(0,4)+"-"+raw.slice(4,6)+"-"+raw.slice(6,8);
     if(!validCivilDay(day))throw Error("Invalid all-day ICS date");
-    return {day,minute:0,allDay:true};
+    return {day,minute:0,allDay:true,instant:null};
   }
   if(!/^(?:DTSTART|DTEND)(?:;TZID=[A-Za-z0-9_+./-]+)?$/i.test(property))
     throw Error("Unsupported ICS date parameters");
@@ -36,20 +41,18 @@ function parseStamp(raw:string,property:string):{day:string;minute:number;allDay
     throw Error("Invalid ICS date/time");
   if(zone){
     if(z)throw Error("ICS TZID must not include a UTC suffix");
-    return {...localStamp(resolveIanaTime(Number(yyyy),Number(mm),Number(dd),Number(hh),Number(mi),0,zone)),allDay:false};
+    const date=resolveIanaTime(Number(yyyy),Number(mm),Number(dd),Number(hh),Number(mi),0,zone);
+    return {...localStamp(date),allDay:false,instant:date.getTime()};
   }
   if(z){
     const date=new Date(Date.UTC(Number(yyyy),Number(mm)-1,Number(dd),
       Number(hh),Number(mi),Number(ss)));
     const value=localStamp(date);
-    return {...value,allDay:false};
+    return {...value,allDay:false,instant:date.getTime()};
   }
-  const date=new Date(Number(yyyy),Number(mm)-1,Number(dd),Number(hh),Number(mi),Number(ss));
-  if(date.getFullYear()!==Number(yyyy)||date.getMonth()+1!==Number(mm)||
-     date.getDate()!==Number(dd)||date.getHours()!==Number(hh)||
-     date.getMinutes()!==Number(mi)||date.getSeconds()!==Number(ss))
-     throw Error("ICS floating time is invalid in the device time zone (DST gap)");
-  return {day,minute:Number(hh)*60+Number(mi),allDay:false};
+  const date=resolveIanaTime(Number(yyyy),Number(mm),Number(dd),Number(hh),
+    Number(mi),0,Intl.DateTimeFormat().resolvedOptions().timeZone);
+  return {day,minute:Number(hh)*60+Number(mi),allDay:false,instant:date.getTime()};
 }
 function getField(fields:Map<string,string>,base:string):[string,string]{
   const matches=[...fields].filter(([k])=>k===base||k.startsWith(base+";"));
@@ -74,6 +77,8 @@ function makeSlot(uid:string,title:string,sk:string,sv:string,ek:string,ev:strin
       throw Error("Only same-day timed ICS events are supported");
     duration=endsMidnight?1440-a.minute:b.minute-a.minute;
   }
+  if(a.instant!==null&&b.instant!==null && (b.instant-a.instant)!==duration*60_000)
+    throw Error("ICS event crosses a daylight saving transition and cannot fit a civil time slot");
   const slot=validateFixedSlot(a.day,a.minute,duration);
   return {...slot,title,sourceUid:uid};
 }
@@ -122,12 +127,13 @@ function parseEvent(fields:Map<string,string>):FixedEventDraft[]{
   if(new Set(days).size!==days.length||days.some(d=>!(d in weekdays))||
     !days.some(d=>weekdays[d]===originalWeekday))throw Error("Invalid ICS BYDAY for DTSTART");
   const eventDays=new Set(days.map(d=>weekdays[d]));
+  const startWeekOffset=(originalWeekday+6)%7; // ISO Monday week anchor.
   const rawEndOffset=Math.round((Date.parse(endOrigin+"T00:00:00Z")-
     Date.parse(initial+"T00:00:00Z"))/86400000);
   const output:FixedEventDraft[]=[];
   for(let delta=0;delta<=730&&output.length<count;delta++){
     const date=dayOffset(initial,delta),weekday=new Date(date+"T00:00:00Z").getUTCDay();
-    if(Math.floor(delta/7)%interval!==0||!eventDays.has(weekday))continue;
+    if(Math.floor((delta+startWeekOffset)/7)%interval!==0||!eventDays.has(weekday))continue;
     const futureEnd=dayOffset(date,rawEndOffset);
     const sourceUid=uid+"#"+date.replace(/-/g,"");
     const next=makeSlot(sourceUid,title,sk,shiftRawDate(sv,date),

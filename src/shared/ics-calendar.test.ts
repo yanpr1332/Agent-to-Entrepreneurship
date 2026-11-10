@@ -60,6 +60,19 @@ describe("strict opt-in local ICS support",()=>{
       "RRULE:FREQ=WEEKLY;COUNT=3;INTERVAL=2\r\n")));
     expect(biweekly.map(x=>x.day)).toEqual(["2026-11-09","2026-11-23","2026-12-07"]);
   });
+  it("anchors INTERVAL recurrence to Monday weeks, even with a midweek DTSTART",()=>{
+    const events=parseICS(wrap(evt("midweek",":20261111T090000",":20261111T100000",
+      "RRULE:FREQ=WEEKLY;INTERVAL=2;COUNT=4;BYDAY=MO,WE\r\n")));
+    expect(events.map(x=>x.day)).toEqual([
+      "2026-11-11","2026-11-23","2026-11-25","2026-12-07",
+    ]);
+  });
+  it("rejects timed events spanning an unrepresentable DST clock change",()=>{
+    expect(()=>parseICS(wrap(evt("jump",
+      ";TZID=America/Los_Angeles:20260308T013000",
+      ";TZID=America/Los_Angeles:20260308T033000"))))
+      .toThrow("transition");
+  });
   it("converts real IANA TZID instants with DST-preserving weekly wall time",()=>{
     const series=parseICS(wrap(evt("pacific",
       ";TZID=America/Los_Angeles:20260302T090000",
