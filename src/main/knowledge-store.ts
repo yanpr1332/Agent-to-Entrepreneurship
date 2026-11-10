@@ -404,6 +404,8 @@ export class KnowledgeStore {
   createGraphNode(raw:unknown,now=new Date()):GraphNode{
     const input=parseGraphNode(raw);
     const source=this.getDocument(input.documentId);
+    if(source.revision!==input.expectedRevision)
+      throw Error("The source changed since preview; review the current passage again");
     const passage=this.getPassage(input.documentId,input.sourceOrdinal);
     const existing=this.db.prepare(`SELECT id FROM knowledge_graph_nodes
       WHERE document_id=? AND source_ordinal=? AND title=?`)

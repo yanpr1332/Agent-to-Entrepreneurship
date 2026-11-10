@@ -65,7 +65,7 @@ export default function KnowledgeGraph({onOpenSource}:{
     if(!source || source.documentId!==docId || source.ordinal!==ordinal)return;
     await run(async()=>{
       const node=await window.desktop.knowledge.createNode({
-        documentId:docId,sourceOrdinal:ordinal,title,note,
+        documentId:docId,sourceOrdinal:ordinal,expectedRevision:source.revision,title,note,
       });
       await refresh();
       selectNode(node);

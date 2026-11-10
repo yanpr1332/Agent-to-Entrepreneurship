@@ -29,7 +29,7 @@ export interface GraphEdge {
 }
 export interface KnowledgeGraphSnapshot { nodes:GraphNode[]; edges:GraphEdge[]; }
 export interface GraphNodeInput {
-  documentId:string; sourceOrdinal:number; title:string; note:string;
+  documentId:string; sourceOrdinal:number; expectedRevision:number; title:string; note:string;
 }
 export interface GraphNodeEdit {id:string;title:string;note:string;}
 export interface GraphEdgeInput {
@@ -49,11 +49,13 @@ function cleanText(value:unknown,max:number,required:boolean):string{
   return value.trim();
 }
 export function parseGraphNode(value:unknown):GraphNodeInput{
-  const r=exact(value,["documentId","sourceOrdinal","title","note"]);
+  const r=exact(value,["documentId","sourceOrdinal","expectedRevision","title","note"]);
+  if(!Number.isSafeInteger(r.expectedRevision)||(r.expectedRevision as number)<1)
+    throw Error("Invalid source revision");
   if(!Number.isSafeInteger(r.sourceOrdinal)||(r.sourceOrdinal as number)<0||
     (r.sourceOrdinal as number)>2500)throw Error("Invalid passage ordinal");
   return {documentId:requireKnowledgeId(r.documentId),
-    sourceOrdinal:r.sourceOrdinal as number,
+    sourceOrdinal:r.sourceOrdinal as number,expectedRevision:r.expectedRevision as number,
     title:cleanText(r.title,120,true),note:cleanText(r.note,600,false)};
 }
 export function parseGraphEdge(value:unknown):GraphEdgeInput{

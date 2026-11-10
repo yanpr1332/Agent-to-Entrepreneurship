@@ -14,7 +14,7 @@ const a={sourcePath:"/tmp/graph-alpha.md",title:"Alpha",format:"markdown" as con
 const b={sourcePath:"/tmp/graph-beta.txt",title:"Beta",format:"text" as const,
   text:"Graph beta source excerpt with chemical facts."};
 function nodeInput(documentId:string,title:string){
-  return {documentId,sourceOrdinal:0,title,note:"manually verified"};
+  return {documentId,sourceOrdinal:0,expectedRevision:1,title,note:"manually verified"};
 }
 afterEach(()=>{
   while(stores.length)stores.pop()!.close();
@@ -65,7 +65,8 @@ describe("source-cited local knowledge graph v3",()=>{
     expect(stale.sourceHash).toBe(da.contentHash);
     expect(()=>store.createGraphEdge({sourceId:na.id,targetId:nb.id,relation:"supports",note:""}))
       .toThrow("stale");
-    const newer=store.createGraphNode(nodeInput(da.id,"New DNA"));
+    expect(()=>store.createGraphNode(nodeInput(da.id,"New DNA"))).toThrow("source changed");
+    const newer=store.createGraphNode({...nodeInput(da.id,"New DNA"),expectedRevision:2});
     expect(newer.sourceRevision).toBe(2);
     expect(newer.needsReview).toBe(false);
     expect(store.createGraphEdge({sourceId:newer.id,targetId:nb.id,relation:"related",note:""}))
