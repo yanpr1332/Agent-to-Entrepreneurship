@@ -77,7 +77,7 @@ function parseEvent(fields:Map<string,string>):FixedEventDraft{
 }
 /** All-or-nothing preview. Explicitly reject unsupported recurrence, TZIDs, duplicates or partial data. */
 export function parseICS(text:string):FixedEventDraft[]{
-  if(typeof text!=="string"||Buffer.byteLength(text,"utf8")>MAX_ICS_BYTES||
+  if(typeof text!=="string"||new TextEncoder().encode(text).byteLength>MAX_ICS_BYTES||
      /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text))
     throw Error("Invalid or oversized ICS file (512 KiB limit)");
   const normalized=text.replace(/\r\n/g,"\n").replace(/\r/g,"\n");
@@ -160,8 +160,8 @@ export function exportICS(events:ReadonlyArray<FixedEvent>):string{
   for(const line of lines){
     let current="";
     for(const char of line){
-      const bytes=Buffer.byteLength(char,"utf8");
-      if(Buffer.byteLength(current,"utf8")+bytes>75){
+      const bytes=new TextEncoder().encode(char).byteLength;
+      if(new TextEncoder().encode(current).byteLength+bytes>75){
         folded.push(current);current=" "+char;
       }else current+=char;
     }
