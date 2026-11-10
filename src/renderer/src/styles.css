@@ -296,3 +296,23 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
 
 /* PDF source anchors refer to the PDF's physical page order, not printed labels. */
 .kb-page-citation{font-size:11px;color:var(--accent);font-weight:600;margin:4px 0 9px}
+
+/* W6 knowledge graph: entirely local, with visible provenance and stale-source cues. */
+.kg-space { display:grid; gap:18px; min-width:0; }
+.kg-layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+.kg-layout .panel { min-width:0; }
+.kg-evidence { border:1px solid var(--line, #d5dbe5); border-radius:10px;
+  padding:12px; margin:10px 0; background:var(--card,#fff); overflow-wrap:anywhere; }
+.kg-evidence p { white-space:pre-wrap; max-height:165px; overflow:auto; }
+.kg-map-scroll { width:100%; overflow:auto; }
+.kg-map { display:block; width:100%; min-width:560px; max-height:500px; }
+.kg-edge-confirmed { stroke:#4777a4; stroke-width:2.7; }
+.kg-edge-pending { stroke:#8f8f8f; stroke-width:2.5; stroke-dasharray:7 7; }
+.kg-edge-stale { stroke:#c47736; stroke-width:2.7; stroke-dasharray:4 5; }
+.kg-node-current circle { fill:#e5f3fe; stroke:#326b99; stroke-width:2.5; }
+.kg-node-stale circle { fill:#fff0dd; stroke:#bf7130; stroke-width:2.5; }
+.kg-map text { fill:#162d42; font-size:11px; pointer-events:none; }
+.kg-map .kg-node-sub { font-size:9px; }
+.kg-legend { display:flex; flex-wrap:wrap; gap:14px; font-size:12px; opacity:.8; }
+.kg-selection { padding-top:12px; display:grid; gap:10px; }
+@media (max-width:880px) { .kg-layout { grid-template-columns:1fr; } }

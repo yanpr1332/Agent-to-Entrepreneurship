@@ -23,6 +23,10 @@ import type {
 } from "../../shared/knowledge-model";
 
 import type {
+  KnowledgeGraphSnapshot, GraphNode, GraphEdge, GraphNodeInput, GraphNodeEdit, GraphEdgeInput,
+} from "../../shared/knowledge-graph-model";
+
+import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
 } from "../../shared/planning-model";
 
@@ -107,6 +111,12 @@ declare global {
         undo: (id: string) => Promise<boolean>;
       };
       knowledge: {
+        graph: () => Promise<KnowledgeGraphSnapshot>;
+        createNode: (input:GraphNodeInput) => Promise<GraphNode>;
+        editNode: (input:GraphNodeEdit) => Promise<GraphNode>;
+        deleteNode: (id:string) => Promise<boolean>;
+        createEdge: (input:GraphEdgeInput) => Promise<GraphEdge>;
+        deleteEdge: (id:string) => Promise<boolean>;
         documents: () => Promise<KnowledgeDocument[]>;
         get: (id: string) => Promise<KnowledgeSnapshot>;
         passage: (id: string, ordinal: number) => Promise<KnowledgePassage>;

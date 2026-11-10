@@ -112,3 +112,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## W6-15 可追溯 PDF 知识库
 
 本地知识库支持原生文件选取 PDF 的纯文字逐页解析，全文搜索和复习卡记录 PDF 物理页码。SQLite 由 v1 安全备份后升级至 v2；只保留提取后的文字/来源记录而非 PDF 原文件。OCR、复杂公式校验、原文 PDF 内嵌阅读器和 AI 引用问答留待后续。参见 [12_PDF_KNOWLEDGE_CITATIONS.md](12_PDF_KNOWLEDGE_CITATIONS.md)。
+
+
+## W6 本地知识图谱
+
+新增带真实原文片段与 PDF 页码来源的知识节点、人工跨文档关系、SQLite v3 迁移和只读关系图展示。原文重新导入后旧节点标记待复核，旧来源不自动重绑定；无需云端或 AI。开发范围、测试和边界见 [13_KNOWLEDGE_GRAPH.md](13_KNOWLEDGE_GRAPH.md)。

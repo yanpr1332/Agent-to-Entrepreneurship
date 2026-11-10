@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import KnowledgeGraph from "./KnowledgeGraph";
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
   KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage,
@@ -25,7 +26,7 @@ export default function KnowledgeBase(){
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
-  const [activeTab,setActiveTab]=useState<"library"|"review">("library");
+  const [activeTab,setActiveTab]=useState<"library"|"review"|"graph">("library");
 
   async function reload():Promise<void>{
     const [docs,items,summary]=await Promise.all([
@@ -113,7 +114,7 @@ export default function KnowledgeBase(){
 
   async function deleteDocument():Promise<void>{
     if(!selected)return;
-    if(!window.confirm(`删除本地知识库中的「${selected.title}」及对应复习卡？原始磁盘文件不会删除。`))return;
+    if(!window.confirm(`删除本地知识库中的「${selected.title}」、复习卡及对应知识图谱节点/关系？原始磁盘文件不会删除。`))return;
     await perform(async()=>{
       await window.desktop.knowledge.delete(selected.id);
       setSelected(null);setPassage(null);setSourceOrdinal(null);setResults([]);
@@ -158,7 +159,7 @@ export default function KnowledgeBase(){
       <strong>本地优先：</strong>支持用户明确选择的 UTF-8 Markdown/TXT（最多 2 MiB）
       与具有可选择文字的 PDF（文件最多 12 MiB、120 页）。
       PDF 仅提取本机文本并记录真实页码，不执行文档脚本、不上传云端、不调用 AI；
-      扫描图片 PDF 的 OCR、Office、录音转写及知识图谱尚未实现。
+      扫描图片 PDF 的 OCR、Office、录音转写尚未实现；知识图谱为人工整理，不自动生成 AI 关系。
     </div>
     {error&&<div className="error-banner" role="alert"><span>{error}</span>
       <button onClick={()=>setError("")}>关闭</button></div>}
@@ -167,6 +168,8 @@ export default function KnowledgeBase(){
       <div className="filter-tabs">
         <button className={activeTab==="library"?"chip selected":"chip"}
           onClick={()=>setActiveTab("library")}>资料与搜索</button>
+        <button className={activeTab==="graph"?"chip selected":"chip"}
+          onClick={()=>setActiveTab("graph")}>知识图谱</button>
         <button className={activeTab==="review"?"chip selected":"chip"}
           onClick={()=>setActiveTab("review")}>今日复习 ({progress.due})</button>
       </div>
@@ -238,6 +241,10 @@ export default function KnowledgeBase(){
         </section>
       </div>
     </>}
+
+    {activeTab==="graph"&&<KnowledgeGraph onOpenSource={async(id,ordinal)=>{
+      setActiveTab("library");await openDocument(id,ordinal);
+    }}/>} 
 
     {activeTab==="review"&&<div className="kb-review-layout">
       <div className="kb-progress">

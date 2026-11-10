@@ -186,6 +186,30 @@ function registerIpcHandlers(): void {
     assistant().cancel();
     return assistant().status();
   });
+  ipcMain.handle(IPC_CHANNELS.knowledgeGraph, event=>{
+    requireTrustedSender(event);
+    return knowledge().graph();
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeGraphCreateNode, (event,input:unknown)=>{
+    requireTrustedSender(event);
+    return knowledge().createGraphNode(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeGraphEditNode, (event,input:unknown)=>{
+    requireTrustedSender(event);
+    return knowledge().editGraphNode(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeGraphDeleteNode, (event,id:unknown)=>{
+    requireTrustedSender(event);
+    return knowledge().deleteGraphNode(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeGraphCreateEdge, (event,input:unknown)=>{
+    requireTrustedSender(event);
+    return knowledge().createGraphEdge(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.knowledgeGraphDeleteEdge, (event,id:unknown)=>{
+    requireTrustedSender(event);
+    return knowledge().deleteGraphEdge(id);
+  });
   ipcMain.handle(IPC_CHANNELS.knowledgeDocuments, event => {
     requireTrustedSender(event);
     return knowledge().listDocuments();
@@ -513,7 +537,7 @@ app.whenReady().then(async () => {
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
     await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",4);
-    await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",2);
+    await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",3);
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
     knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "ate-knowledge.sqlite"));
     planningStore = new PlanningStore(join(app.getPath("userData"), "ate-plans.sqlite"));
