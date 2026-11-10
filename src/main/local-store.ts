@@ -259,10 +259,11 @@ export class LocalStore {
 
   /** Expired hidden records only. Visible personal tasks are never purged. */
   purgeExpiredHiddenCanvasTasks(now = new Date()): number {
-    return this.db.prepare(`DELETE FROM tasks WHERE id IN (
+    const deleted = this.db.prepare(`DELETE FROM tasks WHERE id IN (
       SELECT task_id FROM canvas_assignment_links
       WHERE visible=0 AND retention_expires_at IS NOT NULL AND retention_expires_at <= ?
     )`).run(now.toISOString()).changes;
+    return Number(deleted);
   }
 
   listCanvasCourseSettings(origin: string, accountId: number): { courseId: number; enabled: boolean }[] {
