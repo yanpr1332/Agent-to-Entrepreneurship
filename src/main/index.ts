@@ -7,6 +7,7 @@ import { LocalStore } from "./local-store";
 import { CanvasApi } from "./connectors/canvas-api";
 import { CanvasCredentialVault } from "./connectors/canvas-credentials";
 import { CanvasSyncService } from "./connectors/canvas-sync";
+import { SharedCloudClient } from "./cloud/supabase-client";
 import { parseCanvasCourseId, parseCanvasPersonalTokenInput } from "../shared/canvas-model";
 import { CampusMailStore } from "./connectors/mail-store";
 import { CampusMailVault } from "./connectors/mail-vault";
@@ -25,6 +26,7 @@ function campusMail(): CampusMailService {
   return mailService;
 }
 const CANVAS_SYNC_UPDATED = "canvas:sync-updated";
+const sharedCloud = new SharedCloudClient();
 
 function coordinator(): CanvasSyncService {
   if (!canvasSync) throw new Error("Canvas synchronization is not initialized");
@@ -223,6 +225,71 @@ function registerIpcHandlers(): void {
     coordinator().cancel();
     await credentials().clear();
     return { disconnected: true };
+  });
+  // Supabase candidate PoC. All REST calls run in Main with the user's JWT;
+  // service-role keys are explicitly rejected and never enter renderer storage.
+  ipcMain.handle(IPC_CHANNELS.cloudStatus, (event) => {
+    requireTrustedSender(event);
+    return sharedCloud.status();
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudConfigure, (event, input: unknown) => {
+    requireTrustedSender(event);
+    return sharedCloud.configure(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudLogin, (event, input: unknown) => {
+    requireTrustedSender(event);
+    return sharedCloud.login(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudSignup, (event, input: unknown) => {
+    requireTrustedSender(event);
+    return sharedCloud.signUp(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudLogout, (event) => {
+    requireTrustedSender(event);
+    sharedCloud.signOut();
+    return sharedCloud.status();
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudWorkspaces, (event) => {
+    requireTrustedSender(event);
+    return sharedCloud.listWorkspaces();
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudCreateWorkspace, (event, name: unknown, displayName: unknown) => {
+    requireTrustedSender(event);
+    return sharedCloud.createWorkspace(name, displayName);
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudCreateInvite, (event, workspaceId: unknown) => {
+    requireTrustedSender(event);
+    return sharedCloud.createInvite(workspaceId);
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudJoinWorkspace, (event, token: unknown, displayName: unknown) => {
+    requireTrustedSender(event);
+    return sharedCloud.joinWorkspace(token, displayName);
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudMembers, (event, workspaceId: unknown) => {
+    requireTrustedSender(event);
+    return sharedCloud.listMembers(workspaceId);
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudMessages, (event, workspaceId: unknown) => {
+    requireTrustedSender(event);
+    return sharedCloud.listMessages(workspaceId);
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudSendMessage, (event, workspaceId: unknown, body: unknown) => {
+    requireTrustedSender(event);
+    return sharedCloud.sendMessage(workspaceId, body);
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudTasks, (event, workspaceId: unknown) => {
+    requireTrustedSender(event);
+    return sharedCloud.listTasks(workspaceId);
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudCreateTask, (event, workspaceId: unknown, input: unknown) => {
+    requireTrustedSender(event);
+    return sharedCloud.createTask(workspaceId, input);
+  });
+  ipcMain.handle(IPC_CHANNELS.cloudMarkTask, (
+    event, workspaceId: unknown, taskId: unknown, completed: unknown,
+  ) => {
+    requireTrustedSender(event);
+    return sharedCloud.markTask(workspaceId, taskId, completed);
   });
 }
 

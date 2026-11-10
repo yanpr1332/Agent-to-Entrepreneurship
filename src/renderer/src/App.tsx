@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import type { FocusSession, FocusSummary, LocalTask, TaskPriority } from "../../shared/local-model";
 import { formatDueDate, localDateKey, monthCells } from "./calendar";
 import CanvasConnector from "./CanvasConnector";
+import CloudWorkspace from "./CloudWorkspace";
 import CampusMail from "./CampusMail";
 
 type Page = "overview" | "calendar" | "knowledge" | "focus" | "team" | "ai" | "connectors" | "mail";
@@ -13,7 +14,7 @@ const menu: { page: Page; icon: string; label: string; ready: boolean }[] = [
   { page: "calendar", icon: "▦", label: "日历与任务", ready: true },
   { page: "knowledge", icon: "◇", label: "个人知识库", ready: false },
   { page: "focus", icon: "◷", label: "专注与自律", ready: true },
-  { page: "team", icon: "⌘", label: "小组协作", ready: false },
+  { page: "team", icon: "⌘", label: "小组协作", ready: true },
   { page: "ai", icon: "✳", label: "AI 辅助规划", ready: false },
   { page: "connectors", icon: "⇄", label: "数据接入", ready: true },
   { page: "mail", icon: "✉", label: "邮件管理", ready: true },
@@ -362,7 +363,7 @@ export default function App() {
           {page === "overview" && (
             <>
               <div className="welcome-row"><div><div className="eyebrow">YOUR WORKSPACE</div><h1>把重要的事情，<em>一步步做好。</em></h1><p>日程、任务与专注记录已接入本地数据库，重启后可以恢复。</p></div><div className="date-card"><span>当前版本</span><strong>{version}</strong><small>内部开发原型</small></div></div>
-              <div className="status-banner"><div className="status-icon">✦</div><div className="status-copy"><strong>{runtime === "connected" ? "本地工作空间已连接" : "正在检查本地工作空间"}</strong><span>个人任务与专注记录仅存储在本机。Canvas、邮箱和云端协作尚未接入。</span></div>
+              <div className="status-banner"><div className="status-icon">✦</div><div className="status-copy"><strong>{runtime === "connected" ? "本地工作空间已连接" : "正在检查本地工作空间"}</strong><span>个人任务与专注记录仅存储在本机。Canvas 和邮箱为开发验证版；云端协作 PoC 需配置测试项目并完成真实权限验收。</span></div>
                 <div className="runtime-status"><i className={runtime === "connected" ? "online" : runtime === "unavailable" ? "offline" : ""} />{runtime === "connected" ? "SQLite 已连接" : runtime === "checking" ? "检查中" : "不可用"}</div>
               </div>
               <div className="metric-grid">
@@ -380,7 +381,7 @@ export default function App() {
                 <section className="panel runtime-panel"><div className="eyebrow">SYSTEM STATUS</div><h2>运行状态</h2>
                   <div className="runtime-line"><span>Electron / 本地 SQLite</span><strong>{runtime === "connected" ? "可用" : runtime === "checking" ? "检查中" : "异常"}</strong></div>
                   <div className="runtime-line"><span>个人任务与日历</span><strong>{runtime === "connected" ? "可用" : "未连接"}</strong></div>
-                  <div className="runtime-line"><span>云端协作</span><strong className="not-ready">尚未接入</strong></div>
+                  <div className="runtime-line"><span>云端协作</span><strong className="not-ready">候选 PoC，需配置测试云</strong></div>
                   <div className="runtime-line"><span>Canvas 与邮箱</span><strong>开发验证版</strong></div>
                   <p className="privacy-note">个人任务与专注数据不会自动上传云端。</p>
                 </section>
@@ -447,6 +448,7 @@ export default function App() {
           )}
 
           {page === "connectors" && <CanvasConnector onTasksChanged={refresh} />}
+          {page === "team" && <CloudWorkspace />}
           {page === "mail" && <CampusMail />}
 
           {!selectedModule.ready && (

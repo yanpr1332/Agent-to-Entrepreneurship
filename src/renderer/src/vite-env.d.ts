@@ -11,6 +11,11 @@ import type {
   CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
 } from "../../shared/mail-model";
 
+import type {
+  CloudCredentials, CloudProjectConfig, CloudSessionStatus,
+  SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
+} from "../../shared/cloud-model";
+
 declare global {
   interface Window {
     desktop: {
@@ -32,6 +37,23 @@ declare global {
         prepareSend: (draft: MailDraft) => Promise<MailSendPreview>;
         confirmSend: (confirmationId: string) => Promise<{accepted:true}>;
         onSyncUpdated: (listener: () => void) => () => void;
+      };
+      cloud: {
+        status: () => Promise<CloudSessionStatus>;
+        configure: (input: CloudProjectConfig) => Promise<CloudSessionStatus>;
+        login: (input: CloudCredentials) => Promise<CloudSessionStatus>;
+        signup: (input: CloudCredentials) => Promise<{emailVerificationRequired:true}>;
+        logout: () => Promise<CloudSessionStatus>;
+        workspaces: () => Promise<SharedWorkspace[]>;
+        createWorkspace: (name: string, displayName: string) => Promise<string>;
+        createInvite: (workspaceId: string) => Promise<string>;
+        joinWorkspace: (token: string, displayName: string) => Promise<string>;
+        members: (workspaceId: string) => Promise<SharedMember[]>;
+        messages: (workspaceId: string) => Promise<SharedMessage[]>;
+        sendMessage: (workspaceId: string, body: string) => Promise<SharedMessage>;
+        tasks: (workspaceId: string) => Promise<SharedTask[]>;
+        createTask: (workspaceId: string, input: SharedTaskInput) => Promise<SharedTask>;
+        markTask: (workspaceId: string, taskId: string, completed: boolean) => Promise<SharedTask>;
       };
       canvas: {
         status: () => Promise<CanvasConnectionStatus>;

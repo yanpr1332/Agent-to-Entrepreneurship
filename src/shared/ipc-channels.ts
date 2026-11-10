@@ -31,6 +31,21 @@ export const IPC_CHANNELS = {
   mailPrepareSend: "mail:prepare-send",
   mailConfirmSend: "mail:confirm-send",
   mailSyncUpdated: "mail:sync-updated",
+  cloudStatus: "cloud:status",
+  cloudConfigure: "cloud:configure",
+  cloudLogin: "cloud:login",
+  cloudSignup: "cloud:signup",
+  cloudLogout: "cloud:logout",
+  cloudWorkspaces: "cloud:workspaces",
+  cloudCreateWorkspace: "cloud:create-workspace",
+  cloudCreateInvite: "cloud:create-invite",
+  cloudJoinWorkspace: "cloud:join-workspace",
+  cloudMembers: "cloud:members",
+  cloudMessages: "cloud:messages",
+  cloudSendMessage: "cloud:send-message",
+  cloudTasks: "cloud:tasks",
+  cloudCreateTask: "cloud:create-task",
+  cloudMarkTask: "cloud:mark-task",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
