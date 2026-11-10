@@ -82,3 +82,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## 上海交大 IMAP/SMTP 邮件连接器
 
 开发验证版新增 `mail.sjtu.edu.cn` 的 TLS IMAP 只读收件头同步（每 10 分钟）、本地加密凭据、纯文本草稿与两阶段人工确认 SMTP 发送。详细设计、服务器参数、隐私与真实账号验收见 [05_SJTU_MAIL_CONNECTOR.md](05_SJTU_MAIL_CONNECTOR.md)。未对学校邮箱执行真实连接，CI 通过不等于实际收发完成验收。
+
+
+## 邮件自动整理待办候选
+
+邮件已支持在既有自动同步基础上，自动识别疑似作业、考试、报名等候选，并在本地提供创建个人任务、忽略及恢复审阅；用户确认后才创建任务，SQLite v4 保证去重与事务一致性。见 [07_MAIL_TASK_CANDIDATES.md](07_MAIL_TASK_CANDIDATES.md)，CI 验证和真实校邮箱验收分别记录。

@@ -3,6 +3,9 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { CanvasAssignment, CanvasImportResult, CanvasSyncResult } from "../shared/canvas-model";
+import type { MailCandidateAction, MailCandidateChoiceResult, MailCandidateDecision } from "../shared/mail-candidates";
+import { suggestedTaskTitle } from "../shared/mail-candidates";
+import type { MailRecord } from "../shared/mail-model";
 import {
   parseCreateTask, parseFocusCompletion, parseTaskId, parseUpdateTask,
   type FocusSession, type FocusSummary, type LocalTask, type TaskPriority,
@@ -84,8 +87,8 @@ export class LocalStore {
 
   private migrate(): void {
     const version = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (version > 3) throw new Error("Database created by a newer application; refusing to downgrade");
-    if (version === 3) return;
+    if (version > 4) throw new Error("Database created by a newer application; refusing to downgrade");
+    if (version === 4) return;
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -157,7 +160,16 @@ export class LocalStore {
           );
         `);
       }
-      this.db.exec("PRAGMA user_version = 3");
+      if (version <= 3) {
+        this.db.exec("CREATE TABLE mail_candidate_reviews (" +
+          "account TEXT NOT NULL, uid_validity INTEGER NOT NULL CHECK(uid_validity>0), " +
+          "uid INTEGER NOT NULL CHECK(uid>0), decision TEXT NOT NULL " +
+          "CHECK(decision IN ('ignored','accepted')), task_id TEXT, decided_at TEXT NOT NULL, " +
+          "PRIMARY KEY(account,uid_validity,uid), " +
+          "CHECK((decision='accepted' AND task_id IS NOT NULL) OR " +
+          "(decision='ignored' AND task_id IS NULL)))");
+      }
+      this.db.exec("PRAGMA user_version = 4");
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -301,6 +313,79 @@ export class LocalStore {
       last_success=CASE WHEN excluded.last_success IS NULL THEN canvas_sync_state.last_success ELSE excluded.last_success END,
       last_error=excluded.last_error`).run(origin, accountId, now.toISOString(),
       success ? now.toISOString() : null, error?.slice(0, 160) ?? null);
+  }
+
+  /** Mail candidate reviews are local and keyed by account + UIDVALIDITY + UID. */
+  mailCandidateDecisions(account: string): {
+    uidValidity: number; uid: number; decision: MailCandidateDecision; taskId: string | null;
+  }[] {
+    const rows = this.db.prepare("SELECT uid_validity,uid,decision,task_id " +
+      "FROM mail_candidate_reviews WHERE account=?").all(account) as unknown as {
+        uid_validity: number; uid: number; decision: "ignored"|"accepted"; task_id: string|null;
+      }[];
+    return rows.map(row => ({uidValidity:row.uid_validity,uid:row.uid,
+      decision:row.decision,taskId:row.task_id}));
+  }
+
+  /**
+   * Convert an authorized mail candidate into a canonical local task and
+   * persist its idempotency record in one SQLite transaction. Mail Date is
+   * send time, not a deadline, so the resulting task has no due date.
+   */
+  reviewMailCandidate(record: MailRecord, action: MailCandidateAction): MailCandidateChoiceResult {
+    if (!record.account.endsWith("@sjtu.edu.cn") ||
+        !Number.isSafeInteger(record.uid) || record.uid < 1 ||
+        !Number.isSafeInteger(record.uidValidity) || record.uidValidity < 1 ||
+        !["accept","ignore","reopen"].includes(action)) {
+      throw new Error("Invalid mail candidate source");
+    }
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const args = [record.account,record.uidValidity,record.uid] as const;
+      const existing = this.db.prepare("SELECT decision,task_id FROM mail_candidate_reviews " +
+        "WHERE account=? AND uid_validity=? AND uid=?")
+        .get(...args) as {decision:"ignored"|"accepted";task_id:string|null}|undefined;
+      let result: MailCandidateChoiceResult;
+      if (action === "accept") {
+        if (existing?.decision === "ignored") throw new Error("Restore the candidate before creating a task");
+        if (existing?.decision === "accepted") {
+          result = {action,taskId:existing.task_id,created:false};
+        } else {
+          const id = randomUUID();
+          const now = new Date().toISOString();
+          this.db.prepare("INSERT INTO tasks(" +
+            "id,title,description,due_date,priority,completed,created_at,updated_at) " +
+            "VALUES(?,?,?,NULL,'normal',0,?,?)")
+            .run(id,suggestedTaskTitle(record.subject),"",now,now);
+          this.db.prepare("INSERT INTO mail_candidate_reviews(" +
+            "account,uid_validity,uid,decision,task_id,decided_at) " +
+            "VALUES(?,?,?,'accepted',?,?)").run(...args,id,now);
+          result = {action,taskId:id,created:true};
+        }
+      } else if (action === "ignore") {
+        if (existing?.decision === "accepted") throw new Error("Edit the created task in Calendar");
+        if (!existing) this.db.prepare("INSERT INTO mail_candidate_reviews(" +
+          "account,uid_validity,uid,decision,task_id,decided_at) " +
+          "VALUES(?,?,?,'ignored',NULL,?)").run(...args,new Date().toISOString());
+        result = {action,taskId:null,created:false};
+      } else {
+        if (existing?.decision === "accepted") throw new Error("This candidate already created a task");
+        if (existing?.decision === "ignored") this.db.prepare("DELETE FROM mail_candidate_reviews " +
+          "WHERE account=? AND uid_validity=? AND uid=?").run(...args);
+        result = {action,taskId:null,created:false};
+      }
+      this.db.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  /** Forget mailbox-specific metadata on disconnect, without deleting personal tasks. */
+  clearMailCandidateDecisions(account: string): number {
+    return Number(this.db.prepare("DELETE FROM mail_candidate_reviews WHERE account=?")
+      .run(account).changes);
   }
 
   /** Convert a Canvas instant into the user's local calendar day. */

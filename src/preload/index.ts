@@ -10,6 +10,7 @@ import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPers
 import type {
   CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
 } from "../shared/mail-model";
+import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } from "../shared/mail-candidates";
 
 import type {
   CloudCredentials, CloudProjectConfig, CloudSessionStatus,
@@ -35,6 +36,9 @@ const desktopApi = Object.freeze({
     connect: (input: CampusMailConnectInput) =>
       ipcRenderer.invoke(IPC_CHANNELS.mailConnect, input) as Promise<MailSyncState>,
     list: () => ipcRenderer.invoke(IPC_CHANNELS.mailList) as Promise<MailRecord[]>,
+    candidates: () => ipcRenderer.invoke(IPC_CHANNELS.mailCandidates) as Promise<MailCandidate[]>,
+    reviewCandidate: (choice: MailCandidateChoice) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailReviewCandidate, choice) as Promise<MailCandidateChoiceResult>,
     syncNow: () => ipcRenderer.invoke(IPC_CHANNELS.mailSyncNow) as Promise<MailSyncState>,
     disconnect: () =>
       ipcRenderer.invoke(IPC_CHANNELS.mailDisconnect) as Promise<{disconnected:true}>,

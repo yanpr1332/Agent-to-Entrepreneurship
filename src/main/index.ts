@@ -12,6 +12,8 @@ import { parseCanvasCourseId, parseCanvasPersonalTokenInput } from "../shared/ca
 import { CampusMailStore } from "./connectors/mail-store";
 import { CampusMailVault } from "./connectors/mail-vault";
 import { CampusMailService } from "./connectors/mail-service";
+import { classifyMailSubject, parseMailCandidateChoice } from "../shared/mail-candidates";
+import type { MailCandidate } from "../shared/mail-candidates";
 
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
@@ -125,9 +127,40 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return campusMail().sync();
   });
+  ipcMain.handle(IPC_CHANNELS.mailCandidates, async (event) => {
+    requireTrustedSender(event);
+    const records = await campusMail().list();
+    if (!records.length) return [] as MailCandidate[];
+    const decisions = new Map(localStore().mailCandidateDecisions(records[0].account)
+      .map(item => [`${item.uidValidity}:${item.uid}`,item] as const));
+    return records.flatMap(record => {
+      const kind = classifyMailSubject(record.subject);
+      if (!kind) return [];
+      const prior = decisions.get(`${record.uidValidity}:${record.uid}`);
+      return [{...record,kind,decision:prior?.decision ?? "pending",
+        taskId:prior?.taskId ?? null}] satisfies MailCandidate[];
+    });
+  });
+  ipcMain.handle(IPC_CHANNELS.mailReviewCandidate, async (event, input: unknown) => {
+    requireTrustedSender(event);
+    const choice = parseMailCandidateChoice(input);
+    // The untrusted renderer sends only a source identity and decision, never a
+    // title or task content. Main looks up the currently authorized IMAP cache.
+    const record = (await campusMail().list()).find(item =>
+      item.uid === choice.uid && item.uidValidity === choice.uidValidity &&
+      classifyMailSubject(item.subject) !== null);
+    if (!record) throw new Error("Mail candidate is no longer in the authorized inbox cache");
+    const result = localStore().reviewMailCandidate(record,choice.action);
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send(MAIL_SYNC_UPDATED);
+    }
+    return result;
+  });
   ipcMain.handle(IPC_CHANNELS.mailDisconnect, async (event) => {
     requireTrustedSender(event);
+    const account = campusMail().snapshot().email;
     await campusMail().disconnect();
+    if (account) localStore().clearMailCandidateDecisions(account);
     return { disconnected: true as const };
   });
   ipcMain.handle(IPC_CHANNELS.mailPrepareSend, async (event, input: unknown) => {

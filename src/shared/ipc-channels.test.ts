@@ -37,11 +37,13 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
         "focus:finish",
         "focus:list",
         "focus:summary",
+        "mail:candidates",
         "mail:confirm-send",
         "mail:connect",
         "mail:disconnect",
         "mail:list",
         "mail:prepare-send",
+        "mail:review-candidate",
         "mail:status",
         "mail:sync-now",
         "mail:sync-updated",
@@ -56,7 +58,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
   it("preserves all mail and cloud handlers without overlap", () => {
     const all = Object.values(IPC_CHANNELS);
     expect(new Set(all).size).toBe(all.length);
-    expect(all.filter((name) => name.startsWith("mail:"))).toHaveLength(8);
+    expect(all.filter((name) => name.startsWith("mail:"))).toHaveLength(10);
     expect(all.filter((name) => name.startsWith("cloud:"))).toHaveLength(15);
   });
 

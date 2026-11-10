@@ -10,6 +10,7 @@ import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPers
 import type {
   CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
 } from "../../shared/mail-model";
+import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } from "../../shared/mail-candidates";
 
 import type {
   CloudCredentials, CloudProjectConfig, CloudSessionStatus,
@@ -32,6 +33,8 @@ declare global {
         status: () => Promise<MailSyncState>;
         connect: (input: CampusMailConnectInput) => Promise<MailSyncState>;
         list: () => Promise<MailRecord[]>;
+        candidates: () => Promise<MailCandidate[]>;
+        reviewCandidate: (choice: MailCandidateChoice) => Promise<MailCandidateChoiceResult>;
         syncNow: () => Promise<MailSyncState>;
         disconnect: () => Promise<{disconnected:true}>;
         prepareSend: (draft: MailDraft) => Promise<MailSendPreview>;
