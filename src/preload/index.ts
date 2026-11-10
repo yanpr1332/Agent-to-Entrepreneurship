@@ -23,6 +23,10 @@ import type {
 } from "../shared/knowledge-model";
 
 import type {
+  KnowledgeGraphSnapshot, GraphNode, GraphEdge, GraphNodeInput, GraphNodeEdit, GraphEdgeInput,
+} from "../shared/knowledge-graph-model";
+
+import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
 } from "../shared/planning-model";
 
@@ -141,6 +145,17 @@ const desktopApi = Object.freeze({
     undo: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.planningUndo,id) as Promise<boolean>,
   }),
   knowledge: Object.freeze({
+    graph: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeGraph) as Promise<KnowledgeGraphSnapshot>,
+    createNode: (input:GraphNodeInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeGraphCreateNode,input) as Promise<GraphNode>,
+    editNode: (input:GraphNodeEdit) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeGraphEditNode,input) as Promise<GraphNode>,
+    deleteNode: (id:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeGraphDeleteNode,id) as Promise<boolean>,
+    createEdge: (input:GraphEdgeInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeGraphCreateEdge,input) as Promise<GraphEdge>,
+    deleteEdge: (id:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeGraphDeleteEdge,id) as Promise<boolean>,
     documents: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeDocuments) as Promise<KnowledgeDocument[]>,
     get: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeGet,id) as Promise<KnowledgeSnapshot>,
     passage: (id: string, ordinal: number) =>

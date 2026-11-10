@@ -2,6 +2,12 @@
 export const IPC_CHANNELS = {
   appPing: "app:ping",
   appGetVersion: "app:get-version",
+  knowledgeGraph: "knowledge:graph",
+  knowledgeGraphCreateNode: "knowledge:graph-create-node",
+  knowledgeGraphEditNode: "knowledge:graph-edit-node",
+  knowledgeGraphDeleteNode: "knowledge:graph-delete-node",
+  knowledgeGraphCreateEdge: "knowledge:graph-create-edge",
+  knowledgeGraphDeleteEdge: "knowledge:graph-delete-edge",
   knowledgeDocuments: "knowledge:documents",
   knowledgeGet: "knowledge:get",
   knowledgePassage: "knowledge:passage",
