@@ -7,7 +7,7 @@ export interface GraphNode {
   id:string;
   documentId:string;
   documentTitle:string;
-  documentRevision:number;
+  sourceRevision:number;
   sourceOrdinal:number;
   sourcePage:number|null;
   sourceHash:string;
@@ -31,6 +31,7 @@ export interface KnowledgeGraphSnapshot { nodes:GraphNode[]; edges:GraphEdge[]; 
 export interface GraphNodeInput {
   documentId:string; sourceOrdinal:number; title:string; note:string;
 }
+export interface GraphNodeEdit {id:string;title:string;note:string;}
 export interface GraphEdgeInput {
   sourceId:string; targetId:string; relation:KnowledgeRelation; note:string;
 }
@@ -62,5 +63,11 @@ export function parseGraphEdge(value:unknown):GraphEdgeInput{
   if(r.relation!=="related"&&r.relation!=="supports"&&r.relation!=="contrasts")
     throw Error("Unsupported relation");
   return {sourceId,targetId,relation:r.relation as KnowledgeRelation,
+    note:cleanText(r.note,600,false)};
+}
+
+export function parseGraphNodeEdit(value:unknown):GraphNodeEdit{
+  const r=exact(value,["id","title","note"]);
+  return {id:requireKnowledgeId(r.id),title:cleanText(r.title,120,true),
     note:cleanText(r.note,600,false)};
 }
