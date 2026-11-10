@@ -1,6 +1,7 @@
 /** TZID conversion uses the host's IANA data, never executes calendar-provided VTIMEZONE code. */
 function zonedParts(formatter:Intl.DateTimeFormat,date:Date):number[]{
-  const map=new Map(formatter.formatToParts(date).map(p=>[p.type,p.value]));
+  const map=new Map<string,string>();
+  for(const part of formatter.formatToParts(date))map.set(part.type,part.value);
   return ["year","month","day","hour","minute","second"].map(name=>Number(map.get(name)));
 }
 export function resolveIanaTime(
@@ -15,8 +16,8 @@ export function resolveIanaTime(
       day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",
     });
   }catch{throw Error("Unsupported IANA ICS TZID");}
-  const wall=[year,month,day,hour,minute,second],base=Date.UTC(...[
-    year,month-1,day,hour,minute,second] as [number,number,number,number,number,number]);
+  const wall=[year,month,day,hour,minute,second];
+  const base=Date.UTC(year,month-1,day,hour,minute,second);
   const offsets=new Set<number>();
   for(const shift of [-36,-24,-12,0,12,24,36]){
     const sample=new Date(base+shift*3_600_000);
