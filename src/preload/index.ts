@@ -26,6 +26,7 @@ import type {
   KnowledgeGraphSnapshot, GraphNode, GraphEdge, GraphNodeInput, GraphNodeEdit, GraphEdgeInput,
 } from "../shared/knowledge-graph-model";
 
+import type { FixedEvent,CreateFixedEventInput,ICSPreview,ICSImportResult,ICSExportResult } from "../shared/fixed-calendar-model";
 import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
 } from "../shared/planning-model";
@@ -133,6 +134,16 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.aiPlanPrepare,selection) as Promise<AIPreview>,
     planConfirm: (approvalId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.aiPlanConfirm,approvalId) as Promise<AIPlanAccepted>,
+  }),
+  calendar: Object.freeze({
+    list:()=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarList) as Promise<FixedEvent[]>,
+    create:(input:CreateFixedEventInput)=>
+      ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarCreate,input) as Promise<FixedEvent[]>,
+    remove:(id:string)=>
+      ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarDelete,id) as Promise<boolean>,
+    previewICS:()=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarPreviewICS) as Promise<ICSPreview|null>,
+    confirmICS:(id:string)=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarConfirmICS,id) as Promise<ICSImportResult>,
+    exportICS:()=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarExportICS) as Promise<ICSExportResult>,
   }),
   planning: Object.freeze({
     generate: (settings: PlanningSettings) =>
