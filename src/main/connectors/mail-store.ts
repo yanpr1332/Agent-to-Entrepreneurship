@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, backup } from "node:sqlite";
 import type { MailEnvelope, MailRecord } from "../../shared/mail-model";
 
 /**
@@ -103,4 +103,5 @@ export class CampusMailStore {
   }
 
   close(): void { this.db.close(); }
+  async backupTo(path:string):Promise<number>{return backup(this.db,path);}
 }
