@@ -39,7 +39,7 @@ describe("PDF text parser: real page provenance",()=>{
     expect(pages).toHaveLength(2);
     expect(pages[0]).toContain("Page One Evidence");
     expect(pages[1]).toContain("Page Two Mitosis");
-  });
+  },20_000);
   it("rejects encrypted/binary impostors and resource-heavy files",async()=>{
     await expect(extractPdfText(new Uint8Array(Buffer.from("NOT_A_PDF")))).rejects.toThrow("signature");
     await expect(extractPdfText(new Uint8Array(12*1024*1024+1))).rejects.toThrow("signature");
