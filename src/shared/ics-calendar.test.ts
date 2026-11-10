@@ -49,6 +49,6 @@ describe("strict opt-in local ICS support",()=>{
   it("refuses invalid civil dates, DST impossible local times and oversized files",()=>{
     expect(()=>parseICS(wrap(evt("1",":20260230T090000",":20260230T100000")))).toThrow();
     expect(()=>parseICS("A".repeat(512*1024+1))).toThrow("512 KiB");
-    expect(()=>parseICS(wrap(sameDay.replace("SUMMARY:Course","SUMMARY:\\x00Course")))).toThrow();
+    expect(()=>parseICS(wrap(sameDay.replace("SUMMARY:Course","SUMMARY:\x00Course")))).toThrow();
   });
 });
