@@ -77,8 +77,17 @@ function makeSlot(uid:string,title:string,sk:string,sv:string,ek:string,ev:strin
       throw Error("Only same-day timed ICS events are supported");
     duration=endsMidnight?1440-a.minute:b.minute-a.minute;
   }
-  if(a.instant!==null&&b.instant!==null && (b.instant-a.instant)!==duration*60_000)
-    throw Error("ICS event crosses a daylight saving transition and cannot fit a civil time slot");
+  if(a.instant!==null&&b.instant!==null){
+    const elapsed=b.instant-a.instant;
+    // A source TZID clock can spring forward even when the target machine is UTC.
+    const sourceWallMinutes=Math.round((Date.parse(rawDay(ev)+"T00:00:00Z")-
+      Date.parse(rawDay(sv)+"T00:00:00Z"))/60_000)+
+      (Number(ev.slice(9,11))*60+Number(ev.slice(11,13)))-
+      (Number(sv.slice(9,11))*60+Number(sv.slice(11,13)));
+    if(elapsed!==duration*60_000 ||
+       (/;TZID=/i.test(sk)&&elapsed!==sourceWallMinutes*60_000))
+      throw Error("ICS event crosses a daylight saving transition and cannot fit a civil time slot");
+  }
   const slot=validateFixedSlot(a.day,a.minute,duration);
   return {...slot,title,sourceUid:uid};
 }
