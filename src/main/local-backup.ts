@@ -22,7 +22,7 @@ function assertSqliteBackup(path:string):void{
  * itself; that can omit changes in its -wal file.
  */
 export async function createLocalBackup(
-  userData:string, sources:ReadonlyArray<{name:"tasks"|"mail"|"knowledge"|"planning";store:SnapshotSource}>,
+  userData:string, sources:ReadonlyArray<{name:"tasks"|"mail"|"knowledge"|"planning"|"calendar";store:SnapshotSource}>,
 ):Promise<BackupResult>{
   const createdAt=new Date().toISOString();
   const folder=join(userData,"backups",createdAt.replace(/[:.]/g,"-")+"-"+randomUUID());

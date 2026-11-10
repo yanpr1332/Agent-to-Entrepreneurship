@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { DatabaseSync, backup } from "node:sqlite";
 import type { LocalTask } from "../shared/local-model";
 import type { AIPlanSlot } from "../shared/ai-plan-model";
+import {timesOverlap,type BusySlot} from "../shared/fixed-calendar-model";
 import {
   dayOffset, eligiblePlanningTasks, parsePlanApply, parsePlanningSettings, parseMinute,
   validCivilDay,
@@ -33,7 +34,7 @@ function overlaps(a:{day:string;startMinute:number;durationMinutes:number},
 /** Distinct local SQLite authority for candidate schedule, not task mutation. */
 export class PlanningStore {
   private readonly db:DatabaseSync;
-  constructor(path:string){
+  constructor(path:string,private readonly fixedBusy:()=>BusySlot[]=()=>[]){
     if(path!==":memory:")mkdirSync(dirname(path),{recursive:true});
     this.db=new DatabaseSync(path);
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=3000");
@@ -98,6 +99,7 @@ export class PlanningStore {
     if(settings.startDate<today)throw Error("The planning window must not begin in the past");
     const start=parseMinute(settings.dailyStart),end=parseMinute(settings.dailyEnd);
     const committed=this.listCommitted();
+    const fixed=this.fixedBusy();
     const planned:PlanBlock[]=[];
     const skipped:PlanProposal["skipped"]=[];
     const candidates=eligiblePlanningTasks(tasks).slice(0,MAX_TASKS);
@@ -113,7 +115,8 @@ export class PlanningStore {
         if(task.dueDate && day>task.dueDate && task.dueDate>=settings.startDate)continue;
         for(let minute=start;minute+settings.minutesPerTask<=end;minute+=15){
           const test={day,startMinute:minute,durationMinutes:settings.minutesPerTask};
-          if([...planned,...committed].some(other=>overlaps(test,other)))continue;
+          if([...planned,...committed].some(other=>overlaps(test,other)) ||
+            fixed.some(other=>timesOverlap(test,other)))continue;
           chosen={day,startMinute:minute};
           break;
         }
@@ -153,6 +156,7 @@ export class PlanningStore {
     const taskMap=new Map(selectedTasks.filter(t=>t.visible&&!t.completed).map(t=>[t.id,t]));
     const known=new Set<string>();
     const already=this.listCommitted();
+    const fixed=this.fixedBusy();
     const planned:PlanBlock[]=[];
     const lastDay=dayOffset(settings.startDate,settings.days-1);
     const start=parseMinute(settings.dailyStart),end=parseMinute(settings.dailyEnd);
@@ -168,8 +172,9 @@ export class PlanningStore {
       if(already.some(block=>block.taskId===task.id))
         throw Error("AI tried to schedule a task that was already planned");
       const proposed={day:item.day,startMinute:item.startMinute,durationMinutes:settings.minutesPerTask};
-      if([...already,...planned].some(block=>overlaps(proposed,block)))
-        throw Error("AI suggested overlapping schedule blocks");
+      if([...already,...planned].some(block=>overlaps(proposed,block)) ||
+         fixed.some(block=>timesOverlap(proposed,block)))
+        throw Error("AI suggested overlapping schedule blocks or fixed classes");
       known.add(task.id);
       planned.push({
         id:randomUUID(),taskId:task.id,taskTitle:task.title,
@@ -234,6 +239,7 @@ export class PlanningStore {
       return b;
     });
     const existing=this.listCommitted();
+    const fixed=this.fixedBusy();
     const taskMap=new Map(tasks.map(t=>[t.id,t]));
     for(const b of chosen){
       const current=taskMap.get(b.taskId);
@@ -242,8 +248,9 @@ export class PlanningStore {
         throw Error("A task changed since preview; regenerate the plan before applying");
       if(existing.some(x=>x.taskId===b.taskId))
         throw Error("A task has already been scheduled");
-      if([...existing,...chosen.filter(x=>x.id!==b.id)].some(x=>overlaps(x,b)))
-        throw Error("Proposed blocks overlap an existing or selected time block");
+      if([...existing,...chosen.filter(x=>x.id!==b.id)].some(x=>overlaps(x,b)) ||
+         fixed.some(x=>timesOverlap(x,b)))
+        throw Error("Proposed blocks overlap an existing, selected or fixed time block");
     }
     const batchId=randomUUID(),appliedAt=now.toISOString();
     this.db.exec("BEGIN IMMEDIATE");

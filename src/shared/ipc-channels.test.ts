@@ -15,6 +15,13 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "app:get-version",
       "app:ping",
       "backup:create",
+      "calendar:fixed-create",
+      "calendar:fixed-delete",
+      "calendar:fixed-list",
+      "calendar:ics-cancel",
+      "calendar:ics-confirm",
+      "calendar:ics-export",
+      "calendar:ics-preview",
       "canvas:assignments",
       "canvas:connect",
       "canvas:course-settings",
@@ -87,6 +94,9 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
     ].sort());
   });
 
+  it("limits local calendar access to six approved methods",()=>{
+    expect(Object.values(IPC_CHANNELS).filter(x=>x.startsWith("calendar:"))).toHaveLength(7);
+  });
   it("preserves all mail and cloud handlers without overlap", () => {
     const all = Object.values(IPC_CHANNELS);
     expect(new Set(all).size).toBe(all.length);

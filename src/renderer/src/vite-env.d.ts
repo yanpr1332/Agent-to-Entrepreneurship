@@ -26,6 +26,7 @@ import type {
   KnowledgeGraphSnapshot, GraphNode, GraphEdge, GraphNodeInput, GraphNodeEdit, GraphEdgeInput,
 } from "../../shared/knowledge-graph-model";
 
+import type { FixedEvent,CreateFixedEventInput,ICSPreview,ICSImportResult,ICSExportResult } from "../../shared/fixed-calendar-model";
 import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
 } from "../../shared/planning-model";
@@ -101,6 +102,15 @@ declare global {
         cancel: () => Promise<AIStatus>;
         planPrepare: (selection: AIPlanPrepareInput) => Promise<AIPreview>;
         planConfirm: (approvalId: string) => Promise<AIPlanAccepted>;
+      };
+      calendar: {
+        list:()=>Promise<FixedEvent[]>;
+        create:(input:CreateFixedEventInput)=>Promise<FixedEvent[]>;
+        remove:(id:string)=>Promise<boolean>;
+        previewICS:()=>Promise<ICSPreview|null>;
+        confirmICS:(id:string)=>Promise<ICSImportResult>;
+        cancelICS:(id:string)=>Promise<{canceled:true}>;
+        exportICS:()=>Promise<ICSExportResult>;
       };
       planning: {
         generate: (settings: PlanningSettings) => Promise<PlanProposal>;
