@@ -8,6 +8,8 @@ import {
   type KnowledgeDocument, type KnowledgeSnapshot, type KnowledgeSearchHit,
   type KnowledgeReviewCard, type ReviewProgress, type ReviewRating, type KnowledgePassage,
 } from "../shared/knowledge-model";
+import {parseGraphNode,parseGraphNodeEdit,parseGraphEdge,
+  type KnowledgeGraphSnapshot,type GraphNode,type GraphEdge} from "../shared/knowledge-graph-model";
 
 const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 const CHUNK_LENGTH = 1100;
@@ -67,7 +69,7 @@ export class KnowledgeStore {
   }
   private migrate():void{
     const version=(this.db.prepare("PRAGMA user_version").get() as {user_version:number}).user_version;
-    if(version>2)throw new Error("Knowledge database is from a newer application");
+    if(version>3)throw new Error("Knowledge database is from a newer application");
     if(version===0){this.db.exec("BEGIN IMMEDIATE");
     try{
       this.db.exec(`
@@ -145,6 +147,43 @@ export class KnowledgeStore {
         this.db.exec("COMMIT");
       }catch(error){this.db.exec("ROLLBACK");throw error;}
     }
+    if(version<=2){
+      this.db.exec("BEGIN IMMEDIATE");
+      try{
+        this.db.exec(`
+          CREATE TABLE knowledge_graph_nodes(
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+            source_ordinal INTEGER NOT NULL,
+            source_revision INTEGER NOT NULL,
+            source_page INTEGER,
+            source_hash TEXT NOT NULL,
+            evidence TEXT NOT NULL,
+            title TEXT NOT NULL,
+            note TEXT NOT NULL,
+            needs_review INTEGER NOT NULL DEFAULT 0 CHECK(needs_review IN (0,1)),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            UNIQUE(document_id,source_ordinal,title)
+          );
+          CREATE INDEX knowledge_graph_nodes_doc ON knowledge_graph_nodes(document_id);
+          CREATE TABLE knowledge_graph_edges(
+            id TEXT PRIMARY KEY,
+            source_id TEXT NOT NULL REFERENCES knowledge_graph_nodes(id) ON DELETE CASCADE,
+            target_id TEXT NOT NULL REFERENCES knowledge_graph_nodes(id) ON DELETE CASCADE,
+            relation TEXT NOT NULL CHECK(relation IN ('related','supports','contrasts')),
+            note TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('pending','confirmed')),
+            created_at TEXT NOT NULL,
+            CHECK(source_id<>target_id),
+            UNIQUE(source_id,target_id,relation)
+          );
+          CREATE INDEX knowledge_graph_edges_target ON knowledge_graph_edges(target_id);
+          PRAGMA user_version=3;
+        `);
+        this.db.exec("COMMIT");
+      }catch(error){this.db.exec("ROLLBACK");throw error;}
+    }
   }
 
   close():void{this.db.close();}
@@ -215,6 +254,7 @@ export class KnowledgeStore {
           content_hash=?,byte_length=?,chunk_count=?,revision=revision+1,updated_at=?
           WHERE id=?`).run(source.title,source.format,text,hash,length,parts.length,stamp,id);
         this.db.prepare("UPDATE knowledge_cards SET needs_review=1 WHERE document_id=?").run(id);
+        this.db.prepare("UPDATE knowledge_graph_nodes SET needs_review=1 WHERE document_id=?").run(id);
         this.db.prepare("DELETE FROM knowledge_chunk_pages WHERE document_id=?").run(id);
         this.db.prepare("DELETE FROM knowledge_pdf_sources WHERE document_id=?").run(id);
         this.db.prepare("DELETE FROM knowledge_chunks WHERE document_id=?").run(id);
@@ -270,6 +310,7 @@ export class KnowledgeStore {
           content_hash=?,byte_length=?,chunk_count=?,revision=revision+1,updated_at=?
           WHERE id=?`).run(source.title,text,source.fileHash,source.byteLength,indexed.length,stamp,id);
         this.db.prepare("UPDATE knowledge_cards SET needs_review=1 WHERE document_id=?").run(id);
+        this.db.prepare("UPDATE knowledge_graph_nodes SET needs_review=1 WHERE document_id=?").run(id);
         this.db.prepare("DELETE FROM knowledge_chunk_pages WHERE document_id=?").run(id);
         this.db.prepare("DELETE FROM knowledge_chunks WHERE document_id=?").run(id);
       }else{
@@ -332,6 +373,92 @@ export class KnowledgeStore {
         excerpt:row.body.slice(start,start+500),
       };
     });
+  }
+
+  /** All graph records are local. Evidence is copied from the current trusted FTS passage. */
+  graph():KnowledgeGraphSnapshot{
+    const nodes=(this.db.prepare(`SELECT n.*,d.title AS document_title
+      FROM knowledge_graph_nodes n JOIN knowledge_documents d ON d.id=n.document_id
+      ORDER BY n.created_at,n.id`).all() as unknown as Array<{
+        id:string;document_id:string;document_title:string;source_ordinal:number;
+        source_revision:number;source_page:number|null;source_hash:string;
+        evidence:string;title:string;note:string;needs_review:number;
+        created_at:string;updated_at:string;
+      }>).map(n=>({
+        id:n.id,documentId:n.document_id,documentTitle:n.document_title,
+        sourceOrdinal:n.source_ordinal,sourceRevision:n.source_revision,
+        sourcePage:n.source_page??null,sourceHash:n.source_hash,
+        evidence:n.evidence,title:n.title,note:n.note,needsReview:n.needs_review===1,
+        createdAt:n.created_at,updatedAt:n.updated_at,
+      } satisfies GraphNode));
+    const edges=(this.db.prepare(`SELECT * FROM knowledge_graph_edges ORDER BY created_at,id`)
+      .all() as unknown as Array<{
+        id:string;source_id:string;target_id:string;relation:GraphEdge["relation"];
+        note:string;status:GraphEdge["status"];created_at:string;
+      }>).map(e=>({
+        id:e.id,sourceId:e.source_id,targetId:e.target_id,
+        relation:e.relation,note:e.note,status:e.status,createdAt:e.created_at,
+      } satisfies GraphEdge));
+    return {nodes,edges};
+  }
+  createGraphNode(raw:unknown,now=new Date()):GraphNode{
+    const input=parseGraphNode(raw);
+    const source=this.getDocument(input.documentId);
+    const passage=this.getPassage(input.documentId,input.sourceOrdinal);
+    const existing=this.db.prepare(`SELECT id FROM knowledge_graph_nodes
+      WHERE document_id=? AND source_ordinal=? AND title=?`)
+      .get(source.id,input.sourceOrdinal,input.title) as {id:string}|undefined;
+    if(existing){
+      const node=this.graph().nodes.find(n=>n.id===existing.id);
+      if(!node)throw Error("Graph node was not found");
+      return node;
+    }
+    const count=this.db.prepare("SELECT count(*) AS n FROM knowledge_graph_nodes").get() as {n:number};
+    if(count.n>=200)throw Error("Graph node limit (200) reached");
+    const id=randomUUID(),stamp=now.toISOString();
+    this.db.prepare(`INSERT INTO knowledge_graph_nodes(
+      id,document_id,source_ordinal,source_revision,source_page,source_hash,
+      evidence,title,note,needs_review,created_at,updated_at
+    ) VALUES(?,?,?,?,?,?,?,?,?,0,?,?)`).run(
+      id,source.id,input.sourceOrdinal,source.revision,passage.pageNumber,
+      source.contentHash,passage.body.slice(0,600),input.title,input.note,stamp,stamp);
+    return this.graph().nodes.find(n=>n.id===id)!;
+  }
+  editGraphNode(raw:unknown,now=new Date()):GraphNode{
+    const input=parseGraphNodeEdit(raw);
+    const changed=this.db.prepare(`UPDATE knowledge_graph_nodes SET title=?,note=?,updated_at=?
+      WHERE id=?`).run(input.title,input.note,now.toISOString(),input.id);
+    if(Number(changed.changes)!==1)throw Error("Graph node was not found");
+    return this.graph().nodes.find(n=>n.id===input.id)!;
+  }
+  deleteGraphNode(id:unknown):boolean{
+    return Number(this.db.prepare("DELETE FROM knowledge_graph_nodes WHERE id=?")
+      .run(requireKnowledgeId(id)).changes)===1;
+  }
+  createGraphEdge(raw:unknown,now=new Date()):GraphEdge{
+    const input=parseGraphEdge(raw);
+    const allowed=this.db.prepare(`SELECT id,needs_review FROM knowledge_graph_nodes
+      WHERE id IN (?,?)`).all(input.sourceId,input.targetId) as
+      unknown as Array<{id:string;needs_review:number}>;
+    if(allowed.length!==2)throw Error("Graph relation requires two existing nodes");
+    if(allowed.some(n=>n.needs_review===1))
+      throw Error("Review stale source nodes before creating new relations");
+    const existing=this.db.prepare(`SELECT id FROM knowledge_graph_edges
+      WHERE source_id=? AND target_id=? AND relation=?`)
+      .get(input.sourceId,input.targetId,input.relation) as {id:string}|undefined;
+    if(existing)return this.graph().edges.find(e=>e.id===existing.id)!;
+    const count=this.db.prepare("SELECT count(*) AS n FROM knowledge_graph_edges").get() as {n:number};
+    if(count.n>=400)throw Error("Graph relation limit (400) reached");
+    const id=randomUUID();
+    this.db.prepare(`INSERT INTO knowledge_graph_edges(
+      id,source_id,target_id,relation,note,status,created_at
+    ) VALUES(?,?,?,?,?,'confirmed',?)`)
+      .run(id,input.sourceId,input.targetId,input.relation,input.note,now.toISOString());
+    return this.graph().edges.find(e=>e.id===id)!;
+  }
+  deleteGraphEdge(id:unknown):boolean{
+    return Number(this.db.prepare("DELETE FROM knowledge_graph_edges WHERE id=?")
+      .run(requireKnowledgeId(id)).changes)===1;
   }
 
   private readonly cardSelect=`SELECT c.*,d.title FROM knowledge_cards c
