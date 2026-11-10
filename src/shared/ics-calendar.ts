@@ -1,5 +1,6 @@
 import {dayOffset,validCivilDay} from "./planning-model";
-import {validateFixedTitle,validateFixedSlot,type FixedEvent,type FixedEventDraft,type BusySlot} from "./fixed-calendar-model";
+import {resolveIanaTime} from "./ics-timezone";
+import {validateFixedTitle,validateFixedSlot,type FixedEvent,type FixedEventDraft} from "./fixed-calendar-model";
 
 const MAX_ICS_BYTES=512*1024;
 const MAX_ICS_EVENTS=250;
@@ -17,7 +18,7 @@ function localStamp(date:Date):{day:string;minute:number}{
 }
 function parseStamp(raw:string,property:string):{day:string;minute:number;allDay:boolean}{
   const key=property.toUpperCase();
-  if(key.includes("TZID="))throw Error("ICS TZID time zones are not supported yet; please export UTC or floating time");
+  const zone=/;TZID=([^;]+)$/i.exec(property)?.[1];
   const dateOnly=key==="DTSTART;VALUE=DATE"||key==="DTEND;VALUE=DATE";
   if(dateOnly){
     if(!/^\d{8}$/.test(raw))throw Error("Invalid all-day ICS date");
@@ -25,13 +26,18 @@ function parseStamp(raw:string,property:string):{day:string;minute:number;allDay
     if(!validCivilDay(day))throw Error("Invalid all-day ICS date");
     return {day,minute:0,allDay:true};
   }
-  if(key!=="DTSTART"&&key!=="DTEND")throw Error("Unsupported ICS date parameters");
+  if(!/^(?:DTSTART|DTEND)(?:;TZID=[A-Za-z0-9_+./-]+)?$/i.test(property))
+    throw Error("Unsupported ICS date parameters");
   const match=/^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)(Z?)$/.exec(raw);
   if(!match)throw Error("Unsupported ICS datetime format");
   const [,yyyy,mm,dd,hh,mi,ss,z]=match;
   const day=yyyy+"-"+mm+"-"+dd;
-  if(!validCivilDay(day)||Number(hh)>23||Number(mi)>59||Number(ss)>59)
+  if(!validCivilDay(day)||Number(hh)>23||Number(mi)>59||Number(ss)!==0)
     throw Error("Invalid ICS date/time");
+  if(zone){
+    if(z)throw Error("ICS TZID must not include a UTC suffix");
+    return {...localStamp(resolveIanaTime(Number(yyyy),Number(mm),Number(dd),Number(hh),Number(mi),0,zone)),allDay:false};
+  }
   if(z){
     const date=new Date(Date.UTC(Number(yyyy),Number(mm)-1,Number(dd),
       Number(hh),Number(mi),Number(ss)));
@@ -50,18 +56,14 @@ function getField(fields:Map<string,string>,base:string):[string,string]{
   if(matches.length!==1)throw Error("ICS event needs exactly one "+base);
   return matches[0];
 }
-function parseEvent(fields:Map<string,string>):FixedEventDraft{
-  for(const key of fields.keys()){
-    const name=key.split(";")[0];
-    if(["RRULE","RDATE","EXDATE","RECURRENCE-ID","DURATION"].includes(name))
-      throw Error("Recurring ICS rules are not supported in this import. Export expanded occurrences");
-  }
-  const uid=getField(fields,"UID")[1];
-  if(!uid||uid.length>180||/[^\x21-\x7e]/.test(uid))throw Error("Invalid ICS UID");
-  const title=validateFixedTitle(decodeText(getField(fields,"SUMMARY")[1]));
-  const [sk,sv]=getField(fields,"DTSTART"),[ek,ev]=getField(fields,"DTEND");
+function makeSlot(uid:string,title:string,sk:string,sv:string,ek:string,ev:string):FixedEventDraft{
   const a=parseStamp(sv,sk),b=parseStamp(ev,ek);
   if(a.allDay!==b.allDay)throw Error("ICS event must use matching DATE/DATE-TIME types");
+  const startKind=a.allDay?"date":/;TZID=/i.test(sk)?"zone:"+sk.split("=").at(-1):
+    sv.endsWith("Z")?"utc":"floating";
+  const endKind=b.allDay?"date":/;TZID=/i.test(ek)?"zone:"+ek.split("=").at(-1):
+    ev.endsWith("Z")?"utc":"floating";
+  if(startKind!==endKind)throw Error("ICS DTSTART and DTEND must use the same time basis");
   let duration:number;
   if(a.allDay){
     if(b.day!==dayOffset(a.day,1))throw Error("Only one-day all-day ICS events are supported");
@@ -75,7 +77,68 @@ function parseEvent(fields:Map<string,string>):FixedEventDraft{
   const slot=validateFixedSlot(a.day,a.minute,duration);
   return {...slot,title,sourceUid:uid};
 }
-/** All-or-nothing preview. Explicitly reject unsupported recurrence, TZIDs, duplicates or partial data. */
+const weekdays:Record<string,number>={SU:0,MO:1,TU:2,WE:3,TH:4,FR:5,SA:6};
+function shiftRawDate(raw:string,day:string):string{
+  if(/^\d{8}$/.test(raw))return day.replace(/-/g,"");
+  return day.replace(/-/g,"")+raw.slice(8);
+}
+function rawDay(raw:string):string{
+  const day=raw.slice(0,4)+"-"+raw.slice(4,6)+"-"+raw.slice(6,8);
+  if(!validCivilDay(day))throw Error("Invalid ICS recurrence start day");
+  return day;
+}
+function parseEvent(fields:Map<string,string>):FixedEventDraft[]{
+  for(const key of fields.keys()){
+    const name=key.split(";")[0];
+    if(["RDATE","EXDATE","RECURRENCE-ID","DURATION"].includes(name))
+      throw Error("Unsupported ICS recurrence exception or duration");
+  }
+  const uid=getField(fields,"UID")[1];
+  if(!uid||uid.length>180||/[^\x21-\x7e]/.test(uid))throw Error("Invalid ICS UID");
+  const title=validateFixedTitle(decodeText(getField(fields,"SUMMARY")[1]));
+  const [sk,sv]=getField(fields,"DTSTART"),[ek,ev]=getField(fields,"DTEND");
+  const first=makeSlot(uid,title,sk,sv,ek,ev);
+  const recurrence=fields.get("RRULE");
+  if(!recurrence)return [first];
+  // Explicit, finite weekly recurrence only. Anything else fails the whole import.
+  if(uid.length>168)throw Error("Recurring ICS UID is too long");
+  const fieldsRule=recurrence.toUpperCase().split(";");
+  const rule=new Map<string,string>();
+  for(const part of fieldsRule){
+    const kv=/^([A-Z]+)=([A-Z0-9,]+)$/.exec(part);
+    if(!kv||rule.has(kv[1]))throw Error("Unsupported ICS recurrence rule");
+    rule.set(kv[1],kv[2]);
+  }
+  if([...rule.keys()].some(key=>!["FREQ","COUNT","INTERVAL","BYDAY"].includes(key))||
+    rule.get("FREQ")!=="WEEKLY")throw Error("Unsupported ICS recurrence rule");
+  const count=Number(rule.get("COUNT")),interval=Number(rule.get("INTERVAL")??"1");
+  if(!Number.isSafeInteger(count)||count<1||count>250||
+    !Number.isSafeInteger(interval)||interval<1||interval>8)
+    throw Error("ICS weekly recurrence requires COUNT (1–250), interval 1–8");
+  const initial=rawDay(sv),endOrigin=rawDay(ev);
+  const originalWeekday=new Date(initial+"T00:00:00Z").getUTCDay();
+  const days=(rule.get("BYDAY")??Object.keys(weekdays).find(x=>weekdays[x]===originalWeekday)!).
+    split(",");
+  if(new Set(days).size!==days.length||days.some(d=>!(d in weekdays))||
+    !days.some(d=>weekdays[d]===originalWeekday))throw Error("Invalid ICS BYDAY for DTSTART");
+  const eventDays=new Set(days.map(d=>weekdays[d]));
+  const rawEndOffset=Math.round((Date.parse(endOrigin+"T00:00:00Z")-
+    Date.parse(initial+"T00:00:00Z"))/86400000);
+  const output:FixedEventDraft[]=[];
+  for(let delta=0;delta<=730&&output.length<count;delta++){
+    const date=dayOffset(initial,delta),weekday=new Date(date+"T00:00:00Z").getUTCDay();
+    if(Math.floor(delta/7)%interval!==0||!eventDays.has(weekday))continue;
+    const futureEnd=dayOffset(date,rawEndOffset);
+    const sourceUid=uid+"#"+date.replace(/-/g,"");
+    const next=makeSlot(sourceUid,title,sk,shiftRawDate(sv,date),
+      ek,shiftRawDate(ev,futureEnd));
+    output.push({...next,seriesKey:uid});
+  }
+  if(output.length!==count)throw Error("ICS recurring series exceeds a two-year import window");
+  return output;
+}
+
+/** All-or-nothing preview. Only finite weekly COUNT recurrence and IANA zones are supported. */
 export function parseICS(text:string):FixedEventDraft[]{
   if(typeof text!=="string"||new TextEncoder().encode(text).byteLength>MAX_ICS_BYTES||
      /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text))
@@ -108,7 +171,7 @@ export function parseICS(text:string):FixedEventDraft[]{
     }
     if(line==="END:VEVENT"){
       if(!fields)throw Error("Unexpected ICS end event");
-      result.push(parseEvent(fields));
+      result.push(...parseEvent(fields));
       if(result.length>MAX_ICS_EVENTS)throw Error("Too many ICS events (maximum 250)");
       fields=null;continue;
     }
@@ -121,7 +184,7 @@ export function parseICS(text:string):FixedEventDraft[]{
     const sep=line.indexOf(":");
     if(sep<1)throw Error("Malformed ICS property");
     if(fields){
-      const key=line.slice(0,sep).toUpperCase(),value=line.slice(sep+1);
+      const key=line.slice(0,sep).replace(/^[^;]+/,name=>name.toUpperCase()),value=line.slice(sep+1);
       if(fields.has(key))throw Error("Duplicate ICS property "+key);
       fields.set(key,value);
     }
