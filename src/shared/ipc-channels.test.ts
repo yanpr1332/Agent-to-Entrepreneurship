@@ -4,6 +4,12 @@ import { IPC_CHANNELS } from "./ipc-channels";
 describe("IPC allowlist integration: mail and shared cloud", () => {
   it("exposes the exact reviewed channel list from both merged features", () => {
     expect(Object.values(IPC_CHANNELS).sort()).toEqual([
+      "ai:cancel",
+      "ai:confirm",
+      "ai:connect",
+      "ai:disconnect",
+      "ai:prepare",
+      "ai:status",
       "app:get-version",
       "app:ping",
       "backup:create",
@@ -77,6 +83,12 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
     expect(new Set(all).size).toBe(all.length);
     expect(all.filter((name) => name.startsWith("mail:"))).toHaveLength(10);
     expect(all.filter((name) => name.startsWith("cloud:"))).toHaveLength(15);
+  });
+
+  it("permits only explicit AI status, configuration, approval, cancel and disconnect calls",()=>{
+    expect(Object.values(IPC_CHANNELS).filter(x=>x.startsWith("ai:"))).toEqual([
+      "ai:status","ai:connect","ai:disconnect","ai:prepare","ai:confirm","ai:cancel",
+    ]);
   });
 
   it("exposes only six explicit planning actions",()=>{

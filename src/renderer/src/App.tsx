@@ -6,9 +6,10 @@ import CloudWorkspace from "./CloudWorkspace";
 import CampusMail from "./CampusMail";
 import KnowledgeBase from "./KnowledgeBase";
 import StudyPlanner from "./StudyPlanner";
+import AIWorkspace from "./AIWorkspace";
 import { minuteString, type PlanBlock } from "../../shared/planning-model";
 
-type Page = "overview" | "calendar" | "knowledge" | "focus" | "team" | "ai" | "connectors" | "mail";
+type Page = "overview" | "calendar" | "knowledge" | "focus" | "team" | "ai" | "assistant" | "connectors" | "mail";
 type TaskFilter = "day" | "all" | "undated";
 type RuntimeStatus = "checking" | "connected" | "unavailable";
 
@@ -19,6 +20,7 @@ const menu: { page: Page; icon: string; label: string; ready: boolean }[] = [
   { page: "focus", icon: "◷", label: "专注与自律", ready: true },
   { page: "team", icon: "⌘", label: "小组协作", ready: true },
   { page: "ai", icon: "✳", label: "学习规划（离线规则）", ready: true },
+  { page: "assistant", icon: "✧", label: "AI 学习助手", ready: true },
   { page: "connectors", icon: "⇄", label: "数据接入", ready: true },
   { page: "mail", icon: "✉", label: "邮件管理", ready: true },
 ];
@@ -478,6 +480,7 @@ export default function App() {
 
           {page === "knowledge" && <KnowledgeBase />}
           {page === "ai" && <StudyPlanner onChanged={refreshPlanning} />}
+          {page === "assistant" && <AIWorkspace />}
           {page === "connectors" && <CanvasConnector onTasksChanged={refresh} />}
           {page === "team" && <CloudWorkspace />}
           {page === "mail" && <CampusMail />}

@@ -97,3 +97,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## 离线学习规划与人工应用
 
 独立 PR 实现从本机个人任务生成可编辑的时间块候选、按用户选择部分应用、检查已确认时间冲突与批次撤销，并在日历中查看。该切片明确属于离线规则规划，**不冒充已接入 AI Provider**。详见 [09_OFFLINE_PLANNING_REVIEW.md](09_OFFLINE_PLANNING_REVIEW.md)。
+
+
+## W6-12 OpenAI Provider 安全接入
+
+新增独立的 AI 学习助手：个人 Key 系统加密、单轮问题预览与两分钟一次性确认、固定 HTTPS Responses API、无自动工具/任务写入、每日请求预算与本地脱敏 token 用量。尚不把 AI 自动接入规划或知识库，也不需要开发阶段的真实 API Key。详见 [10_AI_PROVIDER_SECURITY.md](10_AI_PROVIDER_SECURITY.md)。

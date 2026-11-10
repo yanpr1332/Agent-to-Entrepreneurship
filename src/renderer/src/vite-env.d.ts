@@ -26,6 +26,10 @@ import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
 } from "../../shared/planning-model";
 
+import type {
+  AIConnectInput, AIStatus, AIPreview, AIAnswer,
+} from "../../shared/ai-model";
+
 declare global {
   interface Window {
     desktop: {
@@ -81,6 +85,14 @@ declare global {
         imported: (courseId: number) => Promise<number[]>;
         importAssignment: (courseId: number, assignmentId: number) => Promise<CanvasImportResult>;
         syncCourse: (courseId: number) => Promise<CanvasSyncResult>;
+      };
+      ai: {
+        status: () => Promise<AIStatus>;
+        connect: (settings: AIConnectInput) => Promise<AIStatus>;
+        disconnect: () => Promise<AIStatus>;
+        prepare: (prompt: string) => Promise<AIPreview>;
+        confirm: (approvalId: string) => Promise<AIAnswer>;
+        cancel: () => Promise<AIStatus>;
       };
       planning: {
         generate: (settings: PlanningSettings) => Promise<PlanProposal>;

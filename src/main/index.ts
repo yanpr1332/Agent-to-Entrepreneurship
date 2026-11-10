@@ -18,11 +18,20 @@ import { KnowledgeStore } from "./knowledge-store";
 import { PlanningStore } from "./planning-store";
 import { readSelectedKnowledgeText } from "./knowledge-import";
 import { createLocalBackup, backupBeforeMigration } from "./local-backup";
+import { AIKeyVault } from "./ai/ai-vault";
+import { AIUsageLedger } from "./ai/ai-usage";
+import { AIService } from "./ai/ai-service";
 
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
 let knowledgeStore: KnowledgeStore | null = null;
 let planningStore: PlanningStore | null = null;
+let aiService: AIService | null = null;
+let aiLedger: AIUsageLedger | null = null;
+function assistant():AIService {
+  if(!aiService)throw new Error("AI provider is not initialized");
+  return aiService;
+}
 function planner():PlanningStore{
   if(!planningStore)throw new Error("Planning database is unavailable");
   return planningStore;
@@ -137,6 +146,31 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.planningUndo,(event,id:unknown)=>{
     requireTrustedSender(event);
     return planner().undo(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.aiStatus,event=>{
+    requireTrustedSender(event);
+    return assistant().status();
+  });
+  ipcMain.handle(IPC_CHANNELS.aiConnect,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return assistant().connect(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.aiDisconnect,event=>{
+    requireTrustedSender(event);
+    return assistant().disconnect();
+  });
+  ipcMain.handle(IPC_CHANNELS.aiPrepare,(event,prompt:unknown)=>{
+    requireTrustedSender(event);
+    return assistant().prepare(prompt);
+  });
+  ipcMain.handle(IPC_CHANNELS.aiConfirm,(event,approvalId:unknown)=>{
+    requireTrustedSender(event);
+    return assistant().confirm(approvalId);
+  });
+  ipcMain.handle(IPC_CHANNELS.aiCancel,event=>{
+    requireTrustedSender(event);
+    assistant().cancel();
+    return assistant().status();
   });
   ipcMain.handle(IPC_CHANNELS.knowledgeDocuments, event => {
     requireTrustedSender(event);
@@ -465,6 +499,13 @@ app.whenReady().then(async () => {
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
     knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "ate-knowledge.sqlite"));
     planningStore = new PlanningStore(join(app.getPath("userData"), "ate-plans.sqlite"));
+    aiLedger = new AIUsageLedger(join(app.getPath("userData"), "ate-ai-usage.sqlite"));
+    aiService = new AIService(
+      new AIKeyVault(join(app.getPath("userData"), "ai-personal.enc"), safeStorage),
+      aiLedger,
+    );
+    // An inaccessible old key does not block offline tasks or knowledge.
+    await aiService.initialize().catch(()=>{});
     canvasVault = new CanvasCredentialVault(join(app.getPath("userData"), "canvas-personal.enc"), safeStorage);
     mailStore = new CampusMailStore(join(app.getPath("userData"), "ate-mail.sqlite"));
     const mailVault = new CampusMailVault(join(app.getPath("userData"), "campus-mail.enc"), safeStorage);
@@ -515,6 +556,10 @@ app.on("before-quit", () => {
   canvasSync?.stop();
   canvasSync = null;
   // Sync promises may be finishing; the coordinator aborts before further writes.
+  aiService?.cancel();
+  aiService = null;
+  aiLedger?.close();
+  aiLedger = null;
   planningStore?.close();
   planningStore = null;
   knowledgeStore?.close();
