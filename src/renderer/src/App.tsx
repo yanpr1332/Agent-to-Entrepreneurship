@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import type { FocusSession, FocusSummary, LocalTask, TaskPriority } from "../../shared/local-model";
 import { formatDueDate, localDateKey, monthCells } from "./calendar";
 import CanvasConnector from "./CanvasConnector";
+import CampusMail from "./CampusMail";
 
 type Page = "overview" | "calendar" | "knowledge" | "focus" | "team" | "ai" | "connectors" | "mail";
 type TaskFilter = "day" | "all" | "undated";
@@ -15,7 +16,7 @@ const menu: { page: Page; icon: string; label: string; ready: boolean }[] = [
   { page: "team", icon: "⌘", label: "小组协作", ready: false },
   { page: "ai", icon: "✳", label: "AI 辅助规划", ready: false },
   { page: "connectors", icon: "⇄", label: "数据接入", ready: true },
-  { page: "mail", icon: "✉", label: "邮件管理", ready: false },
+  { page: "mail", icon: "✉", label: "邮件管理", ready: true },
 ];
 
 const emptySummary: FocusSummary = {
@@ -380,7 +381,7 @@ export default function App() {
                   <div className="runtime-line"><span>Electron / 本地 SQLite</span><strong>{runtime === "connected" ? "可用" : runtime === "checking" ? "检查中" : "异常"}</strong></div>
                   <div className="runtime-line"><span>个人任务与日历</span><strong>{runtime === "connected" ? "可用" : "未连接"}</strong></div>
                   <div className="runtime-line"><span>云端协作</span><strong className="not-ready">尚未接入</strong></div>
-                  <div className="runtime-line"><span>Canvas 与邮箱</span><strong className="not-ready">尚未接入</strong></div>
+                  <div className="runtime-line"><span>Canvas 与邮箱</span><strong>开发验证版</strong></div>
                   <p className="privacy-note">个人任务与专注数据不会自动上传云端。</p>
                 </section>
               </div>
@@ -446,6 +447,7 @@ export default function App() {
           )}
 
           {page === "connectors" && <CanvasConnector onTasksChanged={refresh} />}
+          {page === "mail" && <CampusMail />}
 
           {!selectedModule.ready && (
             <div className="placeholder-panel"><span className="placeholder-icon">{selectedModule.icon}</span><div className="eyebrow">NEXT DEVELOPMENT SLICE</div><h1>{selectedModule.label}</h1><p>该模块属于 V0.1 开发范围，但本次工程切片尚未实现真实功能。这里不会使用模拟数据冒充已接入。</p><div className="placeholder-actions"><button className="primary-button" onClick={() => setPage("overview")}>返回工作台</button><button className="secondary-button" onClick={() => setPage("calendar")}>使用任务管理</button></div></div>

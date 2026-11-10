@@ -7,6 +7,10 @@ import type {
 
 import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPersonalTokenInput, CanvasImportResult, CanvasSyncResult, CanvasAutoSyncSummary, CanvasCourseSetting } from "../../shared/canvas-model";
 
+import type {
+  CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
+} from "../../shared/mail-model";
+
 declare global {
   interface Window {
     desktop: {
@@ -18,6 +22,16 @@ declare global {
         update: (input: UpdateTaskInput) => Promise<LocalTask>;
         remove: (id: string) => Promise<boolean>;
         visibility: (id: string, visible: boolean) => Promise<boolean>;
+      };
+      mail: {
+        status: () => Promise<MailSyncState>;
+        connect: (input: CampusMailConnectInput) => Promise<MailSyncState>;
+        list: () => Promise<MailRecord[]>;
+        syncNow: () => Promise<MailSyncState>;
+        disconnect: () => Promise<{disconnected:true}>;
+        prepareSend: (draft: MailDraft) => Promise<MailSendPreview>;
+        confirmSend: (confirmationId: string) => Promise<{accepted:true}>;
+        onSyncUpdated: (listener: () => void) => () => void;
       };
       canvas: {
         status: () => Promise<CanvasConnectionStatus>;

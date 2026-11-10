@@ -8,11 +8,22 @@ import { CanvasApi } from "./connectors/canvas-api";
 import { CanvasCredentialVault } from "./connectors/canvas-credentials";
 import { CanvasSyncService } from "./connectors/canvas-sync";
 import { parseCanvasCourseId, parseCanvasPersonalTokenInput } from "../shared/canvas-model";
+import { CampusMailStore } from "./connectors/mail-store";
+import { CampusMailVault } from "./connectors/mail-vault";
+import { CampusMailService } from "./connectors/mail-service";
 
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
 let canvasVault: CanvasCredentialVault | null = null;
 let canvasSync: CanvasSyncService | null = null;
+let mailStore: CampusMailStore | null = null;
+let mailService: CampusMailService | null = null;
+const MAIL_SYNC_UPDATED = "mail:sync-updated";
+
+function campusMail(): CampusMailService {
+  if (!mailService) throw new Error("Campus email is not initialized");
+  return mailService;
+}
 const CANVAS_SYNC_UPDATED = "canvas:sync-updated";
 
 function coordinator(): CanvasSyncService {
@@ -95,6 +106,35 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.focusSummary, (event) => {
     requireTrustedSender(event);
     return localStore().focusSummary();
+  });
+  ipcMain.handle(IPC_CHANNELS.mailStatus, (event) => {
+    requireTrustedSender(event);
+    return campusMail().snapshot();
+  });
+  ipcMain.handle(IPC_CHANNELS.mailConnect, async (event, input: unknown) => {
+    requireTrustedSender(event);
+    return campusMail().connect(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.mailList, async (event) => {
+    requireTrustedSender(event);
+    return campusMail().list();
+  });
+  ipcMain.handle(IPC_CHANNELS.mailSyncNow, async (event) => {
+    requireTrustedSender(event);
+    return campusMail().sync();
+  });
+  ipcMain.handle(IPC_CHANNELS.mailDisconnect, async (event) => {
+    requireTrustedSender(event);
+    await campusMail().disconnect();
+    return { disconnected: true as const };
+  });
+  ipcMain.handle(IPC_CHANNELS.mailPrepareSend, async (event, input: unknown) => {
+    requireTrustedSender(event);
+    return campusMail().prepareSend(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.mailConfirmSend, async (event, confirmationId: unknown) => {
+    requireTrustedSender(event);
+    return campusMail().confirmSend(confirmationId);
   });
   ipcMain.handle(IPC_CHANNELS.canvasStatus, async (event) => {
     requireTrustedSender(event);
@@ -223,6 +263,13 @@ app.whenReady().then(() => {
   try {
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
     canvasVault = new CanvasCredentialVault(join(app.getPath("userData"), "canvas-personal.enc"), safeStorage);
+    mailStore = new CampusMailStore(join(app.getPath("userData"), "ate-mail.sqlite"));
+    const mailVault = new CampusMailVault(join(app.getPath("userData"), "campus-mail.enc"), safeStorage);
+    mailService = new CampusMailService(mailVault, mailStore, undefined, undefined, () => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send(MAIL_SYNC_UPDATED);
+      }
+    });
     store.purgeExpiredHiddenCanvasTasks();
     canvasSync = new CanvasSyncService(store, async () => {
       const saved = await credentials().load();
@@ -244,12 +291,23 @@ app.whenReady().then(() => {
   createWindow();
   coordinator().start(() => BrowserWindow.getAllWindows().length > 0);
   void coordinator().sync();
+  campusMail().start(() => BrowserWindow.getAllWindows().length > 0);
+  void campusMail().initialize().then(() => {
+    if (mailService) void campusMail().sync();
+  }).catch(() => {
+    // No credentials or OS encryption support: mail remains disconnected.
+  });
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on("before-quit", () => {
+  mailService?.cancel();
+  mailService?.stop();
+  mailService = null;
+  mailStore?.close();
+  mailStore = null;
   canvasSync?.cancel();
   canvasSync?.stop();
   canvasSync = null;

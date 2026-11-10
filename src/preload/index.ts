@@ -7,6 +7,10 @@ import type {
 
 import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPersonalTokenInput, CanvasImportResult, CanvasSyncResult, CanvasAutoSyncSummary, CanvasCourseSetting } from "../shared/canvas-model";
 
+import type {
+  CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
+} from "../shared/mail-model";
+
 const desktopApi = Object.freeze({
   ping: () => ipcRenderer.invoke(IPC_CHANNELS.appPing) as Promise<{ ok: true }>,
   getVersion: () => ipcRenderer.invoke(IPC_CHANNELS.appGetVersion) as Promise<string>,
@@ -20,6 +24,24 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.tasksRemove, id) as Promise<boolean>,
     visibility: (id: string, visible: boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.tasksVisibility, { id, visible }) as Promise<boolean>,
+  }),
+  mail: Object.freeze({
+    status: () => ipcRenderer.invoke(IPC_CHANNELS.mailStatus) as Promise<MailSyncState>,
+    connect: (input: CampusMailConnectInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailConnect, input) as Promise<MailSyncState>,
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.mailList) as Promise<MailRecord[]>,
+    syncNow: () => ipcRenderer.invoke(IPC_CHANNELS.mailSyncNow) as Promise<MailSyncState>,
+    disconnect: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailDisconnect) as Promise<{disconnected:true}>,
+    prepareSend: (draft: MailDraft) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailPrepareSend, draft) as Promise<MailSendPreview>,
+    confirmSend: (confirmationId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailConfirmSend, confirmationId) as Promise<{accepted:true}>,
+    onSyncUpdated: (listener: () => void) => {
+      const handler = () => listener();
+      ipcRenderer.on(IPC_CHANNELS.mailSyncUpdated, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.mailSyncUpdated, handler);
+    },
   }),
   canvas: Object.freeze({
     status: () => ipcRenderer.invoke(IPC_CHANNELS.canvasStatus) as Promise<CanvasConnectionStatus>,
