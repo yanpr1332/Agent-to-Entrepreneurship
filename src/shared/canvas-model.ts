@@ -62,3 +62,23 @@ export interface CanvasSyncResult {
   missing: number;
   preserved: number;
 }
+
+/** Per-course sync preferences are independent of individual task visibility. */
+export interface CanvasCourseSetting {
+  courseId: number;
+  enabled: boolean;
+}
+export interface CanvasAutoSyncSummary {
+  connected: boolean;
+  running: boolean;
+  coursesChecked: number;
+  assignmentsSeen: number;
+  created: number;
+  changed: number;
+  preserved: number;
+  missing: number;
+  failedCourses: number;
+  lastAttempt: string | null;
+  lastSuccess: string | null;
+  lastError: string | null;
+}

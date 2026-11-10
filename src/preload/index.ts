@@ -5,7 +5,7 @@ import type {
   LocalTask, UpdateTaskInput,
 } from "../shared/local-model";
 
-import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPersonalTokenInput, CanvasImportResult, CanvasSyncResult } from "../shared/canvas-model";
+import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPersonalTokenInput, CanvasImportResult, CanvasSyncResult, CanvasAutoSyncSummary, CanvasCourseSetting } from "../shared/canvas-model";
 
 const desktopApi = Object.freeze({
   ping: () => ipcRenderer.invoke(IPC_CHANNELS.appPing) as Promise<{ ok: true }>,
@@ -18,6 +18,8 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.tasksUpdate, input) as Promise<LocalTask>,
     remove: (id: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.tasksRemove, id) as Promise<boolean>,
+    visibility: (id: string, visible: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.tasksVisibility, { id, visible }) as Promise<boolean>,
   }),
   canvas: Object.freeze({
     status: () => ipcRenderer.invoke(IPC_CHANNELS.canvasStatus) as Promise<CanvasConnectionStatus>,
@@ -25,6 +27,16 @@ const desktopApi = Object.freeze({
     courses: () => ipcRenderer.invoke(IPC_CHANNELS.canvasCourses) as Promise<CanvasCourse[]>,
     assignments: (courseId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasAssignments, courseId) as Promise<CanvasAssignment[]>,
     disconnect: () => ipcRenderer.invoke(IPC_CHANNELS.canvasDisconnect) as Promise<{ disconnected: true }>,
+    syncNow: () => ipcRenderer.invoke(IPC_CHANNELS.canvasSyncNow) as Promise<CanvasAutoSyncSummary>,
+    syncStatus: () => ipcRenderer.invoke(IPC_CHANNELS.canvasSyncStatus) as Promise<CanvasAutoSyncSummary>,
+    courseSettings: () => ipcRenderer.invoke(IPC_CHANNELS.canvasCourseSettings) as Promise<CanvasCourseSetting[]>,
+    setCourseEnabled: (courseId: number, enabled: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.canvasSetCourseEnabled, {courseId, enabled}) as Promise<{saved: true}>,
+    onSyncUpdated: (listener: () => void) => {
+      const handler = () => listener();
+      ipcRenderer.on(IPC_CHANNELS.canvasSyncUpdated, handler);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.canvasSyncUpdated, handler);
+    },
     imported: (courseId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasImported, courseId) as Promise<number[]>,
     importAssignment: (courseId: number, assignmentId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasImportAssignment, courseId, assignmentId) as Promise<CanvasImportResult>,
     syncCourse: (courseId: number) => ipcRenderer.invoke(IPC_CHANNELS.canvasSyncCourse, courseId) as Promise<CanvasSyncResult>,

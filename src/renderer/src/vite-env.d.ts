@@ -5,7 +5,7 @@ import type {
   LocalTask, UpdateTaskInput,
 } from "../../shared/local-model";
 
-import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPersonalTokenInput, CanvasImportResult, CanvasSyncResult } from "../../shared/canvas-model";
+import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPersonalTokenInput, CanvasImportResult, CanvasSyncResult, CanvasAutoSyncSummary, CanvasCourseSetting } from "../../shared/canvas-model";
 
 declare global {
   interface Window {
@@ -17,6 +17,7 @@ declare global {
         create: (input: CreateTaskInput) => Promise<LocalTask>;
         update: (input: UpdateTaskInput) => Promise<LocalTask>;
         remove: (id: string) => Promise<boolean>;
+        visibility: (id: string, visible: boolean) => Promise<boolean>;
       };
       canvas: {
         status: () => Promise<CanvasConnectionStatus>;
@@ -24,6 +25,11 @@ declare global {
         courses: () => Promise<CanvasCourse[]>;
         assignments: (courseId: number) => Promise<CanvasAssignment[]>;
         disconnect: () => Promise<{ disconnected: true }>;
+        syncNow: () => Promise<CanvasAutoSyncSummary>;
+        syncStatus: () => Promise<CanvasAutoSyncSummary>;
+        courseSettings: () => Promise<CanvasCourseSetting[]>;
+        setCourseEnabled: (courseId: number, enabled: boolean) => Promise<{ saved: true }>;
+        onSyncUpdated: (listener: () => void) => () => void;
         imported: (courseId: number) => Promise<number[]>;
         importAssignment: (courseId: number, assignmentId: number) => Promise<CanvasImportResult>;
         syncCourse: (courseId: number) => Promise<CanvasSyncResult>;

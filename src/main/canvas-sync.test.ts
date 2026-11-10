@@ -80,12 +80,13 @@ describe("Canvas assignment import into local task authority", () => {
     expect(db.listTasks()).toHaveLength(1);
   });
 
-  it("deleting a Canvas task unlinks provenance and permits deliberate reimport", () => {
+  it("hiding a Canvas task preserves its deduplication record", () => {
     const db = memory();
     const first = db.importCanvasAssignment(origin, 12, base);
     expect(db.removeTask(first.taskId)).toBe(true);
-    expect(db.listImportedCanvasAssignmentIds(origin, 12, 51)).toEqual([]);
-    expect(db.importCanvasAssignment(origin, 12, base).created).toBe(true);
+    expect(db.listImportedCanvasAssignmentIds(origin, 12, 51)).toEqual([202]);
+    expect(db.importCanvasAssignment(origin, 12, base).created).toBe(false);
+    expect(db.listTasks()[0].visible).toBe(false);
   });
 
   it("rejects unsafe user/account identities", () => {
