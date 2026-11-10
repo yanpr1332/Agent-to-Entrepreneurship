@@ -62,6 +62,15 @@ export default function FixedCalendarPanel({day,events,onChanged}:{
       }finally{setPreview(null);}
     });
   }
+  async function cancelImport():Promise<void>{
+    if(!preview)return;
+    const accepted=preview;
+    await run(async()=>{
+      await window.desktop.calendar.cancelICS(accepted.approvalId);
+      setPreview(null);
+      setNotice("已取消 ICS 导入授权，未写入日历。");
+    });
+  }
   async function exportLocal():Promise<void>{
     if(!window.confirm("导出本机固定课程与已导入事件到 .ics？文件包含活动标题和时间，可能涉及个人课表。不会上传到网络或包含私人任务/邮件。"))return;
     await run(async()=>{
@@ -111,7 +120,7 @@ export default function FixedCalendarPanel({day,events,onChanged}:{
       </li>)}</ul>
       <div className="button-row">
         <button className="primary-button" disabled={busy} onClick={()=>void importICS()}>确认导入以上全部事件</button>
-        <button className="secondary-button" disabled={busy} onClick={()=>{setPreview(null);setNotice("已放弃导入。");}}>取消预览</button>
+        <button className="secondary-button" disabled={busy} onClick={()=>void cancelImport()}>取消预览</button>
       </div>
     </div>}
     <p className="privacy-note">ICS 首版支持单日事件、UTC 或设备本地浮动时间、单日全天事件；带 TZID、RRULE 的复杂日历会被完整拒绝，避免产生错误的课程时间。若文件有重复课程，请先导出为展开的具体事件。导出使用设备本地浮动时间，不覆盖已有文件。</p>

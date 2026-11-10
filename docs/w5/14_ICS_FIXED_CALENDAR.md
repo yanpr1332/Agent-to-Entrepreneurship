@@ -10,7 +10,7 @@
 
 ## 存储与备份
 - 新建本机 SQLite `ate-fixed-calendar.sqlite`（schema v1）；限 2000 条事件，支持本机数据库在线备份，与其他 SQLite 一同保存，当前备份仍**未单独加密**。
-- 提供唯一六个固定日历 IPC：list/create/delete/preview-ics/confirm-ics/export-ics，均验证 trusted renderer；文件路径只能经 Main 的原生对话框产生。不会将任意路径、文件系统读写接口、SQL 或解析器暴露给 Renderer。
+- 提供唯一七个固定日历 IPC：list/create/delete/preview-ics/confirm-ics/cancel-ics/export-ics，均验证 trusted renderer；文件路径只能经 Main 的原生对话框产生。不会将任意路径、文件系统读写接口、SQL 或解析器暴露给 Renderer。
 
 ## 自动化测试与验收
 - 严格 ICS 白名单：有效日期与本地时间、换行折叠、转义、全天、跨日午夜结束、导出再导入、重复 UID、TZID/RRULE/多日活动拒绝。

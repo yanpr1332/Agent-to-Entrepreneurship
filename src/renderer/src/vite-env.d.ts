@@ -109,6 +109,7 @@ declare global {
         remove:(id:string)=>Promise<boolean>;
         previewICS:()=>Promise<ICSPreview|null>;
         confirmICS:(id:string)=>Promise<ICSImportResult>;
+        cancelICS:(id:string)=>Promise<{canceled:true}>;
         exportICS:()=>Promise<ICSExportResult>;
       };
       planning: {

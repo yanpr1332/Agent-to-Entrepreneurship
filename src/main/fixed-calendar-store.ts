@@ -84,7 +84,8 @@ export class FixedCalendarStore {
   /** Import exactly the previewed snapshot; dedup by UID, never overwrite local edits. */
   import(events:ReadonlyArray<FixedEventDraft>,now=new Date()):ICSImportResult{
     if(!Array.isArray(events)||events.length===0||events.length>250)throw Error("Invalid ICS preview");
-    const known=new Set(this.list().map(e=>e.sourceUid).filter((x):x is string=>!!x));
+    const known=new Set(this.list().flatMap(e=>e.sourceUid
+      ? [e.sourceUid,e.id+"@ate.local"] : [e.id+"@ate.local"]));
     const incoming=events.filter(e=>!known.has(e.sourceUid??""));
     if(new Set(events.map(e=>e.sourceUid)).size!==events.length)
       throw Error("Duplicate event UID in calendar import");

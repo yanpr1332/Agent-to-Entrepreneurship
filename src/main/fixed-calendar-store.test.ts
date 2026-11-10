@@ -28,6 +28,9 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
       durationMinutes:60,sourceUid:"uid-1"};
     expect(db.import([imported],now)).toEqual({added:1,alreadyPresent:0});
     expect(db.import([imported],now)).toEqual({added:0,alreadyPresent:1});
+    expect(db.import([{title:result[0].title,day:result[0].day,
+      startMinute:result[0].startMinute,durationMinutes:result[0].durationMinutes,
+      sourceUid:result[0].id+"@ate.local"}],now)).toEqual({added:0,alreadyPresent:1});
     expect(db.delete(result[0].id)).toBe(true);
     expect(db.list()).toHaveLength(3);
     expect(()=>db.create({title:"No",day:"2026-11-11",startMinute:540,

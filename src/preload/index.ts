@@ -143,6 +143,7 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarDelete,id) as Promise<boolean>,
     previewICS:()=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarPreviewICS) as Promise<ICSPreview|null>,
     confirmICS:(id:string)=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarConfirmICS,id) as Promise<ICSImportResult>,
+    cancelICS:(id:string)=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarCancelICS,id) as Promise<{canceled:true}>,
     exportICS:()=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarExportICS) as Promise<ICSExportResult>,
   }),
   planning: Object.freeze({

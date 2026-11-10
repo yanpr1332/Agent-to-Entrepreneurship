@@ -176,6 +176,11 @@ function registerIpcHandlers(): void {
     return {approvalId:id,expiresAt:new Date(expires).toISOString(),
       filename,events} satisfies ICSPreview;
   });
+  ipcMain.handle(IPC_CHANNELS.fixedCalendarCancelICS,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    if(pendingICS && id===pendingICS.id)pendingICS=null;
+    return {canceled:true};
+  });
   ipcMain.handle(IPC_CHANNELS.fixedCalendarConfirmICS,(event,id:unknown)=>{
     requireTrustedSender(event);
     const pending=pendingICS;
