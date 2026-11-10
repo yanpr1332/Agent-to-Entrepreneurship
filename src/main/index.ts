@@ -21,12 +21,18 @@ import { createLocalBackup, backupBeforeMigration } from "./local-backup";
 import { AIKeyVault } from "./ai/ai-vault";
 import { AIUsageLedger } from "./ai/ai-usage";
 import { AIService } from "./ai/ai-service";
+import { AIPlanningCoordinator } from "./ai/ai-planner";
 
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
 let knowledgeStore: KnowledgeStore | null = null;
 let planningStore: PlanningStore | null = null;
 let aiService: AIService | null = null;
+let aiPlanning: AIPlanningCoordinator | null = null;
+function aiPlanner():AIPlanningCoordinator{
+  if(!aiPlanning)throw new Error("AI planning is not initialized");
+  return aiPlanning;
+}
 let aiLedger: AIUsageLedger | null = null;
 function assistant():AIService {
   if(!aiService)throw new Error("AI provider is not initialized");
@@ -146,6 +152,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.planningUndo,(event,id:unknown)=>{
     requireTrustedSender(event);
     return planner().undo(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.aiPlanPrepare,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return aiPlanner().prepare(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.aiPlanConfirm,(event,approvalId:unknown)=>{
+    requireTrustedSender(event);
+    return aiPlanner().confirm(approvalId);
   });
   ipcMain.handle(IPC_CHANNELS.aiStatus,event=>{
     requireTrustedSender(event);
@@ -506,6 +520,9 @@ app.whenReady().then(async () => {
     );
     // An inaccessible old key does not block offline tasks or knowledge.
     await aiService.initialize().catch(()=>{});
+    aiPlanning = new AIPlanningCoordinator(
+      aiService,planningStore,()=>localStore().listTasks(),
+    );
     canvasVault = new CanvasCredentialVault(join(app.getPath("userData"), "canvas-personal.enc"), safeStorage);
     mailStore = new CampusMailStore(join(app.getPath("userData"), "ate-mail.sqlite"));
     const mailVault = new CampusMailVault(join(app.getPath("userData"), "campus-mail.enc"), safeStorage);
@@ -556,6 +573,7 @@ app.on("before-quit", () => {
   canvasSync?.stop();
   canvasSync = null;
   // Sync promises may be finishing; the coordinator aborts before further writes.
+  aiPlanning = null;
   aiService?.cancel();
   aiService = null;
   aiLedger?.close();

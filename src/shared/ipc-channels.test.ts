@@ -8,6 +8,8 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "ai:confirm",
       "ai:connect",
       "ai:disconnect",
+      "ai:plan-confirm",
+      "ai:plan-prepare",
       "ai:prepare",
       "ai:status",
       "app:get-version",
@@ -88,6 +90,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
   it("permits only explicit AI status, configuration, approval, cancel and disconnect calls",()=>{
     expect(Object.values(IPC_CHANNELS).filter(x=>x.startsWith("ai:"))).toEqual([
       "ai:status","ai:connect","ai:disconnect","ai:prepare","ai:confirm","ai:cancel",
+      "ai:plan-prepare","ai:plan-confirm",
     ]);
   });
 
