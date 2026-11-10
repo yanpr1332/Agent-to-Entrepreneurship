@@ -70,7 +70,7 @@ export class FixedCalendarStore {
       for(const candidate of candidates){
         const id=randomUUID(),stamp=now.toISOString();
         put.run(id,candidate.title,candidate.day,candidate.startMinute,candidate.durationMinutes,stamp);
-        created.push({id,sourceUid:null,...candidate,source:"manual",createdAt:stamp});
+        created.push({id,...candidate,source:"manual",createdAt:stamp});
       }
       this.db.exec("COMMIT");
     }catch(e){this.db.exec("ROLLBACK");throw e;}
