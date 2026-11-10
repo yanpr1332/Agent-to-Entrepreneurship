@@ -53,7 +53,9 @@ describe("AI-generated schedule validation never bypasses local rules",()=>{
       .toThrow("outside");
     expect(()=>db.proposeFromAI(prefs,tasks,[block(tasks[0].id,"2026-11-13")],now))
       .toThrow("outside");
-    expect(()=>db.proposeFromAI(prefs,tasks,[block(tasks[0].id,"2026-11-11",1200)],now))
+    expect(()=>db.proposeFromAI({...prefs,days:4},tasks,
+      [block(tasks[0].id,"2026-11-13")],now)).toThrow("deadline");
+    expect(()=>db.proposeFromAI(prefs,tasks,[block(tasks[0].id,"2026-11-11",1245)],now))
       .toThrow("outside");
     expect(()=>db.proposeFromAI(prefs,tasks,[
       block(tasks[0].id),block(tasks[1].id,"2026-11-11",1080),
