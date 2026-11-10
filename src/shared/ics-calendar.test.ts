@@ -82,11 +82,11 @@ describe("strict opt-in local ICS support",()=>{
     expect(()=>parseICS(wrap(evt("gap",";TZID=America/Los_Angeles:20260308T023000",
       ";TZID=America/Los_Angeles:20260308T033000")))).toThrow("daylight");
     expect(()=>parseICS(wrap(evt("bad",":20261109T090000",":20261109T100000",
-      "RRULE:FREQ=MONTHLY;COUNT=3\r\n"))).toThrow("Unsupported");
+      "RRULE:FREQ=MONTHLY;COUNT=3\r\n")))).toThrow("Unsupported");
     expect(()=>parseICS(wrap(evt("until",":20261109T090000",":20261109T100000",
-      "RRULE:FREQ=WEEKLY;UNTIL=20270101T000000Z\r\n"))).toThrow("Unsupported");
+      "RRULE:FREQ=WEEKLY;UNTIL=20270101T000000Z\r\n")))).toThrow("Unsupported");
     expect(()=>parseICS(wrap(evt("long",":20261109T090000",":20261109T100000",
-      "RRULE:FREQ=WEEKLY;COUNT=250;INTERVAL=8\r\n"))).toThrow("two-year");
+      "RRULE:FREQ=WEEKLY;COUNT=250;INTERVAL=8\r\n")))).toThrow("two-year");
     expect(()=>parseICS(wrap(evt("mismatch",":20261109T090000Z",":20261109T100000")))
       ).toThrow("same time basis");
   });
