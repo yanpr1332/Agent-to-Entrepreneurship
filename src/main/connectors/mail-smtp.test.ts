@@ -8,7 +8,7 @@ class SmtpTranscript implements MailWire {
   closed=false;
   constructor(private readonly replies:string[]){}
   async readLine(){const v=this.replies.shift();if(!v)throw Error("SMTP transcript EOF");return v;}
-  async readBytes(_n:number){throw Error("SMTP should not read literals");}
+  async readBytes(_n:number):Promise<Buffer>{throw Error("SMTP should not read literals");}
   async write(value:string|Buffer){this.writes.push(value.toString());}
   close(){this.closed=true;}
 }
