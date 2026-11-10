@@ -24,6 +24,10 @@ export interface LocalTask {
   createdAt: string;
   updatedAt: string;
   source: CanvasTaskSource | null;
+  /** Hidden items remain in SQLite but are omitted from ordinary calendar/workbench views. */
+  visible: boolean;
+  hiddenAt: string | null;
+  retentionExpiresAt: string | null;
 }
 
 export interface CreateTaskInput {

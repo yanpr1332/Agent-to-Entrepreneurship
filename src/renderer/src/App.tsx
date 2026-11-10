@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { FocusSession, FocusSummary, LocalTask, TaskPriority } from "../../shared/local-model";
 import { formatDueDate, localDateKey, monthCells } from "./calendar";
 import CanvasConnector from "./CanvasConnector";
@@ -130,19 +130,20 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
 }
 
 function TaskRow({
-  task, onToggle, onEdit, onRemove, busy,
+  task, onToggle, onEdit, onRemove, onRestore, busy,
 }: {
   task: LocalTask;
   onToggle: (task: LocalTask) => void;
   onEdit: (task: LocalTask) => void;
   onRemove: (task: LocalTask) => void;
+  onRestore: (task: LocalTask) => void;
   busy: boolean;
 }) {
   return (
     <li className={task.completed ? "task-item completed" : "task-item"}>
       <input
         type="checkbox" aria-label={`完成任务：${task.title}`} checked={task.completed}
-        disabled={busy} onChange={() => onToggle(task)}
+        disabled={busy || !task.visible} onChange={() => onToggle(task)}
       />
       <div className="task-copy">
         <strong>{task.title}</strong>
@@ -152,10 +153,13 @@ function TaskRow({
         </div>
         {task.source && <p className="source-mark">Canvas 来源：${task.source.instanceUrl} · 课程 ${task.source.courseId} · 作业 ${task.source.assignmentId}</p>}
         {task.description && <p>{task.description}</p>}
+        {!task.visible && <p className="hidden-expiry">已隐藏 · 本机保留至 {task.retentionExpiresAt ? new Date(task.retentionExpiresAt).toLocaleDateString("zh-CN") : "尚未设置"}</p>}
       </div>
       <div className="task-actions">
-        <button disabled={busy} onClick={() => onEdit(task)} aria-label={`编辑${task.title}`}>编辑</button>
-        <button disabled={busy} onClick={() => onRemove(task)} aria-label={`删除${task.title}`}>删除</button>
+        {task.visible ? <>
+          <button disabled={busy} onClick={() => onEdit(task)} aria-label={`编辑${task.title}`}>编辑</button>
+          <button disabled={busy} onClick={() => onRemove(task)} aria-label={`${task.source ? "隐藏" : "删除"}${task.title}`}>{task.source ? "隐藏" : "删除"}</button>
+        </> : <button disabled={busy} onClick={() => onRestore(task)} aria-label={`恢复显示${task.title}`}>恢复显示</button>}
       </div>
     </li>
   );
@@ -179,6 +183,8 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(today);
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [filter, setFilter] = useState<TaskFilter>("day");
+  const [showHidden, setShowHidden] = useState(false);
+  const [retentionNotice, setRetentionNotice] = useState("");
   const [dark, setDark] = useState(() => window.localStorage.getItem("ate.theme") === "dark");
 
   useEffect(() => {
@@ -206,14 +212,20 @@ export default function App() {
     return () => { active = false; };
   }, []);
 
-  async function refresh(): Promise<void> {
+  const refresh = useCallback(async (): Promise<void> => {
     const [localTasks, localSessions, localSummary] = await Promise.all([
       window.desktop.tasks.list(), window.desktop.focus.list(), window.desktop.focus.summary(),
     ]);
     setTasks(localTasks);
     setSessions(localSessions);
     setSummary(localSummary);
-  }
+  }, []);
+
+  // Main-process scheduled syncs must refresh the workbench even if the
+  // connection settings page is not currently open.
+  useEffect(() => window.desktop.canvas.onSyncUpdated(() => {
+    void refresh().catch(() => {});
+  }), [refresh]);
 
   function resetTaskForm(): void {
     setEditingId(null);
@@ -270,12 +282,16 @@ export default function App() {
   }
 
   async function removeTask(task: LocalTask): Promise<void> {
-    if (!window.confirm(`确定删除「${task.title}」？删除后无法撤销。`)) return;
+    const prompt = task.source
+      ? `隐藏「${task.title}」？该任务将在本机保留六个月后自动清理，期间可从「隐藏任务」中恢复。Canvas 原始作业不会被删除。`
+      : `确定永久删除「${task.title}」？删除后无法撤销。`;
+    if (!window.confirm(prompt)) return;
     setBusy(true);
     setError("");
     try {
       await window.desktop.tasks.remove(task.id);
       await refresh();
+      if (task.source) setRetentionNotice("已隐藏 Canvas 任务。它将在本机保留六个月，可随时从「隐藏任务」恢复；到期前 30 天会提醒。");
       if (editingId === task.id) resetTaskForm();
     } catch (reason) {
       setError(errorMessage(reason));
@@ -284,9 +300,28 @@ export default function App() {
     }
   }
 
-  const pendingTasks = tasks.filter((task) => !task.completed);
+  async function restoreCanvasTask(task: LocalTask): Promise<void> {
+    if (!task.source) return;
+    setBusy(true);
+    setError("");
+    try {
+      await window.desktop.tasks.visibility(task.id, true);
+      await refresh();
+      setRetentionNotice("该 Canvas 任务已恢复显示。");
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const shownTasks = tasks.filter((task) => task.visible);
+  const hiddenTasks = tasks.filter((task) => !task.visible && task.source);
+  const expiringSoon = hiddenTasks.filter((task) => task.retentionExpiresAt &&
+    Date.parse(task.retentionExpiresAt) - Date.now() <= 30 * 86400000).length;
+  const pendingTasks = shownTasks.filter((task) => !task.completed);
   const todayTasks = pendingTasks.filter((task) => task.dueDate === today);
-  const visibleTasks = tasks.filter((task) =>
+  const visibleTasks = showHidden ? hiddenTasks : shownTasks.filter((task) =>
     filter === "all" || (filter === "day" && task.dueDate === selectedDate) ||
     (filter === "undated" && task.dueDate === null),
   );
@@ -354,23 +389,31 @@ export default function App() {
 
           {page === "calendar" && (
             <>
-              <div className="page-heading"><div><div className="eyebrow">PERSONAL CALENDAR</div><h1>日历与任务</h1><p>创建和安排个人任务，所有变更保存在本机 SQLite。</p></div><span className="count-chip">{tasks.length} 条任务</span></div>
+              <div className="page-heading"><div><div className="eyebrow">PERSONAL CALENDAR</div><h1>日历与任务</h1><p>创建和安排个人任务，所有变更保存在本机 SQLite。</p></div><span className="count-chip">{shownTasks.length} 条展示中的任务</span></div>
               <div className="calendar-layout">
                 <div className="calendar-column">
                   <section className="panel calendar-panel">
                     <div className="calendar-header"><h2>{month.getFullYear()} 年 {month.getMonth() + 1} 月</h2><div className="button-row"><button className="icon-button" aria-label="上个月" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>‹</button><button className="small-button" onClick={() => { setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); setSelectedDate(today); setFilter("day"); }}>今天</button><button className="icon-button" aria-label="下个月" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>›</button></div></div>
                     <div className="weekday-row">{["一", "二", "三", "四", "五", "六", "日"].map((day) => <span key={day}>{day}</span>)}</div>
                     <div className="calendar-grid">{calendar.map((day) => {
-                      const hasTasks = tasks.some((task) => task.dueDate === day.key);
+                      const hasTasks = shownTasks.some((task) => task.dueDate === day.key);
                       return <button key={day.key} className={["calendar-day", day.currentMonth ? "" : "muted-day", day.key === selectedDate ? "selected-day" : "", day.key === today ? "today-day" : ""].join(" ")}
-                        onClick={() => { setSelectedDate(day.key); setFilter("day"); if (!day.currentMonth) { const [y, m] = day.key.split("-").map(Number); setMonth(new Date(y, m - 1, 1)); } }} aria-label={day.key}>
+                        onClick={() => { setSelectedDate(day.key); setFilter("day"); setShowHidden(false); if (!day.currentMonth) { const [y, m] = day.key.split("-").map(Number); setMonth(new Date(y, m - 1, 1)); } }} aria-label={day.key}>
                         <span>{day.day}</span>{hasTasks && <i className="day-dot" />}
                       </button>;
                     })}</div>
                   </section>
-                  <section className="panel task-list-panel"><div className="panel-heading"><div><div className="eyebrow">MY TASKS</div><h2>{filter === "day" ? formatDueDate(selectedDate) : filter === "undated" ? "未安排日期" : "全部任务"}</h2></div><span className="muted-tag">{visibleTasks.length} 条</span></div>
-                    <div className="filter-tabs"><button className={filter === "day" ? "chip selected" : "chip"} onClick={() => setFilter("day")}>选中日期</button><button className={filter === "all" ? "chip selected" : "chip"} onClick={() => setFilter("all")}>全部</button><button className={filter === "undated" ? "chip selected" : "chip"} onClick={() => setFilter("undated")}>无日期</button></div>
-                    {visibleTasks.length ? <ul className="task-list">{visibleTasks.map((task) => <TaskRow key={task.id} task={task} busy={busy} onToggle={(t) => void toggleTask(t)} onEdit={editTask} onRemove={(t) => void removeTask(t)} />)}</ul> : <p className="empty-state">这里还没有任务。可以在右侧创建一条。</p>}
+                  <section className="panel task-list-panel"><div className="panel-heading"><div><div className="eyebrow">MY TASKS</div><h2>{showHidden ? "隐藏的 Canvas 任务" : filter === "day" ? formatDueDate(selectedDate) : filter === "undated" ? "未安排日期" : "全部任务"}</h2></div><span className="muted-tag">{visibleTasks.length} 条</span></div>
+                    <div className="filter-tabs">
+                      <button className={!showHidden && filter === "day" ? "chip selected" : "chip"} onClick={() => { setShowHidden(false); setFilter("day"); }}>选中日期</button>
+                      <button className={!showHidden && filter === "all" ? "chip selected" : "chip"} onClick={() => { setShowHidden(false); setFilter("all"); }}>全部</button>
+                      <button className={!showHidden && filter === "undated" ? "chip selected" : "chip"} onClick={() => { setShowHidden(false); setFilter("undated"); }}>无日期</button>
+                      <button className={showHidden ? "chip selected" : "chip"} onClick={() => setShowHidden(true)}>隐藏任务 ({hiddenTasks.length})</button>
+                    </div>
+                    {retentionNotice && <p className="retention-banner" role="status">{retentionNotice}</p>}
+                    {expiringSoon > 0 && <p className="retention-warning" role="status">有 {expiringSoon} 条隐藏的 Canvas 任务将在 30 天内到期清理。可在「隐藏任务」中恢复。</p>}
+                    {showHidden && <p className="privacy-note">隐藏的 Canvas 任务在本机数据库保留六个月，到期后自动清理。显示每条任务的预计清理日期；隐藏不会删除 Canvas 原始作业。</p>}
+                    {visibleTasks.length ? <ul className="task-list">{visibleTasks.map((task) => <TaskRow key={task.id} task={task} busy={busy} onToggle={(t) => void toggleTask(t)} onEdit={editTask} onRemove={(t) => void removeTask(t)} onRestore={(t) => void restoreCanvasTask(t)} />)}</ul> : <p className="empty-state">{showHidden ? "没有隐藏的 Canvas 任务。" : "这里还没有任务。可以在右侧创建一条。"}</p>}
                   </section>
                 </div>
                 <section className="panel task-editor"><div className="eyebrow">TASK EDITOR</div><h2>{editingId ? "编辑任务" : "新建任务"}</h2>

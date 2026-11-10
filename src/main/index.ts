@@ -6,11 +6,19 @@ import { isTrustedRendererUrl } from "../shared/renderer-trust";
 import { LocalStore } from "./local-store";
 import { CanvasApi } from "./connectors/canvas-api";
 import { CanvasCredentialVault } from "./connectors/canvas-credentials";
+import { CanvasSyncService } from "./connectors/canvas-sync";
 import { parseCanvasCourseId, parseCanvasPersonalTokenInput } from "../shared/canvas-model";
 
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
 let canvasVault: CanvasCredentialVault | null = null;
+let canvasSync: CanvasSyncService | null = null;
+const CANVAS_SYNC_UPDATED = "canvas:sync-updated";
+
+function coordinator(): CanvasSyncService {
+  if (!canvasSync) throw new Error("Canvas synchronization is not initialized");
+  return canvasSync;
+}
 
 function credentials(): CanvasCredentialVault {
   if (!canvasVault) throw new Error("Canvas credentials are unavailable");
@@ -64,6 +72,18 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return localStore().removeTask(id);
   });
+  ipcMain.handle(IPC_CHANNELS.tasksVisibility, (event, input: unknown) => {
+    requireTrustedSender(event);
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw new Error("Invalid task visibility request");
+    }
+    const data = input as Record<string, unknown>;
+    if (Object.keys(data).sort().join(",") !== "id,visible" ||
+        typeof data.visible !== "boolean") {
+      throw new Error("Invalid task visibility request");
+    }
+    return localStore().setCanvasTaskVisibility(data.id, data.visible);
+  });
   ipcMain.handle(IPC_CHANNELS.focusList, (event) => {
     requireTrustedSender(event);
     return localStore().listFocusSessions();
@@ -89,6 +109,8 @@ function registerIpcHandlers(): void {
     // Prove real Canvas API access before persisting encrypted credentials.
     const courses = await api.listCourses();
     await credentials().save({ baseUrl: api.origin, token: config.token });
+    // Initial connection starts automatic collection of current-course assignments.
+    void coordinator().sync();
     return {
       status: { connected: true, baseUrl: api.origin, mode: "developer-local-token" },
       courses,
@@ -131,8 +153,34 @@ function registerIpcHandlers(): void {
     const assignments = await api.listAssignments(courseId);
     return localStore().syncImportedCanvasAssignments(api.origin, accountId, courseId, assignments);
   });
+  ipcMain.handle(IPC_CHANNELS.canvasSyncNow, async (event) => {
+    requireTrustedSender(event);
+    return coordinator().sync();
+  });
+  ipcMain.handle(IPC_CHANNELS.canvasSyncStatus, (event) => {
+    requireTrustedSender(event);
+    return coordinator().snapshot();
+  });
+  ipcMain.handle(IPC_CHANNELS.canvasCourseSettings, async (event) => {
+    requireTrustedSender(event);
+    return coordinator().courseSettings();
+  });
+  ipcMain.handle(IPC_CHANNELS.canvasSetCourseEnabled, async (event, input: unknown) => {
+    requireTrustedSender(event);
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw new Error("Invalid course synchronization setting");
+    }
+    const data = input as Record<string, unknown>;
+    if (Object.keys(data).sort().join(",") !== "courseId,enabled" ||
+      typeof data.courseId !== "number" || typeof data.enabled !== "boolean") {
+      throw new Error("Invalid course synchronization setting");
+    }
+    await coordinator().setCourseEnabled(data.courseId, data.enabled);
+    return { saved: true };
+  });
   ipcMain.handle(IPC_CHANNELS.canvasDisconnect, async (event) => {
     requireTrustedSender(event);
+    coordinator().cancel();
     await credentials().clear();
     return { disconnected: true };
   });
@@ -175,6 +223,15 @@ app.whenReady().then(() => {
   try {
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
     canvasVault = new CanvasCredentialVault(join(app.getPath("userData"), "canvas-personal.enc"), safeStorage);
+    store.purgeExpiredHiddenCanvasTasks();
+    canvasSync = new CanvasSyncService(store, async () => {
+      const saved = await credentials().load();
+      return saved ? new CanvasApi(saved.baseUrl, saved.token) : null;
+    }, () => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send(CANVAS_SYNC_UPDATED);
+      }
+    });
   } catch {
     dialog.showErrorBox(
       "本地数据无法打开",
@@ -185,12 +242,18 @@ app.whenReady().then(() => {
   }
   registerIpcHandlers();
   createWindow();
+  coordinator().start(() => BrowserWindow.getAllWindows().length > 0);
+  void coordinator().sync();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on("before-quit", () => {
+  canvasSync?.cancel();
+  canvasSync?.stop();
+  canvasSync = null;
+  // Sync promises may be finishing; the coordinator aborts before further writes.
   store?.close();
   store = null;
 });

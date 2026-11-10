@@ -23,6 +23,11 @@ interface TaskRow {
   assignment_id: number | null;
   source_url: string | null;
   last_synced_at: string | null;
+  visible: number | null;
+  hidden_at: string | null;
+  retention_expires_at: string | null;
+  override_title: number | null;
+  override_due: number | null;
 }
 
 interface FocusRow {
@@ -40,6 +45,9 @@ function taskFromRow(row: TaskRow): LocalTask {
     id: row.id, title: row.title, description: row.description,
     dueDate: row.due_date, priority: row.priority,
     completed: row.completed === 1, createdAt: row.created_at, updatedAt: row.updated_at,
+    visible: row.visible !== 0,
+    hiddenAt: row.hidden_at ?? null,
+    retentionExpiresAt: row.retention_expires_at ?? null,
     source: row.instance_origin && row.account_id !== null && row.course_id !== null &&
       row.assignment_id !== null && row.last_synced_at
       ? { provider: "canvas", instanceUrl: row.instance_origin,
@@ -75,15 +83,13 @@ export class LocalStore {
   }
 
   private migrate(): void {
-    const row = this.db.prepare("PRAGMA user_version").get() as { user_version: number };
-    if (row.user_version > 2) {
-      throw new Error("Database created by a newer application; refusing to downgrade");
-    }
-    if (row.user_version === 2) return;
+    const version = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
+    if (version > 3) throw new Error("Database created by a newer application; refusing to downgrade");
+    if (version === 3) return;
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      if (row.user_version === 0) {
+      if (version === 0) {
         this.db.exec(`
           CREATE TABLE IF NOT EXISTS tasks (
             id TEXT PRIMARY KEY,
@@ -108,23 +114,50 @@ export class LocalStore {
           CREATE INDEX IF NOT EXISTS idx_focus_sessions_ended_at ON focus_sessions (ended_at);
         `);
       }
-      this.db.exec(`
-        CREATE TABLE canvas_assignment_links (
-          instance_origin TEXT NOT NULL,
-          account_id INTEGER NOT NULL,
-          course_id INTEGER NOT NULL,
-          assignment_id INTEGER NOT NULL,
-          task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
-          remote_title TEXT NOT NULL,
-          remote_due_date TEXT,
-          source_url TEXT,
-          last_synced_at TEXT NOT NULL,
-          missing INTEGER NOT NULL DEFAULT 0 CHECK (missing IN (0,1)),
-          PRIMARY KEY (instance_origin, account_id, course_id, assignment_id)
-        );
-        CREATE INDEX idx_canvas_assignment_links_task ON canvas_assignment_links (task_id);
-        PRAGMA user_version = 2;
-      `);
+      if (version <= 1) {
+        this.db.exec(`
+          CREATE TABLE canvas_assignment_links (
+            instance_origin TEXT NOT NULL,
+            account_id INTEGER NOT NULL,
+            course_id INTEGER NOT NULL,
+            assignment_id INTEGER NOT NULL,
+            task_id TEXT NOT NULL UNIQUE REFERENCES tasks(id) ON DELETE CASCADE,
+            remote_title TEXT NOT NULL,
+            remote_due_date TEXT,
+            source_url TEXT,
+            last_synced_at TEXT NOT NULL,
+            missing INTEGER NOT NULL DEFAULT 0 CHECK (missing IN (0,1)),
+            PRIMARY KEY (instance_origin, account_id, course_id, assignment_id)
+          );
+          CREATE INDEX idx_canvas_assignment_links_task ON canvas_assignment_links (task_id);
+        `);
+      }
+      if (version <= 2) {
+        this.db.exec(`
+          ALTER TABLE canvas_assignment_links ADD COLUMN visible INTEGER NOT NULL DEFAULT 1 CHECK (visible IN (0,1));
+          ALTER TABLE canvas_assignment_links ADD COLUMN hidden_at TEXT;
+          ALTER TABLE canvas_assignment_links ADD COLUMN retention_expires_at TEXT;
+          ALTER TABLE canvas_assignment_links ADD COLUMN override_title INTEGER NOT NULL DEFAULT 0 CHECK (override_title IN (0,1));
+          ALTER TABLE canvas_assignment_links ADD COLUMN override_due INTEGER NOT NULL DEFAULT 0 CHECK (override_due IN (0,1));
+          CREATE INDEX idx_canvas_expiry ON canvas_assignment_links (visible, retention_expires_at);
+          CREATE TABLE canvas_course_settings (
+            instance_origin TEXT NOT NULL,
+            account_id INTEGER NOT NULL,
+            course_id INTEGER NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0,1)),
+            PRIMARY KEY (instance_origin, account_id, course_id)
+          );
+          CREATE TABLE canvas_sync_state (
+            instance_origin TEXT NOT NULL,
+            account_id INTEGER NOT NULL,
+            last_attempt TEXT,
+            last_success TEXT,
+            last_error TEXT,
+            PRIMARY KEY (instance_origin, account_id)
+          );
+        `);
+      }
+      this.db.exec("PRAGMA user_version = 3");
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -137,7 +170,8 @@ export class LocalStore {
   }
 
   private readonly taskSelect = `SELECT t.*, l.instance_origin, l.account_id, l.course_id,
-    l.assignment_id, l.source_url, l.last_synced_at
+    l.assignment_id, l.source_url, l.last_synced_at,
+    l.visible, l.hidden_at, l.retention_expires_at, l.override_title, l.override_due
     FROM tasks t LEFT JOIN canvas_assignment_links l ON l.task_id = t.id`;
 
   listTasks(): LocalTask[] {
@@ -178,12 +212,95 @@ export class LocalStore {
       (patch.completed ?? current.completed) ? 1 : 0,
       new Date().toISOString(), patch.id,
     );
+    // Explicit field-ownership flags survive a user editing a field back to
+    // its previous Canvas value; equality with a remote snapshot is insufficient.
+    if (current.source && (patch.title !== undefined || patch.dueDate !== undefined)) {
+      this.db.prepare(`UPDATE canvas_assignment_links
+        SET override_title = CASE WHEN ? THEN 1 ELSE override_title END,
+            override_due = CASE WHEN ? THEN 1 ELSE override_due END
+        WHERE task_id = ?`).run(patch.title !== undefined ? 1 : 0,
+          patch.dueDate !== undefined ? 1 : 0, patch.id);
+    }
     return this.findTask(patch.id)!;
   }
 
+  /** Delete personal tasks; a linked Canvas task is hidden for six months instead. */
   removeTask(idInput: unknown): boolean {
     const id = parseTaskId(idInput);
+    const linked = this.db.prepare("SELECT task_id FROM canvas_assignment_links WHERE task_id=?").get(id);
+    if (linked) return this.setCanvasTaskVisibility(id, false);
     return this.db.prepare("DELETE FROM tasks WHERE id = ?").run(id).changes === 1;
+  }
+
+  /** Six calendar months, clamped to the last day of the destination month. */
+  static retentionExpiry(when: Date): string {
+    const year = when.getUTCFullYear();
+    const month = when.getUTCMonth() + 6;
+    const maxDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    const clampedDay = Math.min(when.getUTCDate(), maxDay);
+    return new Date(Date.UTC(year, month, clampedDay,
+      when.getUTCHours(), when.getUTCMinutes(), when.getUTCSeconds(),
+      when.getUTCMilliseconds())).toISOString();
+  }
+
+  setCanvasTaskVisibility(idInput: unknown, visible: boolean, now = new Date()): boolean {
+    const id = parseTaskId(idInput);
+    if (typeof visible !== "boolean") throw new Error("Task visibility must be boolean");
+    const existing = this.db.prepare("SELECT visible FROM canvas_assignment_links WHERE task_id=?")
+      .get(id) as { visible: number } | undefined;
+    if (!existing) throw new Error("Only Canvas tasks can be hidden or restored");
+    if ((existing.visible === 1) === visible) return true;
+    return this.db.prepare(`UPDATE canvas_assignment_links
+      SET visible=?, hidden_at=?, retention_expires_at=?
+      WHERE task_id=?`).run(visible ? 1 : 0,
+      visible ? null : now.toISOString(),
+      visible ? null : LocalStore.retentionExpiry(now), id).changes === 1;
+  }
+
+  /** Expired hidden records only. Visible personal tasks are never purged. */
+  purgeExpiredHiddenCanvasTasks(now = new Date()): number {
+    const deleted = this.db.prepare(`DELETE FROM tasks WHERE id IN (
+      SELECT task_id FROM canvas_assignment_links
+      WHERE visible=0 AND retention_expires_at IS NOT NULL AND retention_expires_at <= ?
+    )`).run(now.toISOString()).changes;
+    return Number(deleted);
+  }
+
+  listCanvasCourseSettings(origin: string, accountId: number): { courseId: number; enabled: boolean }[] {
+    this.validateCanvasIdentity(origin, accountId, 1);
+    const rows = this.db.prepare(`SELECT course_id, enabled FROM canvas_course_settings
+      WHERE instance_origin=? AND account_id=?`).all(origin, accountId) as unknown as
+      { course_id: number; enabled: number }[];
+    return rows.map((row) => ({ courseId: row.course_id, enabled: row.enabled === 1 }));
+  }
+
+  setCanvasCourseEnabled(origin: string, accountId: number, courseId: number, enabled: boolean): void {
+    this.validateCanvasIdentity(origin, accountId, courseId);
+    if (typeof enabled !== "boolean") throw new Error("Course sync state must be boolean");
+    this.db.prepare(`INSERT INTO canvas_course_settings(instance_origin,account_id,course_id,enabled)
+      VALUES(?,?,?,?) ON CONFLICT(instance_origin,account_id,course_id)
+      DO UPDATE SET enabled=excluded.enabled`).run(origin, accountId, courseId, enabled ? 1 : 0);
+  }
+
+  canvasSyncState(origin: string, accountId: number): {
+    lastAttempt: string | null; lastSuccess: string | null; lastError: string | null;
+  } {
+    this.validateCanvasIdentity(origin, accountId, 1);
+    const row = this.db.prepare(`SELECT last_attempt, last_success, last_error
+      FROM canvas_sync_state WHERE instance_origin=? AND account_id=?`)
+      .get(origin, accountId) as {last_attempt: string|null; last_success: string|null;last_error: string|null}|undefined;
+    return {lastAttempt: row?.last_attempt ?? null, lastSuccess: row?.last_success ?? null,
+      lastError: row?.last_error ?? null};
+  }
+
+  updateCanvasSyncState(origin: string, accountId: number, success: boolean, error: string | null, now = new Date()): void {
+    this.validateCanvasIdentity(origin, accountId, 1);
+    this.db.prepare(`INSERT INTO canvas_sync_state(instance_origin,account_id,last_attempt,last_success,last_error)
+      VALUES(?,?,?,?,?) ON CONFLICT(instance_origin,account_id) DO UPDATE SET
+      last_attempt=excluded.last_attempt,
+      last_success=CASE WHEN excluded.last_success IS NULL THEN canvas_sync_state.last_success ELSE excluded.last_success END,
+      last_error=excluded.last_error`).run(origin, accountId, now.toISOString(),
+      success ? now.toISOString() : null, error?.slice(0, 160) ?? null);
   }
 
   /** Convert a Canvas instant into the user's local calendar day. */
@@ -278,8 +395,10 @@ export class LocalStore {
         `).get(origin, accountId, courseId, assignmentId) as unknown as {
           task_id: string; remote_title: string; remote_due_date: string | null;
           task_title: string; task_due_date: string | null;
+          visible: number; override_title: number; override_due: number;
         } | undefined;
         if (!old) continue;
+        if (old.visible === 0) continue; // Never unhide or mutate hidden records.
         const remote = byId.get(assignmentId);
         if (!remote) {
           this.db.prepare(`
@@ -292,8 +411,8 @@ export class LocalStore {
 
         const remoteTitle = remote.name.trim().slice(0, 120) || `Canvas 作业 ${remote.id}`;
         const remoteDue = this.assignmentDate(remote.dueAt);
-        const preserveTitle = old.task_title !== old.remote_title;
-        const preserveDue = old.task_due_date !== old.remote_due_date;
+        const preserveTitle = old.override_title === 1 || old.task_title !== old.remote_title;
+        const preserveDue = old.override_due === 1 || old.task_due_date !== old.remote_due_date;
         const title = preserveTitle ? old.task_title : remoteTitle;
         const dueDate = preserveDue ? old.task_due_date : remoteDue;
         if (preserveTitle || preserveDue) result.preserved++;
@@ -315,6 +434,19 @@ export class LocalStore {
       throw error;
     }
     return result;
+  }
+
+  /** Upserts all discovered assignments; hidden ones remain untouched and deduplicated. */
+  reconcileCanvasCourse(origin: string, accountId: number, courseId: number,
+    assignments: CanvasAssignment[]): { created: number; changed: number; missing: number; preserved: number } {
+    this.validateCanvasIdentity(origin, accountId, courseId);
+    let created = 0;
+    for (const assignment of assignments) {
+      if (assignment.courseId !== courseId) continue;
+      if (this.importCanvasAssignment(origin, accountId, assignment).created) created++;
+    }
+    const result = this.syncImportedCanvasAssignments(origin, accountId, courseId, assignments);
+    return { created, changed: result.changed, missing: result.missing, preserved: result.preserved };
   }
 
   listFocusSessions(): FocusSession[] {
