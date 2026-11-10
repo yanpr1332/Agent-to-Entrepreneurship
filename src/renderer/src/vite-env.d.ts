@@ -19,7 +19,7 @@ import type {
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult,
+  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage,
 } from "../../shared/knowledge-model";
 
 import type {
@@ -109,6 +109,7 @@ declare global {
       knowledge: {
         documents: () => Promise<KnowledgeDocument[]>;
         get: (id: string) => Promise<KnowledgeSnapshot>;
+        passage: (id: string, ordinal: number) => Promise<KnowledgePassage>;
         importFile: () => Promise<{document:KnowledgeDocument;changed:boolean}|null>;
         delete: (id: string) => Promise<boolean>;
         search: (query: string) => Promise<KnowledgeSearchHit[]>;

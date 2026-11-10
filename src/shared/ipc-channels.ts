@@ -4,6 +4,7 @@ export const IPC_CHANNELS = {
   appGetVersion: "app:get-version",
   knowledgeDocuments: "knowledge:documents",
   knowledgeGet: "knowledge:get",
+  knowledgePassage: "knowledge:passage",
   knowledgeImport: "knowledge:import",
   knowledgeDelete: "knowledge:delete",
   knowledgeSearch: "knowledge:search",

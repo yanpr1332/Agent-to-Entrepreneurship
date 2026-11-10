@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewProgress, ReviewRating,
+  KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage,
 } from "../../shared/knowledge-model";
 
 function detail(error:unknown):string{
@@ -13,6 +13,7 @@ const day=()=>new Date().toISOString().slice(0,10);
 export default function KnowledgeBase(){
   const [documents,setDocuments]=useState<KnowledgeDocument[]>([]);
   const [selected,setSelected]=useState<KnowledgeSnapshot|null>(null);
+  const [passage,setPassage]=useState<KnowledgePassage|null>(null);
   const [query,setQuery]=useState("");
   const [results,setResults]=useState<KnowledgeSearchHit[]>([]);
   const [cards,setCards]=useState<KnowledgeReviewCard[]>([]);
@@ -53,15 +54,18 @@ export default function KnowledgeBase(){
     finally{setBusy(false);}
   }
 
-  function chooseSource(doc:KnowledgeSnapshot,ordinal:number):void{
-    setSelected(doc);setSourceOrdinal(ordinal);
+  function chooseSource(doc:KnowledgeSnapshot,part:KnowledgePassage):void{
+    setSelected(doc);setPassage(part);setSourceOrdinal(part.ordinal);
     setQuestion("");setAnswer("");
   }
 
   async function openDocument(id:string,ordinal:number|null=null):Promise<void>{
     await perform(async()=>{
-      const doc=await window.desktop.knowledge.get(id);
-      chooseSource(doc,ordinal??0);
+      const [doc,part]=await Promise.all([
+        window.desktop.knowledge.get(id),
+        window.desktop.knowledge.passage(id,ordinal??0),
+      ]);
+      chooseSource(doc,part);
     });
   }
 
@@ -69,8 +73,11 @@ export default function KnowledgeBase(){
     await perform(async()=>{
       const imported=await window.desktop.knowledge.importFile();
       if(!imported)return; // Native file picker cancelled.
-      const doc=await window.desktop.knowledge.get(imported.document.id);
-      chooseSource(doc,0);
+      const [doc,part]=await Promise.all([
+        window.desktop.knowledge.get(imported.document.id),
+        window.desktop.knowledge.passage(imported.document.id,0),
+      ]);
+      chooseSource(doc,part);
       await reload();
       setResults([]);
       setNotice(imported.changed
@@ -109,7 +116,7 @@ export default function KnowledgeBase(){
     if(!window.confirm(`删除本地知识库中的「${selected.title}」及对应复习卡？原始磁盘文件不会删除。`))return;
     await perform(async()=>{
       await window.desktop.knowledge.delete(selected.id);
-      setSelected(null);setSourceOrdinal(null);setResults([]);
+      setSelected(null);setPassage(null);setSourceOrdinal(null);setResults([]);
       await reload();setNotice("索引和相关复习卡已删除；原始文件仍在原路径。");
     });
   }
@@ -139,8 +146,7 @@ export default function KnowledgeBase(){
   }
 
   const dueCards=cards.filter(card=>card.nextDue<=day());
-  const currentSource=selected && sourceOrdinal!==null ?
-    Array.from(selected.text).slice(sourceOrdinal*1000,sourceOrdinal*1000+1100).join("") : null;
+  const currentSource=passage?.body??null;
 
   return <section className="kb-page">
     <div className="page-heading">
@@ -149,9 +155,10 @@ export default function KnowledgeBase(){
       <span className="count-chip">{documents.length} 份本机资料</span>
     </div>
     <div className="connector-warning" role="note">
-      <strong>本地优先：</strong>当前只支持用户选择的 UTF-8 Markdown/TXT（单文件最多 2 MiB）。
-      导入会在本机数据库保存原文快照并建立 FTS5 索引；不安装 Obsidian、不上传云端、
-      不调用 AI，也不扫描未授权的文件夹。PDF/OCR/录音转写与知识图谱尚未实现。
+      <strong>本地优先：</strong>支持用户明确选择的 UTF-8 Markdown/TXT（最多 2 MiB）
+      与具有可选择文字的 PDF（文件最多 12 MiB、120 页）。
+      PDF 仅提取本机文本并记录真实页码，不执行文档脚本、不上传云端、不调用 AI；
+      扫描图片 PDF 的 OCR、Office、录音转写及知识图谱尚未实现。
     </div>
     {error&&<div className="error-banner" role="alert"><span>{error}</span>
       <button onClick={()=>setError("")}>关闭</button></div>}
@@ -188,7 +195,7 @@ export default function KnowledgeBase(){
         <ul className="kb-result-list">{results.map(hit=><li
           key={`${hit.documentId}:${hit.ordinal}`}>
           <button className="kb-source-link" disabled={busy}
-            onClick={()=>void openHit(hit)}>{hit.documentTitle} · 原文片段 #{hit.ordinal+1} · v{hit.documentRevision}</button>
+            onClick={()=>void openHit(hit)}>{hit.documentTitle} · {hit.pageNumber?`PDF 第 ${hit.pageNumber} 页 · `:""}原文片段 #{hit.ordinal+1} · v{hit.documentRevision}</button>
           <p>{hit.excerpt}</p>
         </li>)}</ul>
       </section>}
@@ -199,7 +206,8 @@ export default function KnowledgeBase(){
           <ul className="kb-document-list">{documents.map(doc=><li key={doc.id}>
             <button className={selected?.id===doc.id?"kb-doc-active":"kb-doc"}
               onClick={()=>void openDocument(doc.id)} disabled={busy}>{doc.title}</button>
-            <small>{doc.format==="markdown"?"Markdown":"TXT"} · {Math.ceil(doc.byteLength/1024)} KiB · 第 {doc.revision} 版 · {doc.chunkCount} 段</small>
+            <small>{doc.format==="pdf"?"PDF":doc.format==="markdown"?"Markdown":"TXT"}
+              {doc.pageCount?` · ${doc.pageCount} 页`:""} · {Math.ceil(doc.byteLength/1024)} KiB · 第 {doc.revision} 版 · {doc.chunkCount} 段</small>
           </li>)}</ul>:
           <p className="empty-state">还没有资料。点击「选择并导入资料」开始建立私有本地知识库。</p>}
           <p className="privacy-note">再次导入同一路径会按内容哈希更新索引。导入不会编辑或删除原始文件。</p>
@@ -211,6 +219,9 @@ export default function KnowledgeBase(){
               <button className="secondary-button" disabled={busy}
                 onClick={()=>void deleteDocument()}>从知识库移除</button></div>
             <p className="privacy-note">本机来源：{selected.sourcePath} · 文本快照版本 {selected.revision}</p>
+            {passage?.pageNumber&&<p className="kb-page-citation">
+              当前定位：PDF 第 {passage.pageNumber} 页 · 片段 #{passage.ordinal+1} · 第 {passage.revision} 版
+            </p>}
             <div className="kb-source-preview">{currentSource??selected.text}</div>
             <p className="privacy-note">上方展示选中的文档片段；不会渲染不可信 Markdown HTML。</p>
             <form className="kb-card-form" onSubmit={event=>void addCard(event)}>
@@ -245,7 +256,9 @@ export default function KnowledgeBase(){
             onClick={()=>setRevealed(card.id)}>显示参考答案与原文证据</button>:
           <div className="kb-answer">
             <strong>你编写的答案</strong><p>{card.answer}</p>
-            <strong>原始证据（导入时保存）</strong><blockquote>{card.evidence}</blockquote>
+            <strong>原始证据（导入时保存）
+              {card.sourcePage?` · PDF 第 ${card.sourcePage} 页`:""}
+            </strong><blockquote>{card.evidence}</blockquote>
             <p className="privacy-note">请根据自己的掌握程度评分。一次评分对应一个 UTC 日期，不会因为重复点击重复累计。</p>
             <div className="button-row kb-rating">
               <button disabled={busy} className="secondary-button" onClick={()=>void grade(card,"again")}>重新学</button>
