@@ -229,6 +229,12 @@ export default function App() {
     void refresh().catch(() => {});
   }), [refresh]);
 
+  // Accepted mail candidates create ordinary personal tasks in the same local
+  // SQLite authority and must refresh the calendar immediately.
+  useEffect(() => window.desktop.mail.onSyncUpdated(() => {
+    void refresh().catch(() => {});
+  }), [refresh]);
+
   function resetTaskForm(): void {
     setEditingId(null);
     setTitle("");

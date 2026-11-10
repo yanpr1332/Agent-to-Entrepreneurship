@@ -31,6 +31,8 @@ export const IPC_CHANNELS = {
   mailPrepareSend: "mail:prepare-send",
   mailConfirmSend: "mail:confirm-send",
   mailSyncUpdated: "mail:sync-updated",
+  mailCandidates: "mail:candidates",
+  mailReviewCandidate: "mail:review-candidate",
   cloudStatus: "cloud:status",
   cloudConfigure: "cloud:configure",
   cloudLogin: "cloud:login",

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { MailRecord, MailSendPreview, MailSyncState } from "../../shared/mail-model";
+import type { MailCandidate, MailCandidateAction } from "../../shared/mail-candidates";
 
 const initial: MailSyncState = {
   connected:false,email:null,running:false,lastAttempt:null,
@@ -16,6 +17,8 @@ function date(value:string|null):string {
 export default function CampusMail() {
   const [status,setStatus] = useState<MailSyncState>(initial);
   const [messages,setMessages] = useState<MailRecord[]>([]);
+  const [candidates,setCandidates] = useState<MailCandidate[]>([]);
+  const [showIgnored,setShowIgnored] = useState(false);
   const [email,setEmail] = useState("");
   const [username,setUsername] = useState("");
   const [password,setPassword] = useState("");
@@ -30,11 +33,12 @@ export default function CampusMail() {
   useEffect(() => {
     let active=true;
     const update=() => {
-      void Promise.all([window.desktop.mail.status(),window.desktop.mail.list()])
-        .then(([next,list]) => {
+      void Promise.all([window.desktop.mail.status(),window.desktop.mail.list(),window.desktop.mail.candidates()])
+        .then(([next,list,suggestions]) => {
           if (!active) return;
           setStatus(next);
           setMessages(list);
+          setCandidates(suggestions);
         }).catch(reason => { if (active) setError(message(reason)); });
     };
     const unsubscribe=window.desktop.mail.onSyncUpdated(update);
@@ -49,8 +53,11 @@ export default function CampusMail() {
     try {
       const connected=await window.desktop.mail.connect({email,username,password});
       setStatus(connected);
-      setMessages(await window.desktop.mail.list());
-      setNotice("已连接交大邮箱并读取收件箱邮件头。今后运行期间将定时自动同步。");
+      const [headers,suggestions]=await Promise.all([
+        window.desktop.mail.list(),window.desktop.mail.candidates(),
+      ]);
+      setMessages(headers);setCandidates(suggestions);
+      setNotice("邮箱已连接。后续自动同步邮件头并整理任务候选；不会未经确认创建任务。");
     } catch (reason) {
       setError(message(reason));
     } finally {
@@ -65,7 +72,10 @@ export default function CampusMail() {
     try {
       const result=await window.desktop.mail.syncNow();
       setStatus(result);
-      setMessages(await window.desktop.mail.list());
+      const [headers,suggestions]=await Promise.all([
+        window.desktop.mail.list(),window.desktop.mail.candidates(),
+      ]);
+      setMessages(headers);setCandidates(suggestions);
       setNotice(result.lastError || `收件箱同步完成，目前有 ${result.messageCount} 条本地邮件头记录。`);
     } catch(reason) {setError(message(reason));}
     finally {setBusy(false);}
@@ -76,9 +86,26 @@ export default function CampusMail() {
     setBusy(true);setError("");setPreview(null);
     try {
       await window.desktop.mail.disconnect();
-      setStatus(initial);setMessages([]);setEmail("");setUsername("");setPassword("");
+      setStatus(initial);setMessages([]);setCandidates([]);setEmail("");setUsername("");setPassword("");
       setNotice("已删除本机邮箱凭据和邮件头缓存；学校邮箱中的邮件未发生改变。");
     } catch(reason){setError(message(reason));}
+    finally{setBusy(false);}
+  }
+
+  async function reviewCandidate(candidate:MailCandidate,action:MailCandidateAction):Promise<void>{
+    if(busy)return;
+    setBusy(true);setError("");setNotice("");
+    try {
+      const result=await window.desktop.mail.reviewCandidate({
+        uid:candidate.uid,uidValidity:candidate.uidValidity,action,
+      });
+      setCandidates(await window.desktop.mail.candidates());
+      if(action==="accept") setNotice(result.created
+        ? "已创建本地个人任务。邮件发送时间不等于截止日期，请在日历中补充真实截止时间。"
+        : "此邮件候选此前已创建任务，未重复创建。");
+      else if(action==="ignore") setNotice("已忽略此候选，后续同步不会反复提示。");
+      else setNotice("候选已恢复，可重新考虑是否创建任务。");
+    }catch(reason){setError(message(reason));}
     finally{setBusy(false);}
   }
 
@@ -119,7 +146,8 @@ export default function CampusMail() {
       <div className="connector-warning" role="note">
         <strong>隐私与发送控制</strong>
         收件箱每 10 分钟自动同步最近邮件的发件人、主题与日期，保存在此设备。
-        当前不下载正文或附件，也不自动把邮件转成任务。密码使用系统安全加密保存；
+        当前不下载正文或附件，只根据邮件主题自动整理可能的任务候选（不等于确认存在截止日期）。
+        只有点击「创建个人任务」才写入日历；密码使用系统安全加密保存；
         发送邮件必须先预览完整内容，再由你手动点击「确认发送」。
         请勿在聊天或 GitHub 中提交邮箱密码。
       </div>
@@ -174,6 +202,43 @@ export default function CampusMail() {
           <p className="privacy-note">仅 INBOX，最多保留 200 条邮件头；不自动下载正文、附件、其他文件夹，也不会标记服务器邮件已读。</p>
         </section>
       </div>
+      {status.connected && <section className="panel mail-candidates">
+        <div className="panel-heading"><div>
+          <div className="eyebrow">REVIEWABLE TASK SUGGESTIONS</div>
+          <h2>邮件自动整理 · 待办候选</h2>
+        </div><span className="muted-tag">{candidates.filter(item=>item.decision==="pending").length} 条待处理</span></div>
+        <p className="privacy-note">系统自动扫描已同步的邮件主题生成候选；不会读取正文、推断截止日期或自动创建任务。候选识别可能有误，创建后可在日历自行编辑。</p>
+        <label className="mail-candidate-toggle">
+          <input type="checkbox" checked={showIgnored} onChange={event=>setShowIgnored(event.target.checked)} />
+          显示已忽略的候选
+        </label>
+        {candidates.filter(item=>showIgnored || item.decision!=="ignored").length ? (
+          <ul className="mail-list mail-review-list">{candidates.filter(item=>
+            showIgnored || item.decision!=="ignored").map(item=>(
+            <li key={`${item.account}:${item.uidValidity}:${item.uid}`}>
+              <div className="mail-candidate-title">
+                <strong>{item.subject}</strong>
+                <span className="muted-tag">{item.kind==="coursework"?"课程作业":item.kind==="deadline"?"可能的截止事项":"会议或报名"}</span>
+              </div>
+              <div className="mail-meta"><span>发件人：{item.from}</span>
+                <span>邮件时间：{date(item.date)}（不是截止时间）</span></div>
+              <div className="button-row mail-review-actions">
+                {item.decision==="pending" && <>
+                  <button className="primary-button" disabled={busy}
+                    onClick={()=>void reviewCandidate(item,"accept")}>创建个人任务</button>
+                  <button className="secondary-button" disabled={busy}
+                    onClick={()=>void reviewCandidate(item,"ignore")}>忽略此候选</button>
+                </>}
+                {item.decision==="ignored" && <button className="secondary-button" disabled={busy}
+                  onClick={()=>void reviewCandidate(item,"reopen")}>撤销忽略</button>}
+                {item.decision==="accepted" && <span className="mail-reviewed">
+                  已创建个人任务 · 后续同步不会重复创建
+                </span>}
+              </div>
+            </li>
+          ))}</ul>
+        ) : <p className="empty-state">暂无待处理的邮件任务候选。</p>}
+      </section>}
       {status.connected && <section className="panel mail-compose">
         <div className="eyebrow">CONFIRMED SEND ONLY</div><h2>撰写并发送纯文本邮件</h2>
         {preview ? (
