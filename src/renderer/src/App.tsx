@@ -6,6 +6,8 @@ import CloudWorkspace from "./CloudWorkspace";
 import CampusMail from "./CampusMail";
 import KnowledgeBase from "./KnowledgeBase";
 import StudyPlanner from "./StudyPlanner";
+import FixedCalendarPanel from "./FixedCalendarPanel";
+import type { FixedEvent } from "../../shared/fixed-calendar-model";
 import AIWorkspace from "./AIWorkspace";
 import { minuteString, type PlanBlock } from "../../shared/planning-model";
 
@@ -191,6 +193,7 @@ export default function App() {
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [filter, setFilter] = useState<TaskFilter>("day");
   const [plannedBlocks,setPlannedBlocks]=useState<PlanBlock[]>([]);
+  const [fixedEvents,setFixedEvents]=useState<FixedEvent[]>([]);
   const [showHidden, setShowHidden] = useState(false);
   const [retentionNotice, setRetentionNotice] = useState("");
   const [dark, setDark] = useState(() => window.localStorage.getItem("ate.theme") === "dark");
@@ -228,6 +231,11 @@ export default function App() {
     setSessions(localSessions);
     setSummary(localSummary);
   }, []);
+
+  const refreshCalendar=useCallback(async():Promise<void>=>{
+    setFixedEvents(await window.desktop.calendar.list());
+  },[]);
+  useEffect(()=>{void refreshCalendar().catch(()=>{});},[refreshCalendar,page]);
 
   const refreshPlanning=useCallback(async():Promise<void>=>{
     setPlannedBlocks(await window.desktop.planning.blocks());
@@ -417,7 +425,7 @@ export default function App() {
                     <div className="calendar-header"><h2>{month.getFullYear()} 年 {month.getMonth() + 1} 月</h2><div className="button-row"><button className="icon-button" aria-label="上个月" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>‹</button><button className="small-button" onClick={() => { setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); setSelectedDate(today); setFilter("day"); }}>今天</button><button className="icon-button" aria-label="下个月" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>›</button></div></div>
                     <div className="weekday-row">{["一", "二", "三", "四", "五", "六", "日"].map((day) => <span key={day}>{day}</span>)}</div>
                     <div className="calendar-grid">{calendar.map((day) => {
-                      const hasTasks = shownTasks.some((task) => task.dueDate === day.key) || plannedBlocks.some(block=>block.day===day.key);
+                      const hasTasks = shownTasks.some((task) => task.dueDate === day.key) || plannedBlocks.some(block=>block.day===day.key) || fixedEvents.some(event=>event.day===day.key);
                       return <button key={day.key} className={["calendar-day", day.currentMonth ? "" : "muted-day", day.key === selectedDate ? "selected-day" : "", day.key === today ? "today-day" : ""].join(" ")}
                         onClick={() => { setSelectedDate(day.key); setFilter("day"); setShowHidden(false); if (!day.currentMonth) { const [y, m] = day.key.split("-").map(Number); setMonth(new Date(y, m - 1, 1)); } }} aria-label={day.key}>
                         <span>{day.day}</span>{hasTasks && <i className="day-dot" />}
@@ -436,6 +444,7 @@ export default function App() {
                     </ul>:<p className="empty-state">这一天尚无已确认的规划时间。可以在「学习规划」生成建议。</p>}
                     <p className="privacy-note">这些是单独确认的学习时间，不等于任务截止时间；规划不会修改原任务。</p>
                   </section>
+                  <FixedCalendarPanel day={selectedDate} events={fixedEvents} onChanged={refreshCalendar}/>
                   <section className="panel task-list-panel"><div className="panel-heading"><div><div className="eyebrow">MY TASKS</div><h2>{showHidden ? "隐藏的 Canvas 任务" : filter === "day" ? formatDueDate(selectedDate) : filter === "undated" ? "未安排日期" : "全部任务"}</h2></div><span className="muted-tag">{visibleTasks.length} 条</span></div>
                     <div className="filter-tabs">
                       <button className={!showHidden && filter === "day" ? "chip selected" : "chip"} onClick={() => { setShowHidden(false); setFilter("day"); }}>选中日期</button>
