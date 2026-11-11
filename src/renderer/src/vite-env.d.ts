@@ -26,7 +26,7 @@ import type {
   KnowledgeGraphSnapshot, GraphNode, GraphEdge, GraphNodeInput, GraphNodeEdit, GraphEdgeInput,
 } from "../../shared/knowledge-graph-model";
 
-import type { FixedEvent,CreateFixedEventInput,ICSPreview,ICSImportResult,ICSExportResult } from "../../shared/fixed-calendar-model";
+import type { FixedEvent,CreateFixedEventInput,EditFixedEventInput,ICSPreview,ICSImportResult,ICSExportResult } from "../../shared/fixed-calendar-model";
 import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
 } from "../../shared/planning-model";
@@ -107,6 +107,8 @@ declare global {
         list:()=>Promise<FixedEvent[]>;
         create:(input:CreateFixedEventInput)=>Promise<FixedEvent[]>;
         remove:(id:string)=>Promise<boolean>;
+        edit:(input:EditFixedEventInput)=>Promise<FixedEvent>;
+        removeSeries:(id:string)=>Promise<number>;
         previewICS:()=>Promise<ICSPreview|null>;
         confirmICS:(id:string)=>Promise<ICSImportResult>;
         cancelICS:(id:string)=>Promise<{canceled:true}>;

@@ -26,7 +26,7 @@ import type {
   KnowledgeGraphSnapshot, GraphNode, GraphEdge, GraphNodeInput, GraphNodeEdit, GraphEdgeInput,
 } from "../shared/knowledge-graph-model";
 
-import type { FixedEvent,CreateFixedEventInput,ICSPreview,ICSImportResult,ICSExportResult } from "../shared/fixed-calendar-model";
+import type { FixedEvent,CreateFixedEventInput,EditFixedEventInput,ICSPreview,ICSImportResult,ICSExportResult } from "../shared/fixed-calendar-model";
 import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
 } from "../shared/planning-model";
@@ -141,6 +141,10 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarCreate,input) as Promise<FixedEvent[]>,
     remove:(id:string)=>
       ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarDelete,id) as Promise<boolean>,
+    edit:(input:EditFixedEventInput)=>
+      ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarEdit,input) as Promise<FixedEvent>,
+    removeSeries:(id:string)=>
+      ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarDeleteSeries,id) as Promise<number>,
     previewICS:()=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarPreviewICS) as Promise<ICSPreview|null>,
     confirmICS:(id:string)=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarConfirmICS,id) as Promise<ICSImportResult>,
     cancelICS:(id:string)=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarCancelICS,id) as Promise<{canceled:true}>,

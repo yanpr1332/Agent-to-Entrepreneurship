@@ -55,7 +55,7 @@ export async function createLocalBackup(
 export async function backupBeforeMigration(
   userData:string, filename:string, expectedVersion:number,
 ):Promise<string|null>{
-  if(!["ate-local.sqlite","ate-knowledge.sqlite"].includes(filename))
+  if(!["ate-local.sqlite","ate-knowledge.sqlite","ate-fixed-calendar.sqlite"].includes(filename))
     throw Error("Unapproved migration backup source");
   const sourcePath=join(userData,filename);
   if(!existsSync(sourcePath))return null;

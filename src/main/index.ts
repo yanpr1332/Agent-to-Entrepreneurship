@@ -152,6 +152,14 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return fixedCalendar().delete(id);
   });
+  ipcMain.handle(IPC_CHANNELS.fixedCalendarEdit,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return fixedCalendar().edit(input);
+  });
+  ipcMain.handle(IPC_CHANNELS.fixedCalendarDeleteSeries,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return fixedCalendar().deleteSeries(id);
+  });
   ipcMain.handle(IPC_CHANNELS.fixedCalendarPreviewICS,async event=>{
     requireTrustedSender(event);
     const owner=BrowserWindow.fromWebContents(event.sender);
@@ -616,6 +624,7 @@ app.whenReady().then(async () => {
     // Back up older local schemas BEFORE the constructor runs migrations.
     await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",4);
     await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",3);
+    await backupBeforeMigration(app.getPath("userData"),"ate-fixed-calendar.sqlite",2);
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
     knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "ate-knowledge.sqlite"));
     fixedCalendarStore = new FixedCalendarStore(
