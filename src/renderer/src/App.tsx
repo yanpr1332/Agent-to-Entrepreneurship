@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { FocusSession, FocusSummary, LocalTask, TaskPriority } from "../../shared/local-model";
 import { formatDueDate, localDateKey, monthCells } from "./calendar";
+import CalendarAgenda from "./CalendarAgenda";
+import { calendarWeekDays,shiftCalendarView,type CalendarView } from "./calendar-agenda";
 import CanvasConnector from "./CanvasConnector";
 import CloudWorkspace from "./CloudWorkspace";
 import CampusMail from "./CampusMail";
@@ -190,7 +192,7 @@ export default function App() {
   const [dueDate, setDueDate] = useState(today);
   const [priority, setPriority] = useState<TaskPriority>("normal");
   const [selectedDate, setSelectedDate] = useState(today);
-  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [calendarView, setCalendarView] = useState<CalendarView>("month");
   const [filter, setFilter] = useState<TaskFilter>("day");
   const [plannedBlocks,setPlannedBlocks]=useState<PlanBlock[]>([]);
   const [fixedEvents,setFixedEvents]=useState<CalendarDisplayEvent[]>([]);
@@ -355,7 +357,21 @@ export default function App() {
     filter === "all" || (filter === "day" && task.dueDate === selectedDate) ||
     (filter === "undated" && task.dueDate === null),
   );
-  const calendar = monthCells(month.getFullYear(), month.getMonth());
+  const [selectedYear,selectedMonth]=selectedDate.split("-").map(Number);
+  const calendar=monthCells(selectedYear,selectedMonth-1);
+  const viewHeading=calendarView==="month" ? `${selectedYear} 年 ${selectedMonth} 月` :
+    calendarView==="day" ? formatDueDate(selectedDate) :
+    (()=>{const week=calendarWeekDays(selectedDate);
+      return `${week[0]} — ${week[6]}`;})();
+  const prevLabel=calendarView==="month"?"上个月":calendarView==="week"?"上一周":"前一天";
+  const nextLabel=calendarView==="month"?"下个月":calendarView==="week"?"下一周":"后一天";
+  function selectCalendarDate(date:string):void{
+    setSelectedDate(date);setFilter("day");setShowHidden(false);
+    if(!editingId)setDueDate(date);
+  }
+  function moveCalendar(direction:-1|1):void{
+    selectCalendarDate(shiftCalendarView(selectedDate,calendarView,direction));
+  }
   const nextTasks = pendingTasks.slice(0, 5);
   const selectedModule = menu.find((item) => item.page === page)!;
 
@@ -423,15 +439,39 @@ export default function App() {
               <div className="calendar-layout">
                 <div className="calendar-column">
                   <section className="panel calendar-panel">
-                    <div className="calendar-header"><h2>{month.getFullYear()} 年 {month.getMonth() + 1} 月</h2><div className="button-row"><button className="icon-button" aria-label="上个月" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>‹</button><button className="small-button" onClick={() => { setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); setSelectedDate(today); setFilter("day"); }}>今天</button><button className="icon-button" aria-label="下个月" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>›</button></div></div>
-                    <div className="weekday-row">{["一", "二", "三", "四", "五", "六", "日"].map((day) => <span key={day}>{day}</span>)}</div>
-                    <div className="calendar-grid">{calendar.map((day) => {
-                      const hasTasks = shownTasks.some((task) => task.dueDate === day.key) || plannedBlocks.some(block=>block.day===day.key) || fixedEvents.some(event=>event.day===day.key && (event.source!=="canvas"||(event.visible&&!event.missing)));
-                      return <button key={day.key} className={["calendar-day", day.currentMonth ? "" : "muted-day", day.key === selectedDate ? "selected-day" : "", day.key === today ? "today-day" : ""].join(" ")}
-                        onClick={() => { setSelectedDate(day.key); setFilter("day"); setShowHidden(false); if (!day.currentMonth) { const [y, m] = day.key.split("-").map(Number); setMonth(new Date(y, m - 1, 1)); } }} aria-label={day.key}>
-                        <span>{day.day}</span>{hasTasks && <i className="day-dot" />}
-                      </button>;
-                    })}</div>
+                    <div className="calendar-header">
+                      <h2>{viewHeading}</h2>
+                      <div className="button-row calendar-nav">
+                        <button className="icon-button" aria-label={prevLabel} onClick={()=>moveCalendar(-1)}>‹</button>
+                        <button className="small-button" onClick={()=>selectCalendarDate(today)}>今天</button>
+                        <button className="icon-button" aria-label={nextLabel} onClick={()=>moveCalendar(1)}>›</button>
+                      </div>
+                    </div>
+                    <div className="calendar-view-tabs" role="group" aria-label="切换日历视图">
+                      {([["month","月"],["week","周"],["day","日"]] as const).map(([mode,label])=>
+                        <button key={mode} className={calendarView===mode?"chip selected":"chip"}
+                          aria-pressed={calendarView===mode} onClick={()=>setCalendarView(mode)}>
+                          {label}视图
+                        </button>)}
+                    </div>
+                    {calendarView==="month"?<>
+                      <div className="weekday-row">{["一","二","三","四","五","六","日"].map(day=><span key={day}>{day}</span>)}</div>
+                      <div className="calendar-grid">{calendar.map(day=>{
+                        const hasTasks=shownTasks.some(task=>task.dueDate===day.key) ||
+                          plannedBlocks.some(block=>block.day===day.key) ||
+                          fixedEvents.some(event=>event.day===day.key &&
+                            (event.source!=="canvas"||(event.visible&&!event.missing)));
+                        return <button key={day.key} className={["calendar-day",
+                            day.currentMonth?"":"muted-day",day.key===selectedDate?"selected-day":"",
+                            day.key===today?"today-day":""].join(" ")}
+                          onClick={()=>selectCalendarDate(day.key)} aria-label={day.key}
+                          aria-pressed={day.key===selectedDate} aria-current={day.key===today?"date":undefined}>
+                          <span>{day.day}</span>{hasTasks&&<i className="day-dot"/>}
+                        </button>;
+                      })}</div>
+                    </>:<CalendarAgenda view={calendarView} selectedDay={selectedDate}
+                      today={today} tasks={tasks} blocks={plannedBlocks} events={fixedEvents}
+                      onSelectDate={selectCalendarDate} onEditTask={editTask}/>}
                   </section>
                   <section className="panel planned-day-panel">
                     <div className="eyebrow">CONFIRMED STUDY SCHEDULE</div>
