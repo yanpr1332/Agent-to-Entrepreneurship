@@ -170,9 +170,11 @@ export class CanvasSyncService {
       }
       if(this.calendar){
         try{
-          const events=await api.listCalendarEvents(course.id,localDay(start),localDay(end));
+          const startDate=localDay(start),endDate=localDay(end);
+          const events=await api.listCalendarEvents(course.id,startDate,endDate);
           if(generation!==this.generation)return summary;
-          const report=this.calendar.reconcileCanvasCourse(api.origin,accountId,course.id,events);
+          const report=this.calendar.reconcileCanvasCourse(api.origin,accountId,course.id,
+            events,new Date(),{startDate,endDate});
           summary.calendarEventsSeen=(summary.calendarEventsSeen??0)+events.length;
           summary.calendarCreated=(summary.calendarCreated??0)+report.created;
           summary.calendarChanged=(summary.calendarChanged??0)+report.changed;
