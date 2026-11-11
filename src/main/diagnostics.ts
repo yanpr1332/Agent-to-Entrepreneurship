@@ -1,5 +1,6 @@
 import { constants } from "node:fs";
-import { open } from "node:fs/promises";
+import { lstat,open,rename,rm,writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { IPC_CHANNELS, type IpcChannel } from "../shared/ipc-channels";
 
@@ -69,19 +70,34 @@ export class DiagnosticLogger{
     // Console receives the same sanitized entry, never a raw exception.
     try{this.output(line.trimEnd());}catch{/* Diagnostics cannot break application work. */}
     this.pending=this.pending.then(async()=>{
+      // Windows does not reliably truncate a descriptor opened in append mode.
+      // Perform cap rollover through a closed-handle atomic file replacement.
+      try{
+        const previous=await lstat(this.path);
+        if(!previous.isFile()||previous.isSymbolicLink())return;
+      }catch(error){
+        if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;
+      }
       const flags=constants.O_WRONLY|constants.O_APPEND|constants.O_CREAT|
         (process.platform==="win32"?0:constants.O_NOFOLLOW);
+      let rollover=false;
       const file=await open(this.path,flags,0o600);
       try{
         const stat=await file.stat();
         if(!stat.isFile())return;
-        // Also constrain pre-existing diagnostic files, not just newly created files.
         if(process.platform!=="win32")await file.chmod(0o600);
-        // Keep the entire log <=128 KiB; old diagnostic metadata may be dropped.
-        if(stat.size+Buffer.byteLength(line,"utf8")>MAX_DIAGNOSTIC_BYTES)
-          await file.truncate(0);
-        await file.writeFile(line,"utf8");
+        rollover=stat.size+Buffer.byteLength(line,"utf8")>MAX_DIAGNOSTIC_BYTES;
+        if(!rollover)await file.writeFile(line,"utf8");
       }finally{await file.close();}
+      if(rollover){
+        const temporary=this.path+"."+randomUUID()+".tmp";
+        try{
+          await writeFile(temporary,line,{flag:"wx",mode:0o600});
+          await rename(temporary,this.path);
+        }finally{
+          await rm(temporary,{force:true}).catch(()=>{});
+        }
+      }
     }).catch(()=>{
       // Read-only directories or unsupported filesystem flags must never
       // prevent the actual operation from succeeding; no path is printed.
