@@ -79,7 +79,7 @@ describe("Canvas calendar cache is private, durable and user-controlled",()=>{
   it("rejects invalid or cross-midnight local slots without corrupting other events",()=>{
     const store=db();
     const bad={...remote,endAt:"2026-11-14T09:00:00Z"};
-    expect(store.reconcileCanvasCourse(origin,44,9,[remote,bad])).toThrow("Invalid Canvas calendar reconciliation");
+    expect(()=>store.reconcileCanvasCourse(origin,44,9,[remote,bad])).toThrow("Invalid Canvas calendar reconciliation");
     expect(store.reconcileCanvasCourse(origin,44,9,[{...bad,id:73}]).skipped).toBe(1);
     expect(store.listCanvasEvents(origin,44)).toHaveLength(0);
     expect(toLocalCanvasSlot({...remote,allDayDate:"2026-11-12"})).toMatchObject({
