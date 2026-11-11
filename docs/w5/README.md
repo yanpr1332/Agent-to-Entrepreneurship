@@ -137,3 +137,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## CAL-002 日/周/月统一日历
 
 现有月历新增可切换的周视图和日视图：将个人任务截止日期与固定课程、ICS、Canvas 日历以及已确认学习时间分别展示，按本机自然日导航并提示重叠。隐藏或来源缺失的 Canvas 条目不会出现在时间线上。详见 [17_CALENDAR_DAY_WEEK.md](17_CALENDAR_DAY_WEEK.md)；真实桌面验收仍需用户执行。
+
+
+## APP-004 主进程安全诊断
+
+全部 IPC 处理器增加统一的异常输出白名单，启动和 Canvas/邮箱等自动同步使用本机结构化诊断记录。日志不接受原始异常、用户输入或凭据，仅保留固定事件和操作码；原始第三方错误不会通过 IPC 输出到界面。详细边界和测试见 [18_APP_004_SAFE_DIAGNOSTICS.md](18_APP_004_SAFE_DIAGNOSTICS.md)。实际服务故障场景和用户侧交互仍需本机验收。

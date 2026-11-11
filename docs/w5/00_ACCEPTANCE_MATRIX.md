@@ -60,6 +60,7 @@
 | 14 | 固定课程 + ICS 导入导出（时区/重复规则白名单） | [14](14_ICS_FIXED_CALENDAR.md) | ✅ | ✅ | ✅ | ❌ |
 | 15 | Canvas 日历事项自动同步 | [15](15_CANVAS_CALENDAR_AUTO_SYNC.md) | ✅ | ✅ | ✅ | ❌ |
 | 17 | CAL-002 日/周视图、真实时间线与冲突提示 | [17](17_CALENDAR_DAY_WEEK.md) | ✅ | ✅ | ✅ [Windows/macOS run](https://github.com/yanpr1332/Agent-to-Entrepreneurship/actions/runs/43017575714) | ❌ 未做真实 GUI 验收 |
+| 18 | APP-004 主进程结构化脱敏诊断与统一 IPC 错误边界 | [18](18_APP_004_SAFE_DIAGNOSTICS.md) | ✅ | 已提交测试 | 待本 PR CI | ❌ 未做真实故障注入 GUI 验收 |
 
 「真机」一栏的含义是**实际运行过**。目前只有 01、02 拿到「⚠️ 自动化」——由 CDP 脚本真实点击
 DOM 验证，不是人手工走查；其余切片仍为 ❌。在补齐之前，本仓库不得对外表述任何切片"已验收通过"。
