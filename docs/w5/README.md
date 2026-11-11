@@ -1,6 +1,7 @@
 # W5 工程启动与桌面基础框架
 
-状态：进行中。本 PR 覆盖 W5-0 工程基线与 W5-1 Electron 桌面骨架；不代表 W5-1 全部完成。
+状态：进行中。W5-0 工程基线与 W5-1 Electron 桌面骨架已完成，并在此基础上推进了 15 个垂直切片；
+逐项验证结果、环境差异与未验证项见 [验收矩阵](00_ACCEPTANCE_MATRIX.md)。
 
 ## W5-0 工程决策
 
@@ -51,16 +52,19 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 
 ## 当前已知边界
 
-- 工作台卡片是静态产品结构预览，不是八大模块业务功能。
-- 目前只暴露 ping 与 app version 两个只读 IPC 能力。
-- 当前窗口关闭遵循平台默认退出行为；托盘驻留、后台资源控制和紧急退出属于 W5-6。
-- 尚无 SQLite、Supabase、Canvas、IMAP/SMTP、AI Runtime、账号系统和同步引擎。
+- 个人任务、日历、专注、知识库、规划已接入本机 SQLite（4 个独立数据库、WAL、user_version 迁移）；Canvas、邮箱、AI 凭据与云端会话各自隔离。
+- 已暴露约 90 个显式 allowlist IPC 通道，覆盖任务、日历、知识、规划、AI、Canvas、邮件与云端；Renderer 仍无 Node、文件系统或 shell 能力。
+- 当前窗口关闭遵循平台默认退出行为；托盘驻留、后台资源控制和紧急退出属于 W5-6，尚未实现。
+- Canvas 仅支持开发者本人的 Personal Token；OAuth 多用户方案依赖学校 Developer Key，尚未申请或获批。
+- 云端协作只有 PoC 代码，未在真实 Supabase 项目部署，也未做 RLS 隔离的正反向验收；消息为 10 秒轮询。
+- 尚未实现：统一日志与脱敏、E2E 测试、备份恢复 UI、安装包签名与公证、专注程序限制。
 - 本地运行成功不等于 macOS 安装包、签名或团队云端验收通过。
 
 ## 验收证据
 
-- Windows 本机此前执行的 npm install、typecheck、Vitest 与 electron-vite build 曾通过；安全信任校验代码新增后，必须由 CI 对最新 PR head 重新执行，旧结果不作为新代码的完整验收证据。
-- GitHub Actions 应分别通过 Windows 与 macOS 的 typecheck、unit tests、production bundle build。
+- 2026-11-11 本机复现：`typecheck` 通过；43 个测试文件 / 190 个用例全部通过；`electron-vite build` 产出 out/main、out/preload、out/renderer。命令、环境差异与失败项记录在 [验收矩阵](00_ACCEPTANCE_MATRIX.md)。
+- GUI 启动与交互、真实外部接入、双平台安装包尚未验收，明细见矩阵第 3、4 节。
+- GitHub Actions 应分别通过 Windows 与 macOS 的 typecheck、unit tests、production bundle build；CI 结果优先于本机记录。
 - macOS 原生安装包、签名、公证仍需单独验收。
 
 
