@@ -1,6 +1,7 @@
 import type { CanvasAutoSyncSummary, CanvasCourseSetting } from "../../shared/canvas-model";
 import { LocalStore } from "../local-store";
 import { CanvasApi } from "./canvas-api";
+import { FixedCalendarStore } from "../fixed-calendar-store";
 
 const SYNC_INTERVAL_MS = 30 * 60 * 1000;
 const MAX_COURSES_PER_RUN = 100;
@@ -14,6 +15,8 @@ const MAX_COURSES_PER_RUN = 100;
 export class CanvasSyncService {
   private pending: Promise<CanvasAutoSyncSummary> | null = null;
   private generation = 0;
+  private activeContext:{origin:string;accountId:number}|null=null;
+  scope():{origin:string;accountId:number}|null{return this.activeContext?{...this.activeContext}:null;}
   private interval: ReturnType<typeof setInterval> | null = null;
   private latest: CanvasAutoSyncSummary = {
     connected: false, running: false, coursesChecked: 0,
@@ -26,6 +29,7 @@ export class CanvasSyncService {
     private readonly store: LocalStore,
     private readonly apiFactory: () => Promise<CanvasApi | null>,
     private readonly notify: () => void = () => {},
+    private readonly calendar?:FixedCalendarStore,
   ) {}
 
   snapshot(): CanvasAutoSyncSummary {
@@ -46,6 +50,7 @@ export class CanvasSyncService {
 
   cancel(): void {
     this.generation++;
+    this.activeContext=null;
     this.pending = null;
     this.latest = { ...this.latest, connected: false, running: false,
       lastError: null };
@@ -119,6 +124,8 @@ export class CanvasSyncService {
     }
 
     if (generation !== this.generation) return summary;
+    this.activeContext={origin:api.origin,accountId};
+    this.calendar?.purgeExpiredHiddenCanvasEvents();
     const prior = this.store.canvasSyncState(api.origin, accountId);
     summary.lastSuccess = prior.lastSuccess;
     let courses;
@@ -136,6 +143,12 @@ export class CanvasSyncService {
       return summary;
     }
 
+    const start=new Date(),end=new Date();
+    start.setDate(start.getDate()-14);
+    end.setDate(end.getDate()+180);
+    const localDay=(date:Date)=>[date.getFullYear(),
+      String(date.getMonth()+1).padStart(2,"0"),
+      String(date.getDate()).padStart(2,"0")].join("-");
     const settings = new Map(this.store.listCanvasCourseSettings(api.origin, accountId)
       .map(({courseId, enabled}) => [courseId, enabled]));
     for (const course of courses) {
@@ -155,11 +168,25 @@ export class CanvasSyncService {
         // Other courses still sync. No remote error body or bearer token is logged.
         summary.failedCourses++;
       }
+      if(this.calendar){
+        try{
+          const events=await api.listCalendarEvents(course.id,localDay(start),localDay(end));
+          if(generation!==this.generation)return summary;
+          const report=this.calendar.reconcileCanvasCourse(api.origin,accountId,course.id,events);
+          summary.calendarEventsSeen=(summary.calendarEventsSeen??0)+events.length;
+          summary.calendarCreated=(summary.calendarCreated??0)+report.created;
+          summary.calendarChanged=(summary.calendarChanged??0)+report.changed;
+          summary.calendarMissing=(summary.calendarMissing??0)+report.missing;
+          summary.calendarSkipped=(summary.calendarSkipped??0)+report.skipped;
+        }catch{
+          summary.calendarFailedCourses=(summary.calendarFailedCourses??0)+1;
+        }
+      }
     }
 
     if (generation !== this.generation) return summary;
-    if (summary.failedCourses) {
-      summary.lastError = `有 ${summary.failedCourses} 门课程暂时未能同步，已有数据保留。`;
+    if (summary.failedCourses||summary.calendarFailedCourses) {
+      summary.lastError = `有 ${summary.failedCourses} 门作业课程及 ${summary.calendarFailedCourses??0} 门日历课程未能同步，已有数据保留。`;
     } else {
       summary.lastSuccess = new Date().toISOString();
     }

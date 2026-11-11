@@ -78,6 +78,12 @@ export interface CanvasAutoSyncSummary {
   preserved: number;
   missing: number;
   failedCourses: number;
+  calendarEventsSeen?: number;
+  calendarCreated?: number;
+  calendarChanged?: number;
+  calendarMissing?: number;
+  calendarSkipped?: number;
+  calendarFailedCourses?: number;
   lastAttempt: string | null;
   lastSuccess: string | null;
   lastError: string | null;
