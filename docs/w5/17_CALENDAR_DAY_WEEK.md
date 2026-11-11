@@ -23,3 +23,5 @@
 - Vitest 覆盖日期运算、跨年/跨月、月末夹取、任务与时间块分离、重叠及 Canvas 显示过滤。
 - Windows/macOS CI 包含类型检查、测试与 Electron 构建，但**不代替真人 GUI 验收**。
 - 日/周为时间顺序卡片，不支持拖拽、小时网格、学期视图和直接拖动编辑。
+
+本轮首次完整 CI 记录：<https://github.com/yanpr1332/Agent-to-Entrepreneurship/actions/runs/43017575714>（Windows/macOS 均成功）。任何后续提交均以 PR #23 最新 Checks 为准。
