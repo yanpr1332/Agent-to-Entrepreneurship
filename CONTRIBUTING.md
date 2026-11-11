@@ -1,6 +1,8 @@
 # 参与贡献与开发协作
 
-感谢参与 Agent-to-Entrepreneurship。项目当前已完成 W1 PRD、W2 UI/UX 归档、W3 技术架构归档，并形成 W4 内部 Alpha 开发计划。正式应用代码尚未因此自动启动。
+感谢参与 Agent-to-Entrepreneurship。项目已完成 W1 PRD、W2 UI/UX 归档、W3 技术架构归档、W4 内部 Alpha 开发计划，
+并落地 W5/W6 共 15 个垂直切片。各切片的真实验收状态以 [W5 验收矩阵](docs/w5/00_ACCEPTANCE_MATRIX.md) 为准，
+「代码已完成」不等于「已通过验收」。
 
 ## 开始前
 1. 阅读 docs/PRD.md、docs/DECISIONS.md、docs/ui-ux/README.md、docs/architecture/README.md 和 docs/w4/README.md。

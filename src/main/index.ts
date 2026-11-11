@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, type IpcMainInvokeEvent } from "electron";
 import { join,basename,extname } from "node:path";
+import { configureUserDataOverride } from "./user-data-override";
 import { randomUUID } from "node:crypto";
 import { lstat,readFile,writeFile } from "node:fs/promises";
 import { FixedCalendarStore } from "./fixed-calendar-store";
@@ -27,6 +28,45 @@ import { AIKeyVault } from "./ai/ai-vault";
 import { AIUsageLedger } from "./ai/ai-usage";
 import { AIService } from "./ai/ai-service";
 import { AIPlanningCoordinator } from "./ai/ai-planner";
+
+/**
+ * Local runtime compatibility notice. See docs/w5/16_LOCAL_RUNTIME_TROUBLESHOOTING.md.
+ *
+ * On some managed Windows hosts Chromium cannot create its sandboxed child
+ * processes. The GPU child then fails to launch and Chromium aborts with
+ * "GPU process isn't usable. Goodbye." before app.whenReady() runs, so no window
+ * ever appears and no in-process fallback is possible.
+ *
+ * The switch cannot be applied here: Chromium initialises its sandbox before
+ * this module is evaluated, so `app.commandLine.appendSwitch("no-sandbox")` has
+ * no effect. It must be passed to the Electron command line; electron-vite
+ * forwards it through `dev --noSandbox` (npm run dev:compat).
+ */
+if (app.commandLine.hasSwitch("no-sandbox")) {
+  console.warn(
+    "[ate] Chromium OS sandbox is DISABLED for this run (--no-sandbox). " +
+      "Local compatibility mode only; renderer isolation is reduced and this must not be shipped.",
+  );
+}
+
+/**
+ * Opt-in relocation of the local data directory. Needed when %APPDATA% is not
+ * writable for this process (managed hosts, portable installs, CI). Unset by
+ * default so normal installs keep using %APPDATA%\<app name>.
+ */
+// A failed override must never silently fall back to the default data store.
+let userDataOverrideFailure = false;
+try {
+  const customPath = configureUserDataOverride(
+    process.env.ATE_USER_DATA_DIR,
+    (directory) => app.setPath("userData", directory),
+  );
+  if (customPath) console.warn("[ate] user data directory overridden:", customPath);
+} catch (error) {
+  userDataOverrideFailure = true;
+  console.error("[ate] cannot initialise ATE_USER_DATA_DIR:",
+    error instanceof Error ? `${error.name}: ${error.message}` : error);
+}
 
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
@@ -631,6 +671,14 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  if (userDataOverrideFailure) {
+    dialog.showErrorBox(
+      "无法打开自定义数据目录",
+      "ATE_USER_DATA_DIR 指定的目录无法创建或设置。应用不会改用默认目录，以免意外使用另一份数据。请检查路径和权限后重试。",
+    );
+    app.quit();
+    return;
+  }
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
     await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",4);
@@ -672,7 +720,15 @@ app.whenReady().then(async () => {
         if (!window.isDestroyed()) window.webContents.send(CANVAS_SYNC_UPDATED);
       }
     },fixedCalendar());
-  } catch {
+  } catch (error) {
+    // Detail stays on this machine (terminal only). The dialog keeps the
+    // existing user-facing wording: no paths, no stack traces, no data.
+    console.error(
+      "[ate] local database initialisation failed; userData =",
+      app.getPath("userData"),
+      "\n[ate] cause:",
+      error instanceof Error ? `${error.name}: ${error.message}` : error,
+    );
     dialog.showErrorBox(
       "本地数据无法打开",
       "应用无法安全打开本地数据库。请备份用户数据目录后检查磁盘权限或数据库版本；应用不会自动覆盖已有数据。",

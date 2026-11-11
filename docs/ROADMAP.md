@@ -10,9 +10,9 @@
 | W2 UI/UX | **方向与交互已确认、文档和 HTML 原型已归档，待最终体验签收** | [详细页面树、九项逐条交互、八模块旅程、统一异常状态与模拟原型](ui-ux/README.md)；正式验收见 [W2 清单](ui-ux/05_W2_ACCEPTANCE.md) |
 | W3 详细架构 | **八项方案与集中审阅已确认，技术文档已归档；实测风险待 W4** | [W3 设计索引与追踪](architecture/README.md)：ER、接口、权限、同步、平台矩阵、风险 |
 | W4 开发计划 | **已确认并整理为独立 PR 归档（2026-11-07）** | [W4 总览](w4/README.md)：Alpha 范围、开发 Backlog、灵活协作边界、AI 工作流、测试验收、里程碑、外部依赖和 GitHub 治理 |
-| W5 第一轮开发 | **尚未授权开始** | 仅在 W2–W4 决策及另行写入许可后启动代码和 CI |
+| W5/W6 增量开发 | **进行中** | 15 个垂直切片已落地；`typecheck`、190 个单元测试与双平台 CI 可复现，逐项证据与未验证项见 [W5 验收矩阵](w5/00_ACCEPTANCE_MATRIX.md)。真实外部接入（Canvas OAuth、交大邮箱收发、Supabase RLS）与双平台安装包仍未验收 |
 
-详细协作规则见 [PROJECT_WORKFLOW.md](PROJECT_WORKFLOW.md)。用户已授权**本轮**将 W2 设计细化、HTML 原型和相关文件同步至仓库；此授权不扩展为后续 W3/W4 写入或 W5 开发许可。
+详细协作规则见 [PROJECT_WORKFLOW.md](PROJECT_WORKFLOW.md)。用户已授权**本轮**将 W2 设计细化、HTML 原型和相关文件同步至仓库；此授权不扩展为后续 W3/W4 写入或 W5 开发许可。（该句为 W2 阶段的历史授权说明；W5/W6 的实际进度以本表与 [W5 验收矩阵](w5/00_ACCEPTANCE_MATRIX.md) 为准。）
 
 ## 首版 P0 的工程批次建议（不是已经批准的开发排期）
 
