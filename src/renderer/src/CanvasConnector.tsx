@@ -70,7 +70,7 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
       setCourseSettings(await window.desktop.canvas.courseSettings());
       setAssignments([]);
       setCourseId(null);
-      setNotice("已验证个人 Canvas 连接，正在自动同步所有未屏蔽课程的作业。");
+      setNotice("已验证个人 Canvas 连接，正在自动同步未屏蔽课程的作业和日历事项。");
     } catch (reason) {
       setError(errorText(reason));
     } finally {
@@ -88,7 +88,7 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
       await onTasksChanged();
       setNotice(report.lastError
         ? `同步部分完成：${report.lastError}`
-        : `同步完成：检查 ${report.coursesChecked} 门课程，发现 ${report.assignmentsSeen} 条作业，新建 ${report.created} 条任务，更新 ${report.changed} 条。`);
+        : `同步完成：检查 ${report.coursesChecked} 门课程，新增 ${report.created} 条作业任务，新增 ${report.calendarCreated??0} 条日历事项，更新 ${report.calendarChanged??0} 条日历事项。`);
     } catch (reason) {
       setError(errorText(reason));
     } finally {
@@ -127,7 +127,7 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
   }
 
   async function disconnect(): Promise<void> {
-    if (!window.confirm("断开 Canvas 并删除本机加密保存的个人 Token？已同步的本地任务将保留。")) return;
+    if (!window.confirm("断开 Canvas 并删除本机加密保存的个人 Token？已同步的本地任务和日历缓存将保留，但断开后不显示其他账号的日历。")) return;
     setLoading(true);
     setError("");
     try {
@@ -156,15 +156,15 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
         <div>
           <div className="eyebrow">EXTERNAL CONNECTORS</div>
           <h1>Canvas 自动同步</h1>
-          <p>连接后默认同步当前课程作业，个人任务可单独显示或隐藏。</p>
+          <p>连接后默认同步当前课程作业和近期日历事项，个人任务及 Canvas 日历项可单独显示或隐藏。</p>
         </div>
         <span className="count-chip">{status.connected ? "Canvas 已连接" : "尚未连接"}</span>
       </div>
       <div className="connector-warning" role="note">
         <strong>个人 API Token 仅供开发者本人在本机验证。</strong>
         多用户正式接入仍需学校授权 Developer Key + OAuth。请勿向团队成员分享 Token。
-        连接后默认自动收集当前可访问课程的作业；你可以暂停单门课程同步，
-        也可以在日历中隐藏单条任务。隐藏的 Canvas 任务会保留六个月。
+        连接后默认自动收集当前可访问课程的作业及近期日历事项（过去 14 天、未来 180 天）；你可以暂停单门课程同步，
+        也可以在日历中隐藏单条任务或日历事项。隐藏的 Canvas 记录会保留六个月。
       </div>
       {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => setError("")}>关闭</button></div>}
       {notice && <div className="connector-notice" role="status">{notice}</div>}

@@ -142,7 +142,16 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle(IPC_CHANNELS.fixedCalendarList,event=>{
     requireTrustedSender(event);
-    return fixedCalendar().list();
+    return fixedCalendar().listForDisplay();
+  });
+  ipcMain.handle(IPC_CHANNELS.canvasCalendarVisibility,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    if(!input||typeof input!=="object"||Array.isArray(input))
+      throw Error("Invalid Canvas calendar visibility request");
+    const data=input as Record<string,unknown>;
+    if(Object.keys(data).sort().join(",")!=="id,visible")
+      throw Error("Invalid Canvas calendar visibility fields");
+    return fixedCalendar().setCanvasEventVisibility(data.id,data.visible);
   });
   ipcMain.handle(IPC_CHANNELS.fixedCalendarCreate,(event,input:unknown)=>{
     requireTrustedSender(event);
@@ -624,12 +633,13 @@ app.whenReady().then(async () => {
     // Back up older local schemas BEFORE the constructor runs migrations.
     await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",4);
     await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",3);
-    await backupBeforeMigration(app.getPath("userData"),"ate-fixed-calendar.sqlite",2);
+    await backupBeforeMigration(app.getPath("userData"),"ate-fixed-calendar.sqlite",3);
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
     knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "ate-knowledge.sqlite"));
     fixedCalendarStore = new FixedCalendarStore(
       join(app.getPath("userData"),"ate-fixed-calendar.sqlite"),
       ()=>planningStore?.listCommitted()??[],
+      ()=>canvasSync?.scope()??null,
     );
     planningStore = new PlanningStore(join(app.getPath("userData"), "ate-plans.sqlite"),
       ()=>fixedCalendar().busySlots());
@@ -659,7 +669,7 @@ app.whenReady().then(async () => {
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(CANVAS_SYNC_UPDATED);
       }
-    });
+    },fixedCalendar());
   } catch {
     dialog.showErrorBox(
       "本地数据无法打开",
