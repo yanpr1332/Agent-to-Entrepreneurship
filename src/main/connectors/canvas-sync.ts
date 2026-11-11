@@ -22,6 +22,8 @@ export class CanvasSyncService {
     connected: false, running: false, coursesChecked: 0,
     assignmentsSeen: 0, created: 0, changed: 0,
     preserved: 0, missing: 0, failedCourses: 0,
+    calendarEventsSeen:0,calendarCreated:0,calendarChanged:0,
+    calendarMissing:0,calendarSkipped:0,calendarFailedCourses:0,
     lastAttempt: null, lastSuccess: null, lastError: null,
   };
 
@@ -108,6 +110,8 @@ export class CanvasSyncService {
       connected: false, running: false, coursesChecked: 0,
       assignmentsSeen: 0, created: 0, changed: 0,
       preserved: 0, missing: 0, failedCourses: 0,
+      calendarEventsSeen:0,calendarCreated:0,calendarChanged:0,
+      calendarMissing:0,calendarSkipped:0,calendarFailedCourses:0,
       lastAttempt: now, lastSuccess: this.latest.lastSuccess, lastError: null,
     };
 
