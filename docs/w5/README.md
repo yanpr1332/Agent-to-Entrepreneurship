@@ -132,3 +132,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## CAL-005 Canvas 日历自动同步
 
 现有 Canvas 个人连接扩展为自动同步当前课程日历事项（非作业），在日历里按用户选择显示/隐藏，保留本机缓存并将可见课程时间用于学习规划冲突检查；ICS 仍作为手动备选导入方式。隐私、同步窗口、账号边界和保留规则见 [15_CANVAS_CALENDAR_AUTO_SYNC.md](15_CANVAS_CALENDAR_AUTO_SYNC.md)。
+
+
+## CAL-002 日/周/月统一日历
+
+现有月历新增可切换的周视图和日视图：将个人任务截止日期与固定课程、ICS、Canvas 日历以及已确认学习时间分别展示，按本机自然日导航并提示重叠。隐藏或来源缺失的 Canvas 条目不会出现在时间线上。详见 [17_CALENDAR_DAY_WEEK.md](17_CALENDAR_DAY_WEEK.md)；真实桌面验收仍需用户执行。
