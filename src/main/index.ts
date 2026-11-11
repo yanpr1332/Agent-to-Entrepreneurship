@@ -504,10 +504,7 @@ function registerIpcHandlers(): void {
     coordinator().cancel();
     await credentials().save({ baseUrl: api.origin, token: config.token });
     // Initial connection starts automatic collection of current-course assignments.
-    void coordinator().sync().then(summary=>{
-    if(summary.failedCourses||summary.calendarFailedCourses)
-      report("CANVAS_SYNC_FAILED","canvas");
-  }).catch(()=>report("CANVAS_SYNC_FAILED","canvas"));
+    void coordinator().sync();
     return {
       status: { connected: true, baseUrl: api.origin, mode: "developer-local-token" },
       courses,
@@ -721,6 +718,7 @@ app.whenReady().then(async () => {
     mailStore = new CampusMailStore(join(app.getPath("userData"), "ate-mail.sqlite"));
     const mailVault = new CampusMailVault(join(app.getPath("userData"), "campus-mail.enc"), safeStorage);
     mailService = new CampusMailService(mailVault, mailStore, undefined, undefined, () => {
+      if(mailService?.snapshot().lastError)report("MAIL_SYNC_FAILED","mail");
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(MAIL_SYNC_UPDATED);
       }
@@ -730,6 +728,8 @@ app.whenReady().then(async () => {
       const saved = await credentials().load();
       return saved ? new CanvasApi(saved.baseUrl, saved.token) : null;
     }, () => {
+      const state=canvasSync?.snapshot();
+      if(state?.lastError)report("CANVAS_SYNC_FAILED","canvas");
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(CANVAS_SYNC_UPDATED);
       }
