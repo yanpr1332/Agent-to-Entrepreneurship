@@ -49,7 +49,6 @@ export class FixedCalendarStore {
       "CREATE INDEX fixed_events_series ON fixed_events(series_id);"+
       "PRAGMA user_version=2; COMMIT;"
     );
-  }
     if(version<=2){
       this.db.exec("BEGIN IMMEDIATE");
       try{
