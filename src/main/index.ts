@@ -7,7 +7,8 @@ import { FixedCalendarStore } from "./fixed-calendar-store";
 import { parseICS,exportICS } from "../shared/ics-calendar";
 import type { ICSPreview,FixedEventDraft } from "../shared/fixed-calendar-model";
 import { pathToFileURL } from "node:url";
-import { IPC_CHANNELS } from "../shared/ipc-channels";
+import { IPC_CHANNELS, type IpcChannel } from "../shared/ipc-channels";
+import { DiagnosticLogger, protectIpc, type DiagnosticCode } from "./diagnostics";
 import { isTrustedRendererUrl } from "../shared/renderer-trust";
 import { LocalStore } from "./local-store";
 import { CanvasApi } from "./connectors/canvas-api";
@@ -42,12 +43,8 @@ import { AIPlanningCoordinator } from "./ai/ai-planner";
  * no effect. It must be passed to the Electron command line; electron-vite
  * forwards it through `dev --noSandbox` (npm run dev:compat).
  */
-if (app.commandLine.hasSwitch("no-sandbox")) {
-  console.warn(
-    "[ate] Chromium OS sandbox is DISABLED for this run (--no-sandbox). " +
-      "Local compatibility mode only; renderer isolation is reduced and this must not be shipped.",
-  );
-}
+// Logged as a fixed-code safety warning after userData is ready.
+const sandboxDisabled=app.commandLine.hasSwitch("no-sandbox");
 
 /**
  * Opt-in relocation of the local data directory. Needed when %APPDATA% is not
@@ -61,13 +58,16 @@ try {
     process.env.ATE_USER_DATA_DIR,
     (directory) => app.setPath("userData", directory),
   );
-  if (customPath) console.warn("[ate] user data directory overridden:", customPath);
+  // Never print local profile paths in normal diagnostics.
 } catch (error) {
   userDataOverrideFailure = true;
-  console.error("[ate] cannot initialise ATE_USER_DATA_DIR:",
-    error instanceof Error ? `${error.name}: ${error.message}` : error);
+  console.error("[ate] custom data directory could not be initialized.");
 }
 
+let diagnostics: DiagnosticLogger | null = null;
+function report(code:DiagnosticCode,operation:"app"|"storage"|"canvas"|"mail"|"ai"="app"):void{
+  diagnostics?.record(code,operation);
+}
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
 let knowledgeStore: KnowledgeStore | null = null;
@@ -144,31 +144,39 @@ function localStore(): LocalStore {
 }
 
 function registerIpcHandlers(): void {
-  ipcMain.handle(IPC_CHANNELS.appPing, (event) => {
+  const logger=diagnostics;
+  if(!logger)throw new Error("Diagnostics are not initialized");
+  // Every renderer->Main handler shares one privacy-preserving error boundary.
+  const handle:typeof ipcMain.handle=(channel,listener)=>{
+    ipcMain.handle(channel,(event,...args)=>protectIpc(
+      channel as IpcChannel,()=>listener(event,...args),logger,
+    ));
+  };
+  handle(IPC_CHANNELS.appPing, (event) => {
     requireTrustedSender(event);
     return { ok: true as const };
   });
-  ipcMain.handle(IPC_CHANNELS.appGetVersion, (event) => {
+  handle(IPC_CHANNELS.appGetVersion, (event) => {
     requireTrustedSender(event);
     return app.getVersion();
   });
-  ipcMain.handle(IPC_CHANNELS.tasksList, (event) => {
+  handle(IPC_CHANNELS.tasksList, (event) => {
     requireTrustedSender(event);
     return localStore().listTasks();
   });
-  ipcMain.handle(IPC_CHANNELS.tasksCreate, (event, input: unknown) => {
+  handle(IPC_CHANNELS.tasksCreate, (event, input: unknown) => {
     requireTrustedSender(event);
     return localStore().createTask(input);
   });
-  ipcMain.handle(IPC_CHANNELS.tasksUpdate, (event, input: unknown) => {
+  handle(IPC_CHANNELS.tasksUpdate, (event, input: unknown) => {
     requireTrustedSender(event);
     return localStore().updateTask(input);
   });
-  ipcMain.handle(IPC_CHANNELS.tasksRemove, (event, id: unknown) => {
+  handle(IPC_CHANNELS.tasksRemove, (event, id: unknown) => {
     requireTrustedSender(event);
     return localStore().removeTask(id);
   });
-  ipcMain.handle(IPC_CHANNELS.tasksVisibility, (event, input: unknown) => {
+  handle(IPC_CHANNELS.tasksVisibility, (event, input: unknown) => {
     requireTrustedSender(event);
     if (!input || typeof input !== "object" || Array.isArray(input)) {
       throw new Error("Invalid task visibility request");
@@ -180,11 +188,11 @@ function registerIpcHandlers(): void {
     }
     return localStore().setCanvasTaskVisibility(data.id, data.visible);
   });
-  ipcMain.handle(IPC_CHANNELS.fixedCalendarList,event=>{
+  handle(IPC_CHANNELS.fixedCalendarList,event=>{
     requireTrustedSender(event);
     return fixedCalendar().listForDisplay();
   });
-  ipcMain.handle(IPC_CHANNELS.canvasCalendarVisibility,(event,input:unknown)=>{
+  handle(IPC_CHANNELS.canvasCalendarVisibility,(event,input:unknown)=>{
     requireTrustedSender(event);
     if(!input||typeof input!=="object"||Array.isArray(input))
       throw Error("Invalid Canvas calendar visibility request");
@@ -193,23 +201,23 @@ function registerIpcHandlers(): void {
       throw Error("Invalid Canvas calendar visibility fields");
     return fixedCalendar().setCanvasEventVisibility(data.id,data.visible);
   });
-  ipcMain.handle(IPC_CHANNELS.fixedCalendarCreate,(event,input:unknown)=>{
+  handle(IPC_CHANNELS.fixedCalendarCreate,(event,input:unknown)=>{
     requireTrustedSender(event);
     return fixedCalendar().create(input);
   });
-  ipcMain.handle(IPC_CHANNELS.fixedCalendarDelete,(event,id:unknown)=>{
+  handle(IPC_CHANNELS.fixedCalendarDelete,(event,id:unknown)=>{
     requireTrustedSender(event);
     return fixedCalendar().delete(id);
   });
-  ipcMain.handle(IPC_CHANNELS.fixedCalendarEdit,(event,input:unknown)=>{
+  handle(IPC_CHANNELS.fixedCalendarEdit,(event,input:unknown)=>{
     requireTrustedSender(event);
     return fixedCalendar().edit(input);
   });
-  ipcMain.handle(IPC_CHANNELS.fixedCalendarDeleteSeries,(event,id:unknown)=>{
+  handle(IPC_CHANNELS.fixedCalendarDeleteSeries,(event,id:unknown)=>{
     requireTrustedSender(event);
     return fixedCalendar().deleteSeries(id);
   });
-  ipcMain.handle(IPC_CHANNELS.fixedCalendarPreviewICS,async event=>{
+  handle(IPC_CHANNELS.fixedCalendarPreviewICS,async event=>{
     requireTrustedSender(event);
     const owner=BrowserWindow.fromWebContents(event.sender);
     if(!owner||owner.isDestroyed())throw Error("Calendar import requires a trusted window");
@@ -233,12 +241,12 @@ function registerIpcHandlers(): void {
     return {approvalId:id,expiresAt:new Date(expires).toISOString(),
       filename,events} satisfies ICSPreview;
   });
-  ipcMain.handle(IPC_CHANNELS.fixedCalendarCancelICS,(event,id:unknown)=>{
+  handle(IPC_CHANNELS.fixedCalendarCancelICS,(event,id:unknown)=>{
     requireTrustedSender(event);
     if(pendingICS && id===pendingICS.id)pendingICS=null;
     return {canceled:true};
   });
-  ipcMain.handle(IPC_CHANNELS.fixedCalendarConfirmICS,(event,id:unknown)=>{
+  handle(IPC_CHANNELS.fixedCalendarConfirmICS,(event,id:unknown)=>{
     requireTrustedSender(event);
     const pending=pendingICS;
     pendingICS=null; // Confirmation is one-use, even on error.
@@ -246,7 +254,7 @@ function registerIpcHandlers(): void {
       throw Error("ICS preview expired; select and review the file again");
     return fixedCalendar().import(pending.events);
   });
-  ipcMain.handle(IPC_CHANNELS.fixedCalendarExportICS,async event=>{
+  handle(IPC_CHANNELS.fixedCalendarExportICS,async event=>{
     requireTrustedSender(event);
     const owner=BrowserWindow.fromWebContents(event.sender);
     if(!owner||owner.isDestroyed())throw Error("Calendar export requires a trusted window");
@@ -263,100 +271,100 @@ function registerIpcHandlers(): void {
     await writeFile(selection.filePath,exportICS(events),{encoding:"utf8",flag:"wx",mode:0o600});
     return {saved:true,eventCount:events.length};
   });
-  ipcMain.handle(IPC_CHANNELS.planningGenerate,(event,input:unknown)=>{
+  handle(IPC_CHANNELS.planningGenerate,(event,input:unknown)=>{
     requireTrustedSender(event);
     return planner().propose(input,localStore().listTasks());
   });
-  ipcMain.handle(IPC_CHANNELS.planningProposals,event=>{
+  handle(IPC_CHANNELS.planningProposals,event=>{
     requireTrustedSender(event);
     return planner().proposals();
   });
-  ipcMain.handle(IPC_CHANNELS.planningBlocks,event=>{
+  handle(IPC_CHANNELS.planningBlocks,event=>{
     requireTrustedSender(event);
     return planner().listCommitted();
   });
-  ipcMain.handle(IPC_CHANNELS.planningBatches,event=>{
+  handle(IPC_CHANNELS.planningBatches,event=>{
     requireTrustedSender(event);
     return planner().batches();
   });
-  ipcMain.handle(IPC_CHANNELS.planningApply,(event,input:unknown)=>{
+  handle(IPC_CHANNELS.planningApply,(event,input:unknown)=>{
     requireTrustedSender(event);
     return planner().apply(input,localStore().listTasks());
   });
-  ipcMain.handle(IPC_CHANNELS.planningUndo,(event,id:unknown)=>{
+  handle(IPC_CHANNELS.planningUndo,(event,id:unknown)=>{
     requireTrustedSender(event);
     return planner().undo(id);
   });
-  ipcMain.handle(IPC_CHANNELS.aiPlanPrepare,(event,input:unknown)=>{
+  handle(IPC_CHANNELS.aiPlanPrepare,(event,input:unknown)=>{
     requireTrustedSender(event);
     return aiPlanner().prepare(input);
   });
-  ipcMain.handle(IPC_CHANNELS.aiPlanConfirm,(event,approvalId:unknown)=>{
+  handle(IPC_CHANNELS.aiPlanConfirm,(event,approvalId:unknown)=>{
     requireTrustedSender(event);
     return aiPlanner().confirm(approvalId);
   });
-  ipcMain.handle(IPC_CHANNELS.aiStatus,event=>{
+  handle(IPC_CHANNELS.aiStatus,event=>{
     requireTrustedSender(event);
     return assistant().status();
   });
-  ipcMain.handle(IPC_CHANNELS.aiConnect,(event,input:unknown)=>{
+  handle(IPC_CHANNELS.aiConnect,(event,input:unknown)=>{
     requireTrustedSender(event);
     return assistant().connect(input);
   });
-  ipcMain.handle(IPC_CHANNELS.aiDisconnect,event=>{
+  handle(IPC_CHANNELS.aiDisconnect,event=>{
     requireTrustedSender(event);
     return assistant().disconnect();
   });
-  ipcMain.handle(IPC_CHANNELS.aiPrepare,(event,prompt:unknown)=>{
+  handle(IPC_CHANNELS.aiPrepare,(event,prompt:unknown)=>{
     requireTrustedSender(event);
     return assistant().prepare(prompt);
   });
-  ipcMain.handle(IPC_CHANNELS.aiConfirm,(event,approvalId:unknown)=>{
+  handle(IPC_CHANNELS.aiConfirm,(event,approvalId:unknown)=>{
     requireTrustedSender(event);
     return assistant().confirm(approvalId);
   });
-  ipcMain.handle(IPC_CHANNELS.aiCancel,event=>{
+  handle(IPC_CHANNELS.aiCancel,event=>{
     requireTrustedSender(event);
     assistant().cancel();
     return assistant().status();
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeGraph, event=>{
+  handle(IPC_CHANNELS.knowledgeGraph, event=>{
     requireTrustedSender(event);
     return knowledge().graph();
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeGraphCreateNode, (event,input:unknown)=>{
+  handle(IPC_CHANNELS.knowledgeGraphCreateNode, (event,input:unknown)=>{
     requireTrustedSender(event);
     return knowledge().createGraphNode(input);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeGraphEditNode, (event,input:unknown)=>{
+  handle(IPC_CHANNELS.knowledgeGraphEditNode, (event,input:unknown)=>{
     requireTrustedSender(event);
     return knowledge().editGraphNode(input);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeGraphDeleteNode, (event,id:unknown)=>{
+  handle(IPC_CHANNELS.knowledgeGraphDeleteNode, (event,id:unknown)=>{
     requireTrustedSender(event);
     return knowledge().deleteGraphNode(id);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeGraphCreateEdge, (event,input:unknown)=>{
+  handle(IPC_CHANNELS.knowledgeGraphCreateEdge, (event,input:unknown)=>{
     requireTrustedSender(event);
     return knowledge().createGraphEdge(input);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeGraphDeleteEdge, (event,id:unknown)=>{
+  handle(IPC_CHANNELS.knowledgeGraphDeleteEdge, (event,id:unknown)=>{
     requireTrustedSender(event);
     return knowledge().deleteGraphEdge(id);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeDocuments, event => {
+  handle(IPC_CHANNELS.knowledgeDocuments, event => {
     requireTrustedSender(event);
     return knowledge().listDocuments();
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeGet, (event,id:unknown) => {
+  handle(IPC_CHANNELS.knowledgeGet, (event,id:unknown) => {
     requireTrustedSender(event);
     return knowledge().getDocument(id);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgePassage,(event,id:unknown,ordinal:unknown)=>{
+  handle(IPC_CHANNELS.knowledgePassage,(event,id:unknown,ordinal:unknown)=>{
     requireTrustedSender(event);
     return knowledge().getPassage(id,ordinal);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeImport, async event => {
+  handle(IPC_CHANNELS.knowledgeImport, async event => {
     requireTrustedSender(event);
     const owner=BrowserWindow.fromWebContents(event.sender);
     if(!owner || owner.isDestroyed())throw new Error("Knowledge import requires a trusted window");
@@ -369,35 +377,35 @@ function registerIpcHandlers(): void {
     const source=await readSelectedKnowledgeFile(selection.filePaths[0]);
     return source.format==="pdf" ? knowledge().importPdf(source) : knowledge().importText(source);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeDelete, (event,id:unknown) => {
+  handle(IPC_CHANNELS.knowledgeDelete, (event,id:unknown) => {
     requireTrustedSender(event);
     return knowledge().deleteDocument(id);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeSearch, (event,query:unknown) => {
+  handle(IPC_CHANNELS.knowledgeSearch, (event,query:unknown) => {
     requireTrustedSender(event);
     return knowledge().search(query);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeCards, event => {
+  handle(IPC_CHANNELS.knowledgeCards, event => {
     requireTrustedSender(event);
     return knowledge().listCards();
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeCreateCard, (event,body:unknown) => {
+  handle(IPC_CHANNELS.knowledgeCreateCard, (event,body:unknown) => {
     requireTrustedSender(event);
     return knowledge().createCard(body);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeRemoveCard, (event,id:unknown) => {
+  handle(IPC_CHANNELS.knowledgeRemoveCard, (event,id:unknown) => {
     requireTrustedSender(event);
     return knowledge().removeCard(id);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeReviewCard, (event,id:unknown,rating:unknown) => {
+  handle(IPC_CHANNELS.knowledgeReviewCard, (event,id:unknown,rating:unknown) => {
     requireTrustedSender(event);
     return knowledge().reviewCard(id,rating);
   });
-  ipcMain.handle(IPC_CHANNELS.knowledgeReviewProgress, event => {
+  handle(IPC_CHANNELS.knowledgeReviewProgress, event => {
     requireTrustedSender(event);
     return knowledge().progress();
   });
-  ipcMain.handle(IPC_CHANNELS.backupCreate, async event => {
+  handle(IPC_CHANNELS.backupCreate, async event => {
     requireTrustedSender(event);
     if(!mailStore)throw new Error("Mail database is unavailable");
     return createLocalBackup(app.getPath("userData"),[
@@ -408,35 +416,35 @@ function registerIpcHandlers(): void {
       {name:"calendar",store:fixedCalendar()},
     ]);
   });
-  ipcMain.handle(IPC_CHANNELS.focusList, (event) => {
+  handle(IPC_CHANNELS.focusList, (event) => {
     requireTrustedSender(event);
     return localStore().listFocusSessions();
   });
-  ipcMain.handle(IPC_CHANNELS.focusFinish, (event, input: unknown) => {
+  handle(IPC_CHANNELS.focusFinish, (event, input: unknown) => {
     requireTrustedSender(event);
     return localStore().recordFocusSession(input);
   });
-  ipcMain.handle(IPC_CHANNELS.focusSummary, (event) => {
+  handle(IPC_CHANNELS.focusSummary, (event) => {
     requireTrustedSender(event);
     return localStore().focusSummary();
   });
-  ipcMain.handle(IPC_CHANNELS.mailStatus, (event) => {
+  handle(IPC_CHANNELS.mailStatus, (event) => {
     requireTrustedSender(event);
     return campusMail().snapshot();
   });
-  ipcMain.handle(IPC_CHANNELS.mailConnect, async (event, input: unknown) => {
+  handle(IPC_CHANNELS.mailConnect, async (event, input: unknown) => {
     requireTrustedSender(event);
     return campusMail().connect(input);
   });
-  ipcMain.handle(IPC_CHANNELS.mailList, async (event) => {
+  handle(IPC_CHANNELS.mailList, async (event) => {
     requireTrustedSender(event);
     return campusMail().list();
   });
-  ipcMain.handle(IPC_CHANNELS.mailSyncNow, async (event) => {
+  handle(IPC_CHANNELS.mailSyncNow, async (event) => {
     requireTrustedSender(event);
     return campusMail().sync();
   });
-  ipcMain.handle(IPC_CHANNELS.mailCandidates, async (event) => {
+  handle(IPC_CHANNELS.mailCandidates, async (event) => {
     requireTrustedSender(event);
     const records = await campusMail().list();
     if (!records.length) return [] as MailCandidate[];
@@ -450,7 +458,7 @@ function registerIpcHandlers(): void {
         taskId:prior?.taskId ?? null}] satisfies MailCandidate[];
     });
   });
-  ipcMain.handle(IPC_CHANNELS.mailReviewCandidate, async (event, input: unknown) => {
+  handle(IPC_CHANNELS.mailReviewCandidate, async (event, input: unknown) => {
     requireTrustedSender(event);
     const choice = parseMailCandidateChoice(input);
     // The untrusted renderer sends only a source identity and decision, never a
@@ -465,28 +473,28 @@ function registerIpcHandlers(): void {
     }
     return result;
   });
-  ipcMain.handle(IPC_CHANNELS.mailDisconnect, async (event) => {
+  handle(IPC_CHANNELS.mailDisconnect, async (event) => {
     requireTrustedSender(event);
     const account = campusMail().snapshot().email;
     await campusMail().disconnect();
     if (account) localStore().clearMailCandidateDecisions(account);
     return { disconnected: true as const };
   });
-  ipcMain.handle(IPC_CHANNELS.mailPrepareSend, async (event, input: unknown) => {
+  handle(IPC_CHANNELS.mailPrepareSend, async (event, input: unknown) => {
     requireTrustedSender(event);
     return campusMail().prepareSend(input);
   });
-  ipcMain.handle(IPC_CHANNELS.mailConfirmSend, async (event, confirmationId: unknown) => {
+  handle(IPC_CHANNELS.mailConfirmSend, async (event, confirmationId: unknown) => {
     requireTrustedSender(event);
     return campusMail().confirmSend(confirmationId);
   });
-  ipcMain.handle(IPC_CHANNELS.canvasStatus, async (event) => {
+  handle(IPC_CHANNELS.canvasStatus, async (event) => {
     requireTrustedSender(event);
     const stored = await credentials().load();
     if (!stored) return { connected: false, baseUrl: null, mode: null };
     return { connected: true, baseUrl: stored.baseUrl, mode: "developer-local-token" };
   });
-  ipcMain.handle(IPC_CHANNELS.canvasConnect, async (event, input: unknown) => {
+  handle(IPC_CHANNELS.canvasConnect, async (event, input: unknown) => {
     requireTrustedSender(event);
     const config = parseCanvasPersonalTokenInput(input);
     const api = new CanvasApi(config.baseUrl, config.token);
@@ -496,28 +504,31 @@ function registerIpcHandlers(): void {
     coordinator().cancel();
     await credentials().save({ baseUrl: api.origin, token: config.token });
     // Initial connection starts automatic collection of current-course assignments.
-    void coordinator().sync();
+    void coordinator().sync().then(summary=>{
+    if(summary.failedCourses||summary.calendarFailedCourses)
+      report("CANVAS_SYNC_FAILED","canvas");
+  }).catch(()=>report("CANVAS_SYNC_FAILED","canvas"));
     return {
       status: { connected: true, baseUrl: api.origin, mode: "developer-local-token" },
       courses,
     };
   });
-  ipcMain.handle(IPC_CHANNELS.canvasCourses, async (event) => {
+  handle(IPC_CHANNELS.canvasCourses, async (event) => {
     requireTrustedSender(event);
     return (await canvasApi()).listCourses();
   });
-  ipcMain.handle(IPC_CHANNELS.canvasAssignments, async (event, courseId: unknown) => {
+  handle(IPC_CHANNELS.canvasAssignments, async (event, courseId: unknown) => {
     requireTrustedSender(event);
     return (await canvasApi()).listAssignments(courseId);
   });
-  ipcMain.handle(IPC_CHANNELS.canvasImported, async (event, courseInput: unknown) => {
+  handle(IPC_CHANNELS.canvasImported, async (event, courseInput: unknown) => {
     requireTrustedSender(event);
     const courseId = parseCanvasCourseId(courseInput);
     const api = await canvasApi();
     const accountId = await api.getCurrentUserId();
     return localStore().listImportedCanvasAssignmentIds(api.origin, accountId, courseId);
   });
-  ipcMain.handle(IPC_CHANNELS.canvasImportAssignment, async (
+  handle(IPC_CHANNELS.canvasImportAssignment, async (
     event, courseInput: unknown, assignmentInput: unknown,
   ) => {
     requireTrustedSender(event);
@@ -531,7 +542,7 @@ function registerIpcHandlers(): void {
     if (!assignment) throw new Error("Assignment not present in the currently authorized Canvas course");
     return localStore().importCanvasAssignment(api.origin, accountId, assignment);
   });
-  ipcMain.handle(IPC_CHANNELS.canvasSyncCourse, async (event, courseInput: unknown) => {
+  handle(IPC_CHANNELS.canvasSyncCourse, async (event, courseInput: unknown) => {
     requireTrustedSender(event);
     const courseId = parseCanvasCourseId(courseInput);
     const api = await canvasApi();
@@ -539,19 +550,19 @@ function registerIpcHandlers(): void {
     const assignments = await api.listAssignments(courseId);
     return localStore().syncImportedCanvasAssignments(api.origin, accountId, courseId, assignments);
   });
-  ipcMain.handle(IPC_CHANNELS.canvasSyncNow, async (event) => {
+  handle(IPC_CHANNELS.canvasSyncNow, async (event) => {
     requireTrustedSender(event);
     return coordinator().sync();
   });
-  ipcMain.handle(IPC_CHANNELS.canvasSyncStatus, (event) => {
+  handle(IPC_CHANNELS.canvasSyncStatus, (event) => {
     requireTrustedSender(event);
     return coordinator().snapshot();
   });
-  ipcMain.handle(IPC_CHANNELS.canvasCourseSettings, async (event) => {
+  handle(IPC_CHANNELS.canvasCourseSettings, async (event) => {
     requireTrustedSender(event);
     return coordinator().courseSettings();
   });
-  ipcMain.handle(IPC_CHANNELS.canvasSetCourseEnabled, async (event, input: unknown) => {
+  handle(IPC_CHANNELS.canvasSetCourseEnabled, async (event, input: unknown) => {
     requireTrustedSender(event);
     if (!input || typeof input !== "object" || Array.isArray(input)) {
       throw new Error("Invalid course synchronization setting");
@@ -564,7 +575,7 @@ function registerIpcHandlers(): void {
     await coordinator().setCourseEnabled(data.courseId, data.enabled);
     return { saved: true };
   });
-  ipcMain.handle(IPC_CHANNELS.canvasDisconnect, async (event) => {
+  handle(IPC_CHANNELS.canvasDisconnect, async (event) => {
     requireTrustedSender(event);
     coordinator().cancel();
     await credentials().clear();
@@ -572,64 +583,64 @@ function registerIpcHandlers(): void {
   });
   // Supabase candidate PoC. All REST calls run in Main with the user's JWT;
   // service-role keys are explicitly rejected and never enter renderer storage.
-  ipcMain.handle(IPC_CHANNELS.cloudStatus, (event) => {
+  handle(IPC_CHANNELS.cloudStatus, (event) => {
     requireTrustedSender(event);
     return sharedCloud.status();
   });
-  ipcMain.handle(IPC_CHANNELS.cloudConfigure, (event, input: unknown) => {
+  handle(IPC_CHANNELS.cloudConfigure, (event, input: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.configure(input);
   });
-  ipcMain.handle(IPC_CHANNELS.cloudLogin, (event, input: unknown) => {
+  handle(IPC_CHANNELS.cloudLogin, (event, input: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.login(input);
   });
-  ipcMain.handle(IPC_CHANNELS.cloudSignup, (event, input: unknown) => {
+  handle(IPC_CHANNELS.cloudSignup, (event, input: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.signUp(input);
   });
-  ipcMain.handle(IPC_CHANNELS.cloudLogout, (event) => {
+  handle(IPC_CHANNELS.cloudLogout, (event) => {
     requireTrustedSender(event);
     sharedCloud.signOut();
     return sharedCloud.status();
   });
-  ipcMain.handle(IPC_CHANNELS.cloudWorkspaces, (event) => {
+  handle(IPC_CHANNELS.cloudWorkspaces, (event) => {
     requireTrustedSender(event);
     return sharedCloud.listWorkspaces();
   });
-  ipcMain.handle(IPC_CHANNELS.cloudCreateWorkspace, (event, name: unknown, displayName: unknown) => {
+  handle(IPC_CHANNELS.cloudCreateWorkspace, (event, name: unknown, displayName: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.createWorkspace(name, displayName);
   });
-  ipcMain.handle(IPC_CHANNELS.cloudCreateInvite, (event, workspaceId: unknown) => {
+  handle(IPC_CHANNELS.cloudCreateInvite, (event, workspaceId: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.createInvite(workspaceId);
   });
-  ipcMain.handle(IPC_CHANNELS.cloudJoinWorkspace, (event, token: unknown, displayName: unknown) => {
+  handle(IPC_CHANNELS.cloudJoinWorkspace, (event, token: unknown, displayName: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.joinWorkspace(token, displayName);
   });
-  ipcMain.handle(IPC_CHANNELS.cloudMembers, (event, workspaceId: unknown) => {
+  handle(IPC_CHANNELS.cloudMembers, (event, workspaceId: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.listMembers(workspaceId);
   });
-  ipcMain.handle(IPC_CHANNELS.cloudMessages, (event, workspaceId: unknown) => {
+  handle(IPC_CHANNELS.cloudMessages, (event, workspaceId: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.listMessages(workspaceId);
   });
-  ipcMain.handle(IPC_CHANNELS.cloudSendMessage, (event, workspaceId: unknown, body: unknown) => {
+  handle(IPC_CHANNELS.cloudSendMessage, (event, workspaceId: unknown, body: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.sendMessage(workspaceId, body);
   });
-  ipcMain.handle(IPC_CHANNELS.cloudTasks, (event, workspaceId: unknown) => {
+  handle(IPC_CHANNELS.cloudTasks, (event, workspaceId: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.listTasks(workspaceId);
   });
-  ipcMain.handle(IPC_CHANNELS.cloudCreateTask, (event, workspaceId: unknown, input: unknown) => {
+  handle(IPC_CHANNELS.cloudCreateTask, (event, workspaceId: unknown, input: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.createTask(workspaceId, input);
   });
-  ipcMain.handle(IPC_CHANNELS.cloudMarkTask, (
+  handle(IPC_CHANNELS.cloudMarkTask, (
     event, workspaceId: unknown, taskId: unknown, completed: unknown,
   ) => {
     requireTrustedSender(event);
@@ -679,6 +690,9 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
+  diagnostics=new DiagnosticLogger(app.getPath("userData"));
+  report("APP_START","app");
+  if(sandboxDisabled)report("SANDBOX_DISABLED","app");
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
     await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",4);
@@ -699,7 +713,7 @@ app.whenReady().then(async () => {
       aiLedger,
     );
     // An inaccessible old key does not block offline tasks or knowledge.
-    await aiService.initialize().catch(()=>{});
+    await aiService.initialize().catch(()=>report("AI_INIT_DEGRADED","ai"));
     aiPlanning = new AIPlanningCoordinator(
       aiService,planningStore,()=>localStore().listTasks(),
     );
@@ -721,14 +735,9 @@ app.whenReady().then(async () => {
       }
     },fixedCalendar());
   } catch (error) {
-    // Detail stays on this machine (terminal only). The dialog keeps the
-    // existing user-facing wording: no paths, no stack traces, no data.
-    console.error(
-      "[ate] local database initialisation failed; userData =",
-      app.getPath("userData"),
-      "\n[ate] cause:",
-      error instanceof Error ? `${error.name}: ${error.message}` : error,
-    );
+    // Never serialize raw SQLite errors, local paths, stacks, or input values.
+    report("STORAGE_OPEN_FAILED","storage");
+    await diagnostics?.flush();
     dialog.showErrorBox(
       "本地数据无法打开",
       "应用无法安全打开本地数据库。请备份用户数据目录后检查磁盘权限或数据库版本；应用不会自动覆盖已有数据。",
@@ -738,13 +747,15 @@ app.whenReady().then(async () => {
   }
   registerIpcHandlers();
   createWindow();
+  report("APP_READY","app");
   coordinator().start(() => BrowserWindow.getAllWindows().length > 0);
   void coordinator().sync();
   campusMail().start(() => BrowserWindow.getAllWindows().length > 0);
   void campusMail().initialize().then(() => {
-    if (mailService) void campusMail().sync();
+    if (mailService) void campusMail().sync().catch(()=>report("MAIL_SYNC_FAILED","mail"));
   }).catch(() => {
     // No credentials or OS encryption support: mail remains disconnected.
+    report("MAIL_INIT_DEGRADED","mail");
   });
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
