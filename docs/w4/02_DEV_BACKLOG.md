@@ -18,7 +18,7 @@
 | Task ID | 代码状态 | 验收状态 |
 |---|---|---|
 | APP-001 / APP-002 | 已完成（Electron 骨架、9 个导航入口、IPC 白名单） | 待真机 |
-| APP-003 | 已完成（4 个 SQLite 库、WAL、user_version 迁移、迁移前快照） | 单测通过，待真机 |
+| APP-003 | 已完成（6 个 SQLite 库、WAL、user_version 迁移、迁移前快照） | 单测通过，待真机 |
 | APP-004 | **未实现**（无统一日志与脱敏层） | 未开始 |
 | APP-005 / APP-006 | 部分（safeStorage 凭据、明暗主题） | 待真机 |
 | CAL-001 / CAL-003 / CAL-004 / CAL-005 | 已完成（任务 CRUD、ICS 导入导出、Canvas 任务映射与去重） | 单测通过，待真机 |

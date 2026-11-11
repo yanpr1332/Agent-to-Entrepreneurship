@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, type IpcMainInvokeEvent } from "electron";
-import { join,basename,extname,resolve } from "node:path";
+import { join,basename,extname } from "node:path";
+import { configureUserDataOverride } from "./user-data-override";
 import { randomUUID } from "node:crypto";
 import { lstat,readFile,writeFile } from "node:fs/promises";
 import { FixedCalendarStore } from "./fixed-calendar-store";
@@ -53,10 +54,18 @@ if (app.commandLine.hasSwitch("no-sandbox")) {
  * writable for this process (managed hosts, portable installs, CI). Unset by
  * default so normal installs keep using %APPDATA%\<app name>.
  */
-const userDataOverride = process.env.ATE_USER_DATA_DIR;
-if (userDataOverride) {
-  app.setPath("userData", resolve(userDataOverride));
-  console.warn("[ate] user data directory overridden:", app.getPath("userData"));
+// A failed override must never silently fall back to the default data store.
+let userDataOverrideFailure = false;
+try {
+  const customPath = configureUserDataOverride(
+    process.env.ATE_USER_DATA_DIR,
+    (directory) => app.setPath("userData", directory),
+  );
+  if (customPath) console.warn("[ate] user data directory overridden:", customPath);
+} catch (error) {
+  userDataOverrideFailure = true;
+  console.error("[ate] cannot initialise ATE_USER_DATA_DIR:",
+    error instanceof Error ? `${error.name}: ${error.message}` : error);
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -662,6 +671,14 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
+  if (userDataOverrideFailure) {
+    dialog.showErrorBox(
+      "无法打开自定义数据目录",
+      "ATE_USER_DATA_DIR 指定的目录无法创建或设置。应用不会改用默认目录，以免意外使用另一份数据。请检查路径和权限后重试。",
+    );
+    app.quit();
+    return;
+  }
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
     await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",4);

@@ -98,6 +98,9 @@ Electron 命令行（见 `node_modules/electron-vite/dist/chunks/lib-*.js` 中 `
    ```
 
    注意：换目录等于换一套本地数据，原任务/资料不会自动迁移。
+   启动时会先递归创建缺少的目录，再交给 Electron 设置 `userData`；
+   如果目录无法创建或设置失败，应用会停止启动并提示错误，**不会静默回退到默认目录**。
+   首次运行可以指定一个尚不存在的子目录，不必手动预先创建。
 
 **排障提示**：此前的版本把真实异常静默吞掉了，只会显示通用文案。现在主进程会向终端打印
 `[ate] local database initialisation failed; userData = ...` 与具体错误，先看终端再动手。
