@@ -10,7 +10,7 @@
 | 时间 | 2026-11-11 18:40–18:55（Asia/Shanghai） |
 | 基线提交 | `cd8347b`（`origin/main`，工作区与远端完全一致） |
 | 操作系统 | Windows（用户本机桌面会话） |
-| Node.js | v24.21.0（`engines` 要求 `>=24 <25`；[.nvmrc](../.nvmrc) 钉 24.18.0，CI 亦为 24.18.0） |
+| Node.js | v24.21.0（`engines` 要求 `>=24 <25`；[`.nvmrc`](../../.nvmrc) 钉 24.18.0，CI 亦为 24.18.0） |
 | npm | 11.19.0 |
 | Electron | 45.2.3 |
 
@@ -22,11 +22,21 @@
 | `npm test`（默认 forks 池） | ⚠️ 环境失败，**非断言失败** | 全部测试文件报 `Timeout terminating forks worker`；沙箱禁止子进程 IPC |
 | `node node_modules/vitest/vitest.mjs run --pool=threads` | ✅ **43 文件 / 190 用例全部通过**，3.06 s | 命中 `Test Files 43 passed (43)`、`Tests 190 passed (190)` |
 | `node node_modules/electron-vite/bin/electron-vite.js build` | ✅ 通过，0.6 s | `out/main/index.js` 214.67 kB、`out/preload/index.js` 12.30 kB、`out/renderer/index.html` 0.60 kB、`index-*.css` 26.81 kB、`index-*.js` 780.93 kB |
-| `npm run dev`（默认，沙箱开启） | ❌ 本机不可用 | 本机无法创建 Chromium 沙箱子进程，报 `GPU process isn't usable. Goodbye.`；原因与替代参数见 [16 本地运行排障](16_LOCAL_RUNTIME_TROUBLESHOOTING.md) |
+| `npm run dev`（默认，沙箱开启） | ❌ 本机不可用 | 默认路径启动即退出；日志显示 GPU/沙箱子进程启动失败（`GPU process isn't usable. Goodbye.`）。兼容模式下应用可正常运行，但默认路径的根因仍需在真实桌面环境进一步复核；排查记录与替代参数见 [16 本地运行排障](16_LOCAL_RUNTIME_TROUBLESHOOTING.md) |
 | `npm run dev:compat`（`--noSandbox`） | ✅ 已验证（CDP 自动化驱动） | 11 项断言全部通过：preload 桥、IPC、版本、9 个导航、SQLite 连接横幅、4 张指标卡、9 个页面均渲染标题且无全局错误横幅、表单建任务、SQLite 回读、主题切换；另独立验证重启后任务仍在并能清理。userData 下生成 6 个 SQLite 库 |
 
 > `npm run build` = `typecheck && test && electron-vite build`，因第二段在本地环境受限，本次以分步执行替代；
 > CI 使用的是同一组命令，以 CI 结果为准。
+
+### CI 证据
+
+| 项 | 链接 / 说明 |
+| --- | --- |
+| PR #22 Checks（始终反映最新提交） | <https://github.com/yanpr1332/Agent-to-Entrepreneurship/pull/22/checks> |
+| 首个 Windows + macOS 双绿的 run（提交 `4067176`） | <https://github.com/yanpr1332/Agent-to-Entrepreneurship/actions/runs/43009081733> |
+| 「CI」列的读法 | 指该 PR 的 Checks 全绿；此后新增的提交以 PR Checks 页面为准，不继承旧结果 |
+
+两个 job（`Verify (windows-latest)`、`Verify (macos-latest)`）各自执行 `npm ci → typecheck → test → build`。
 
 ## 3. 切片状态
 
@@ -34,21 +44,21 @@
 
 | # | 切片 | 设计文档 | 代码 | 单测 | CI | 真机 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 01 | 工程基线 + Electron 骨架（IPC 白名单、可信 sender、安全基线） | [README](README.md) | ✅ | ✅ | ⬜ 待本次 PR CI | ⚠️ 自动化 |
-| 02 | 本地 SQLite：任务 / 日历 / 专注积分 | [02](02_LOCAL_WORKFLOWS.md) | ✅ | ✅ | ⬜ | ⚠️ 自动化（任务 CRUD 与主题已验证；日历逐日切换、专注计时交互未点） |
-| 03 | Canvas 个人 Token 只读连接器（仅开发者本机） | [03](03_CANVAS_CONNECTOR.md) | ✅ | ✅ | ⬜ | ❌ 无真实 Token |
-| 04 | Canvas 作业自动同步 + 隐藏六个月保留 | [04](04_CANVAS_TASK_SYNC.md) | ✅ | ✅ | ⬜ | ❌ |
-| 05 | 交大邮箱 IMAP 只读同步 / SMTP 逐次确认发送 | [05](05_SJTU_MAIL_CONNECTOR.md) | ✅ | ✅ | ⬜ | ❌ 未做真实邮箱收发 |
-| 06 | 云端工作空间 PoC（Supabase + RLS） | [06](06_CLOUD_WORKSPACE_POC.md) | ✅ | ✅ | ⬜ | ❌ 未在真实项目部署/验收 |
-| 07 | 邮件转任务候选（确认后写入） | [07](07_MAIL_TASK_CANDIDATES.md) | ✅ | ✅ | ⬜ | ❌ |
-| 08 | 本地知识库 + FTS5 检索 + 离线复习 | [08](08_LOCAL_KNOWLEDGE_REVIEW.md) | ✅ | ✅ | ⬜ | ❌ |
-| 09 | 离线规则规划 + 选择性应用 + 批次撤销 | [09](09_OFFLINE_PLANNING_REVIEW.md) | ✅ | ✅ | ⬜ | ❌ |
-| 10 | OpenAI Provider 安全接入（两阶段确认、用量上限） | [10](10_AI_PROVIDER_SECURITY.md) | ✅ | ✅ | ⬜ | ❌ 无真实 Key |
-| 11 | AI 结构化规划人工审核闭环 | [11](11_AI_PLANNING_REVIEW.md) | ✅ | ✅ | ⬜ | ❌ |
-| 12 | PDF 逐页解析与页码引用 | [12](12_PDF_KNOWLEDGE_CITATIONS.md) | ✅ | ✅ | ⬜ | ❌ |
-| 13 | 本地知识图谱（人工节点/关系 + 证据） | [13](13_KNOWLEDGE_GRAPH.md) | ✅ | ✅ | ⬜ | ❌ |
-| 14 | 固定课程 + ICS 导入导出（时区/重复规则白名单） | [14](14_ICS_FIXED_CALENDAR.md) | ✅ | ✅ | ⬜ | ❌ |
-| 15 | Canvas 日历事项自动同步 | [15](15_CANVAS_CALENDAR_AUTO_SYNC.md) | ✅ | ✅ | ⬜ | ❌ |
+| 01 | 工程基线 + Electron 骨架（IPC 白名单、可信 sender、安全基线） | [README](README.md) | ✅ | ✅ | ✅ | ⚠️ 自动化 |
+| 02 | 本地 SQLite：任务 / 日历 / 专注积分 | [02](02_LOCAL_WORKFLOWS.md) | ✅ | ✅ | ✅ | ⚠️ 自动化（任务 CRUD 与主题已验证；日历逐日切换、专注计时交互未点） |
+| 03 | Canvas 个人 Token 只读连接器（仅开发者本机） | [03](03_CANVAS_CONNECTOR.md) | ✅ | ✅ | ✅ | ❌ 无真实 Token |
+| 04 | Canvas 作业自动同步 + 隐藏六个月保留 | [04](04_CANVAS_TASK_SYNC.md) | ✅ | ✅ | ✅ | ❌ |
+| 05 | 交大邮箱 IMAP 只读同步 / SMTP 逐次确认发送 | [05](05_SJTU_MAIL_CONNECTOR.md) | ✅ | ✅ | ✅ | ❌ 未做真实邮箱收发 |
+| 06 | 云端工作空间 PoC（Supabase + RLS） | [06](06_CLOUD_WORKSPACE_POC.md) | ✅ | ✅ | ✅ | ❌ 未在真实项目部署/验收 |
+| 07 | 邮件转任务候选（确认后写入） | [07](07_MAIL_TASK_CANDIDATES.md) | ✅ | ✅ | ✅ | ❌ |
+| 08 | 本地知识库 + FTS5 检索 + 离线复习 | [08](08_LOCAL_KNOWLEDGE_REVIEW.md) | ✅ | ✅ | ✅ | ❌ |
+| 09 | 离线规则规划 + 选择性应用 + 批次撤销 | [09](09_OFFLINE_PLANNING_REVIEW.md) | ✅ | ✅ | ✅ | ❌ |
+| 10 | OpenAI Provider 安全接入（两阶段确认、用量上限） | [10](10_AI_PROVIDER_SECURITY.md) | ✅ | ✅ | ✅ | ❌ 无真实 Key |
+| 11 | AI 结构化规划人工审核闭环 | [11](11_AI_PLANNING_REVIEW.md) | ✅ | ✅ | ✅ | ❌ |
+| 12 | PDF 逐页解析与页码引用 | [12](12_PDF_KNOWLEDGE_CITATIONS.md) | ✅ | ✅ | ✅ | ❌ |
+| 13 | 本地知识图谱（人工节点/关系 + 证据） | [13](13_KNOWLEDGE_GRAPH.md) | ✅ | ✅ | ✅ | ❌ |
+| 14 | 固定课程 + ICS 导入导出（时区/重复规则白名单） | [14](14_ICS_FIXED_CALENDAR.md) | ✅ | ✅ | ✅ | ❌ |
+| 15 | Canvas 日历事项自动同步 | [15](15_CANVAS_CALENDAR_AUTO_SYNC.md) | ✅ | ✅ | ✅ | ❌ |
 
 「真机」一栏的含义是**实际运行过**。目前只有 01、02 拿到「⚠️ 自动化」——由 CDP 脚本真实点击
 DOM 验证，不是人手工走查；其余切片仍为 ❌。在补齐之前，本仓库不得对外表述这 15 个切片"已验收通过"。

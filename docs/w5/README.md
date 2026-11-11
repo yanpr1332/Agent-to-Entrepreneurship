@@ -52,7 +52,7 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 
 ## 当前已知边界
 
-- 个人任务、日历、专注、知识库、规划已接入本机 SQLite（4 个独立数据库、WAL、user_version 迁移）；Canvas、邮箱、AI 凭据与云端会话各自隔离。
+- 个人任务与专注、知识库、固定日历、学习规划、AI 用量、邮件缓存分别落在 **6 个独立 SQLite 库**（`ate-local` / `ate-knowledge` / `ate-fixed-calendar` / `ate-plans` / `ate-ai-usage` / `ate-mail`，均启用 WAL 与 user_version 迁移）；Canvas、邮箱、AI 凭据与云端会话各自隔离。
 - 已暴露约 90 个显式 allowlist IPC 通道，覆盖任务、日历、知识、规划、AI、Canvas、邮件与云端；Renderer 仍无 Node、文件系统或 shell 能力。
 - 当前窗口关闭遵循平台默认退出行为；托盘驻留、后台资源控制和紧急退出属于 W5-6，尚未实现。
 - Canvas 仅支持开发者本人的 Personal Token；OAuth 多用户方案依赖学校 Developer Key，尚未申请或获批。

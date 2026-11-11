@@ -28,9 +28,10 @@ npm run dev:compat                              # 本机无法创建 Chromium �
 
 Windows 事件日志会留下 `electron.exe` 的 APPCRASH，异常代码 `0xc0000005`。
 
-**根因**：本机无法创建 Chromium 的**沙箱子进程**（受管控终端、安全软件或系统策略导致）。
-GPU 子进程一起起不来，Chromium 在 `app.whenReady()` 之前就直接自杀，所以主进程里的任何
-fallback 都来不及执行。
+**根因（推断，待真实桌面环境复核）**：Chromium 无法创建其沙箱子进程。现有日志只能证明
+**子进程启动失败**，不足以排除应用自身的配置问题；本机在 `--no-sandbox` 下可正常启动，
+说明故障点在 Chromium 沙箱层，但确切原因（受管控终端、安全软件、系统策略或 AppContainer
+被禁用）仍需在具备管理员权限的真实桌面环境中逐项确认。
 
 **修复**：
 
