@@ -75,6 +75,8 @@ export class DiagnosticLogger{
       try{
         const stat=await file.stat();
         if(!stat.isFile())return;
+        // Also constrain pre-existing diagnostic files, not just newly created files.
+        if(process.platform!=="win32")await file.chmod(0o600);
         // Keep the entire log <=128 KiB; old diagnostic metadata may be dropped.
         if(stat.size+Buffer.byteLength(line,"utf8")>MAX_DIAGNOSTIC_BYTES)
           await file.truncate(0);
