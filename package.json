@@ -11,6 +11,7 @@
   },
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:compat": "electron-vite dev --noSandbox",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",

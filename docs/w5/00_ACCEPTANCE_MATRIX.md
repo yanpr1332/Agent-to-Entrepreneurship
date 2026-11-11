@@ -22,19 +22,20 @@
 | `npm test`（默认 forks 池） | ⚠️ 环境失败，**非断言失败** | 全部测试文件报 `Timeout terminating forks worker`；沙箱禁止子进程 IPC |
 | `node node_modules/vitest/vitest.mjs run --pool=threads` | ✅ **43 文件 / 190 用例全部通过**，3.06 s | 命中 `Test Files 43 passed (43)`、`Tests 190 passed (190)` |
 | `node node_modules/electron-vite/bin/electron-vite.js build` | ✅ 通过，0.6 s | `out/main/index.js` 214.67 kB、`out/preload/index.js` 12.30 kB、`out/renderer/index.html` 0.60 kB、`index-*.css` 26.81 kB、`index-*.js` 780.93 kB |
-| `npm run dev`（GUI 启动） | ❌ 未验证 | Electron 在本会话的进程上下文中无法启动（`electron.exe --version` 亦无输出），最小 hello-world 主进程日志未写入；与本项目代码无关 |
+| `npm run dev`（默认，沙箱开启） | ❌ 本机不可用 | 本机无法创建 Chromium 沙箱子进程，报 `GPU process isn't usable. Goodbye.`；原因与替代参数见 [16 本地运行排障](16_LOCAL_RUNTIME_TROUBLESHOOTING.md) |
+| `npm run dev:compat`（`--noSandbox`） | ✅ 已验证（CDP 自动化驱动） | 11 项断言全部通过：preload 桥、IPC、版本、9 个导航、SQLite 连接横幅、4 张指标卡、9 个页面均渲染标题且无全局错误横幅、表单建任务、SQLite 回读、主题切换；另独立验证重启后任务仍在并能清理。userData 下生成 6 个 SQLite 库 |
 
 > `npm run build` = `typecheck && test && electron-vite build`，因第二段在本地环境受限，本次以分步执行替代；
 > CI 使用的是同一组命令，以 CI 结果为准。
 
 ## 3. 切片状态
 
-状态定义：**代码**＝仓库有实现；**单测**＝有 Vitest 覆盖并通过；**CI**＝Windows+macOS 双平台工作流通过；**真机**＝本人实际点击验收过。
+状态定义：**代码**＝仓库有实现；**单测**＝有 Vitest 覆盖并通过；**CI**＝Windows+macOS 双平台工作流通过；**真机**＝实际运行过（⚠️ 自动化＝由 CDP 脚本真实点击 DOM 验证，未由人手工走查）。
 
 | # | 切片 | 设计文档 | 代码 | 单测 | CI | 真机 |
 | --- | --- | --- | --- | --- | --- | --- |
-| 01 | 工程基线 + Electron 骨架（IPC 白名单、可信 sender、安全基线） | [README](README.md) | ✅ | ✅ | ⬜ 待本次 PR CI | ❌ |
-| 02 | 本地 SQLite：任务 / 日历 / 专注积分 | [02](02_LOCAL_WORKFLOWS.md) | ✅ | ✅ | ⬜ | ❌ |
+| 01 | 工程基线 + Electron 骨架（IPC 白名单、可信 sender、安全基线） | [README](README.md) | ✅ | ✅ | ⬜ 待本次 PR CI | ⚠️ 自动化 |
+| 02 | 本地 SQLite：任务 / 日历 / 专注积分 | [02](02_LOCAL_WORKFLOWS.md) | ✅ | ✅ | ⬜ | ⚠️ 自动化（任务 CRUD 与主题已验证；日历逐日切换、专注计时交互未点） |
 | 03 | Canvas 个人 Token 只读连接器（仅开发者本机） | [03](03_CANVAS_CONNECTOR.md) | ✅ | ✅ | ⬜ | ❌ 无真实 Token |
 | 04 | Canvas 作业自动同步 + 隐藏六个月保留 | [04](04_CANVAS_TASK_SYNC.md) | ✅ | ✅ | ⬜ | ❌ |
 | 05 | 交大邮箱 IMAP 只读同步 / SMTP 逐次确认发送 | [05](05_SJTU_MAIL_CONNECTOR.md) | ✅ | ✅ | ⬜ | ❌ 未做真实邮箱收发 |
@@ -49,8 +50,8 @@
 | 14 | 固定课程 + ICS 导入导出（时区/重复规则白名单） | [14](14_ICS_FIXED_CALENDAR.md) | ✅ | ✅ | ⬜ | ❌ |
 | 15 | Canvas 日历事项自动同步 | [15](15_CANVAS_CALENDAR_AUTO_SYNC.md) | ✅ | ✅ | ⬜ | ❌ |
 
-「真机」一栏全部为 ❌，含义是**没有任何人提供过真实设备交互证据**，而不是"功能坏了"。在补齐之前，
-本仓库不得对外表述这 15 个切片"已验收通过"。
+「真机」一栏的含义是**实际运行过**。目前只有 01、02 拿到「⚠️ 自动化」——由 CDP 脚本真实点击
+DOM 验证，不是人手工走查；其余切片仍为 ❌。在补齐之前，本仓库不得对外表述这 15 个切片"已验收通过"。
 
 ## 4. 未验证项清单（按风险排序）
 
@@ -59,7 +60,7 @@
 3. **交大邮箱真实收发**：IMAP 登录、收件、SMTP 发送均无真实账号证据。
 4. **Supabase 真实部署**：迁移 SQL 未在真实项目执行；RLS 隔离未用独立账号做正反向验证；Realtime 未接入（当前 10 秒轮询）。
 5. **OpenAI 真实调用**：无真实 Key 的调用记录；成本与限流仅由单元测试的假 client 覆盖。
-6. **GUI 交互**：本会话无法启动 Electron，全部界面行为未经点击验证。
+6. **GUI 交互**：已用 CDP 自动化点击 9 个页面、建任务、重启持久化并通过；但专注计时、知识库导入、规划应用、ICS 导入等具体交互尚未人工走查。
 7. **备份恢复**：只能生成备份，无恢复 UI、无自动清理；备份未加密。
 
 ## 5. 本机复现步骤
@@ -73,7 +74,8 @@ npm run typecheck
 npm test                      # CI 环境用默认池；受限环境改用下面一行
 node node_modules\vitest\vitest.mjs run --pool=threads
 npm run build
-npm run dev                   # 必须由本人在真实桌面会话执行
+npm run dev                   # 默认：Chromium 沙箱开启
+npm run dev:compat            # 本机无法创建 Chromium 沙箱子进程时使用；见 16_LOCAL_RUNTIME_TROUBLESHOOTING.md
 ```
 
 GUI 冒烟清单（逐项记录 通过 / 失败 / 未验证）：

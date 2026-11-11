@@ -59,6 +59,7 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 - 云端协作只有 PoC 代码，未在真实 Supabase 项目部署，也未做 RLS 隔离的正反向验收；消息为 10 秒轮询。
 - 尚未实现：统一日志与脱敏、E2E 测试、备份恢复 UI、安装包签名与公证、专注程序限制。
 - 本地运行成功不等于 macOS 安装包、签名或团队云端验收通过。
+- 受管控的 Windows 主机可能无法创建 Chromium 沙箱子进程，需用 `npm run dev:compat`，详见 [本地运行排障](16_LOCAL_RUNTIME_TROUBLESHOOTING.md)。
 
 ## 验收证据
 
