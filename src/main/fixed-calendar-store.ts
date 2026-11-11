@@ -131,20 +131,24 @@ export class FixedCalendarStore {
   }
   /** Course-scoped, transactional, and opt-in visibility preserving. Never overwrites a hidden row. */
   reconcileCanvasCourse(origin:string,accountId:number,courseId:number,
-    remote:CanvasCalendarEvent[],now=new Date()):CanvasCalendarSyncResult{
+    remote:CanvasCalendarEvent[],now=new Date(),
+    window?:{startDate:string;endDate:string}):CanvasCalendarSyncResult{
     if(typeof origin!=="string"||!/^https:\/\/[^/]+$/.test(origin)||
       !Number.isSafeInteger(accountId)||accountId<=0||
       !Number.isSafeInteger(courseId)||courseId<=0||remote.length>1000||
       new Set(remote.map(x=>x.id)).size!==remote.length||
       remote.some(x=>x.courseId!==courseId||!Number.isSafeInteger(x.id)||x.id<=0))
       throw Error("Invalid Canvas calendar reconciliation");
+    if(window && (!/^\d{4}-\d{2}-\d{2}$/.test(window.startDate)||
+      !/^\d{4}-\d{2}-\d{2}$/.test(window.endDate)||window.startDate>window.endDate))
+      throw Error("Invalid Canvas calendar reconciliation window");
     const result:CanvasCalendarSyncResult={created:0,changed:0,missing:0,skipped:0};
     const stamp=now.toISOString();
     const ids=new Set(remote.map(x=>x.id));
     const previous=this.db.prepare(
-      "SELECT remote_id,missing FROM canvas_calendar_events "+
+      "SELECT remote_id,missing,day FROM canvas_calendar_events "+
       "WHERE instance_origin=? AND account_id=? AND course_id=?"
-    ).all(origin,accountId,courseId) as unknown as Array<{remote_id:number;missing:number}>;
+    ).all(origin,accountId,courseId) as unknown as Array<{remote_id:number;missing:number;day:string}>;
     this.db.exec("BEGIN IMMEDIATE");
     try{
       for(const item of remote){
@@ -185,7 +189,8 @@ export class FixedCalendarStore {
         }
       }
       for(const prev of previous){
-        if(!ids.has(prev.remote_id)&&prev.missing===0){
+        if(!ids.has(prev.remote_id)&&prev.missing===0 &&
+          (!window||(prev.day>=window.startDate&&prev.day<=window.endDate))){
           this.db.prepare("UPDATE canvas_calendar_events SET missing=1 "+
             "WHERE instance_origin=? AND account_id=? AND course_id=? AND remote_id=?"
           ).run(origin,accountId,courseId,prev.remote_id);
