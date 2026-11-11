@@ -86,7 +86,8 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
       startMinute:540,durationMinutes:60,weeks:1})[0];
     initial.close();
     const old=new DatabaseSync(path);
-    old.exec("DROP INDEX fixed_events_series; ALTER TABLE fixed_events DROP COLUMN series_id; PRAGMA user_version=1;");
+    old.exec("DROP TABLE canvas_calendar_events; DROP INDEX fixed_events_series; "+
+      "ALTER TABLE fixed_events DROP COLUMN series_id; PRAGMA user_version=1;");
     old.close();
     const copied=await backupBeforeMigration(dir,"ate-fixed-calendar.sqlite",2);
     expect(copied).toBeTruthy();

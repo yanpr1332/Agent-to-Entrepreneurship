@@ -34,8 +34,8 @@ describe("automatic Canvas calendar to offline study planning",()=>{
     const busy=calendar.busySlots();
     expect(busy).toHaveLength(1);
     const planner=new PlanningStore(":memory:",()=>calendar.busySlots());closeables.push(planner);
-    const settings={startDate:busy[0].day,days:1,dailyStart:"00:00",
-      dailyEnd:"23:45",minutesPerTask:45};
+    const settings={startDate:busy[0].day,days:1,dailyStart:"08:00",
+      dailyEnd:"12:00",minutesPerTask:45};
     const task={id:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       title:"Study",description:"",dueDate:null,priority:"normal" as const,
       completed:false,visible:true,hiddenAt:null,retentionExpiresAt:null,source:null,
