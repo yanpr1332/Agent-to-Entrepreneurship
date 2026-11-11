@@ -452,6 +452,8 @@ function registerIpcHandlers(): void {
     const api = new CanvasApi(config.baseUrl, config.token);
     // Prove real Canvas API access before persisting encrypted credentials.
     const courses = await api.listCourses();
+    // A replacement Token may belong to a different Canvas account. Fence old syncs.
+    coordinator().cancel();
     await credentials().save({ baseUrl: api.origin, token: config.token });
     // Initial connection starts automatic collection of current-course assignments.
     void coordinator().sync();
