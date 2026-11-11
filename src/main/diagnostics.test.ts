@@ -39,7 +39,8 @@ describe("APP-004 private diagnostics and IPC error boundary",()=>{
 
   it("caps the file without accidentally including arbitrary exception messages",async()=>{
     const dir=fixture(),logger=new DiagnosticLogger(dir,()=>{});
-    for(let i=0;i<2600;i++)logger.record("APP_START","app");
+    writeFileSync(join(dir,DIAGNOSTIC_FILE),"X".repeat(MAX_DIAGNOSTIC_BYTES-40));
+    logger.record("APP_START","app");
     await logger.flush();
     const data=readFileSync(join(dir,DIAGNOSTIC_FILE),"utf8");
     expect(Buffer.byteLength(data)).toBeLessThanOrEqual(MAX_DIAGNOSTIC_BYTES);
