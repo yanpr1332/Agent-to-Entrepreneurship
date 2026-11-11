@@ -16,7 +16,7 @@ export interface CanvasCalendarSyncResult {
   missing:number;
   skipped:number;
 }
-export interface CanvasCalendarFixedEvent extends FixedEvent {
+export interface CanvasCalendarFixedEvent extends Omit<FixedEvent,"source"> {
   source:"canvas";
   visible:boolean;
   missing:boolean;
@@ -55,3 +55,5 @@ export function toLocalCanvasSlot(event:CanvasCalendarEvent):{
     start.getSeconds()!==0||end.getSeconds()!==0)return null;
   return {day,startMinute,durationMinutes:wallDuration};
 }
+
+export type CalendarDisplayEvent=FixedEvent|CanvasCalendarFixedEvent;
