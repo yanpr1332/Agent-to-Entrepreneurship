@@ -122,3 +122,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## W6 固定课程与 ICS
 
 支持本机固定课程/按周展开、IANA TZID 与有限周 RRULE 的安全 ICS 导入预览、单次编辑/整组删除、ICS 导出，以及学习规划和 AI 建议的固定事项避让。具体支持格式与时区限制见 [14_ICS_FIXED_CALENDAR.md](14_ICS_FIXED_CALENDAR.md)。
+
+
+## CAL-005 Canvas 日历自动同步
+
+现有 Canvas 个人连接扩展为自动同步当前课程日历事项（非作业），在日历里按用户选择显示/隐藏，保留本机缓存并将可见课程时间用于学习规划冲突检查；ICS 仍作为手动备选导入方式。隐私、同步窗口、账号边界和保留规则见 [15_CANVAS_CALENDAR_AUTO_SYNC.md](15_CANVAS_CALENDAR_AUTO_SYNC.md)。

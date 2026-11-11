@@ -21,6 +21,7 @@ export const IPC_CHANNELS = {
   knowledgeReviewProgress: "knowledge:review-progress",
   backupCreate: "backup:create",
   fixedCalendarList: "calendar:fixed-list",
+  canvasCalendarVisibility: "calendar:canvas-visibility",
   fixedCalendarCreate: "calendar:fixed-create",
   fixedCalendarDelete: "calendar:fixed-delete",
   fixedCalendarEdit: "calendar:fixed-edit",

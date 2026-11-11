@@ -1,18 +1,20 @@
 import {useEffect,useState,type FormEvent} from "react";
 import {timesOverlap,type BusySlot,type FixedEvent,type ICSPreview} from "../../shared/fixed-calendar-model";
+import type {CalendarDisplayEvent,CanvasCalendarFixedEvent} from "../../shared/canvas-calendar-model";
 import {dayOffset,minuteString,parseMinute} from "../../shared/planning-model";
 
 function errorText(e:unknown):string{return e instanceof Error?e.message:"日历操作失败";}
 
 /** Fixed events remain independent of tasks and are never uploaded automatically. */
 export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
-  day:string;events:FixedEvent[];studyBlocks:BusySlot[];onChanged:()=>Promise<void>;
+  day:string;events:CalendarDisplayEvent[];studyBlocks:BusySlot[];onChanged:()=>Promise<void>;
 }){
   const [title,setTitle]=useState("");
   const [start,setStart]=useState("09:00");
   const [end,setEnd]=useState("10:00");
   const [weeks,setWeeks]=useState(1);
   const [editing,setEditing]=useState<string|null>(null);
+  const [showHiddenCanvas,setShowHiddenCanvas]=useState(false);
   const [editDay,setEditDay]=useState(day);
   const [preview,setPreview]=useState<ICSPreview|null>(null);
   const [busy,setBusy]=useState(false);
@@ -69,6 +71,15 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
       setNotice("已删除系列中的 "+removed+" 个事件。");
     });
   }
+  async function setCanvasVisible(item:CanvasCalendarFixedEvent):Promise<void>{
+    await run(async()=>{
+      await window.desktop.calendar.setCanvasVisibility({id:item.id,visible:!item.visible});
+      await onChanged();
+      setNotice(item.visible
+        ? "该 Canvas 日历事项已隐藏，保留六个月；同步不会重新显示它。"
+        : "已重新显示该 Canvas 日历事项。");
+    });
+  }
   async function pickICS():Promise<void>{
     await run(async()=>{
       setPreview(await window.desktop.calendar.previewICS());
@@ -103,7 +114,9 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
       setNotice(result.saved?"已导出 "+result.eventCount+" 个固定事件。文件保存在你选择的本地位置。":"已取消导出。");
     });
   }
-  const current=events.filter(e=>e.day===day);
+  const current=events.filter(e=>e.day===day &&
+    (e.source!=="canvas"||e.visible||showHiddenCanvas));
+  const activeEvents=events.filter(e=>e.source!=="canvas"||(e.visible&&!e.missing));
   const manualConflicts=(()=>{
     if(!title.trim()||!start||!end)return [] as string[];
     let from:number,to:number;
@@ -112,30 +125,43 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
     const group=editing? [{day:editDay,startMinute:from,durationMinutes:to-from}] :
       Array.from({length:weeks},(_,i)=>({day:dayOffset(day,i*7),startMinute:from,durationMinutes:to-from}));
     return group.flatMap(slot=>[
-      ...events.filter(e=>e.id!==editing&&timesOverlap(e,slot)).map(e=>slot.day+" · 与固定事项「"+e.title+"」重叠"),
+      ...activeEvents.filter(e=>e.id!==editing&&timesOverlap(e,slot)).map(e=>slot.day+" · 与固定事项「"+e.title+"」重叠"),
       ...studyBlocks.filter(b=>timesOverlap(b,slot)).map(()=>slot.day+" · 与已确认学习时间重叠，保存将被拒绝"),
     ]).slice(0,12);
   })();
   const previewConflicts=preview?.events.flatMap(slot=>[
-    ...events.filter(e=>timesOverlap(e,slot)).map(e=>slot.day+" · "+slot.title+" / "+e.title),
+    ...activeEvents.filter(e=>timesOverlap(e,slot)).map(e=>slot.day+" · "+slot.title+" / "+e.title),
     ...studyBlocks.filter(b=>timesOverlap(b,slot)).map(()=>slot.day+" · 与已确认学习时间冲突（无法导入）"),
   ]).slice(0,12)??[];
   return <section className="panel fixed-calendar-panel">
     <div className="eyebrow">LOCAL FIXED EVENTS</div>
     <h2>固定课程与 ICS 日历</h2>
-    <p className="privacy-note">课程和导入的事件保存在本机，与任务截止日期分离。学习规划、AI 候选及最终应用均避开这些时间。手动按周重复最多 16 周；日历数据不自动同步至 Canvas 或其他服务。</p>
+    <p className="privacy-note">课程、ICS 和 Canvas 日历事件缓存在本机，与任务截止日期分离。Canvas 自动同步仅更新所选账号和课程的有效日程，不替你修改已确认的学习计划。学习规划、AI 候选及最终应用均避开这些时间。手动按周重复最多 16 周；日历数据不自动同步至 Canvas 或其他服务。</p>
     {error&&<div className="error-banner" role="alert">{error}
       <button onClick={()=>setError("")}>关闭</button></div>}
     {notice&&<div className="connector-notice" role="status">{notice}</div>}
     <h3>{day} · 固定事项 ({current.length})</h3>
+    <label className="course-switch"><input type="checkbox" checked={showHiddenCanvas}
+      onChange={e=>setShowHiddenCanvas(e.target.checked)}/>显示隐藏的 Canvas 日历事项</label>
     {current.length?<ul className="planned-day-list">{current.map(item=><li key={item.id}>
       <span>{minuteString(item.startMinute)}–{minuteString(item.startMinute+item.durationMinutes)}</span>
       <strong>{item.title}</strong>
-      {item.startMinute+item.durationMinutes<1440&&<button className="text-button" disabled={busy}
-        onClick={()=>beginEdit(item)}>编辑单次</button>}
-      {item.seriesId&&<button className="text-button" disabled={busy}
-        onClick={()=>void removeSeries(item)}>删除整组</button>}
-      <button className="text-button" disabled={busy} onClick={()=>void remove(item)}>删除单次</button>
+      {item.source==="canvas"?<>
+        <small>Canvas 课程 #{item.courseId}
+          {item.missing?" · 来源已缺失（不占用规划时间）":""}
+          {!item.visible?" · 已隐藏（保留至 "+item.retentionExpiresAt?.slice(0,10)+"）":""}
+        </small>
+        {item.visible&&!item.missing&&studyBlocks.some(b=>timesOverlap(item,b))&&
+          <small className="retention-warning">与已确认学习时间冲突，请人工调整学习计划</small>}
+        <button className="text-button" disabled={busy}
+          onClick={()=>void setCanvasVisible(item)}>{item.visible?"隐藏此项":"重新显示"}</button>
+      </>:<>
+        {item.startMinute+item.durationMinutes<1440&&<button className="text-button" disabled={busy}
+          onClick={()=>beginEdit(item)}>编辑单次</button>}
+        {item.seriesId&&<button className="text-button" disabled={busy}
+          onClick={()=>void removeSeries(item)}>删除整组</button>}
+        <button className="text-button" disabled={busy} onClick={()=>void remove(item)}>删除单次</button>
+      </>}
     </li>)}</ul>:<p className="empty-state">当天无固定事项。</p>}
     <form className="fixed-calendar-form" onSubmit={event=>void create(event)}>
       <h3>{editing?"编辑单次事件":"创建固定课程"}</h3>
@@ -180,6 +206,6 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
         <button className="secondary-button" disabled={busy} onClick={()=>void cancelImport()}>取消预览</button>
       </div>
     </div>}
-    <p className="privacy-note">ICS 支持单日事件、UTC/本地浮动时间、IANA TZID 时区以及有限周重复（COUNT 1–250、BYDAY、INTERVAL 1–8，最多两年）。夏令时跳时或歧义时刻、UNTIL/EXDATE、跨夜课程及其他不支持的复杂规则会整文件拒绝，避免错误安排。可编辑单次事件，新增重复系列可整组删除；旧版本独立课程仍需单条删除。导出使用设备本地浮动时间，不覆盖已有文件。</p>
+    <p className="privacy-note">ICS 导出仅包含人工/ICS 固定事项，不包含 Canvas 或任务。ICS 支持单日事件、UTC/本地浮动时间、IANA TZID 时区以及有限周重复（COUNT 1–250、BYDAY、INTERVAL 1–8，最多两年）。夏令时跳时或歧义时刻、UNTIL/EXDATE、跨夜课程及其他不支持的复杂规则会整文件拒绝，避免错误安排。可编辑单次事件，新增重复系列可整组删除；旧版本独立课程仍需单条删除。导出使用设备本地浮动时间，不覆盖已有文件。</p>
   </section>;
 }

@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import type { CanvasAssignment, CanvasCourse } from "../../shared/canvas-model";
 import { parseCanvasCourseId } from "../../shared/canvas-model";
+import type { CanvasCalendarEvent } from "../../shared/canvas-calendar-model";
 
 const MAX_PAGES = 20;
 const MAX_ITEMS = 1000;
@@ -200,6 +201,41 @@ export class CanvasApi {
   async listCourses(): Promise<CanvasCourse[]> {
     const rows = await this.requestPages("/api/v1/courses?enrollment_state=active&per_page=50");
     return parseCourses(rows);
+  }
+
+  /** Course-scoped calendar events only (not assignments), bounded to a finite date window. */
+  async listCalendarEvents(courseIdInput:unknown,startDate:string,endDate:string):Promise<CanvasCalendarEvent[]>{
+    const courseId=parseCanvasCourseId(courseIdInput);
+    if(!/^\d{4}-\d\d-\d\d$/.test(startDate)||!/^\d{4}-\d\d-\d\d$/.test(endDate)||
+       !Number.isFinite(Date.parse(startDate))||!Number.isFinite(Date.parse(endDate))||
+       startDate>endDate||(Date.parse(endDate)-Date.parse(startDate))/86400000>200)
+       throw Error("Canvas calendar window must be 200 days or less");
+    const query=new URLSearchParams({
+      type:"event",start_date:startDate,end_date:endDate,per_page:"50",
+      "context_codes[]":"course_"+courseId,
+      "excludes[]":"description",
+    });
+    const rows=await this.requestPages("/api/v1/calendar_events?"+query);
+    const result:CanvasCalendarEvent[]=[];
+    for(const value of rows){
+      const item=asRecord(value);
+      if(!item)continue;
+      const id=safePositiveId(item.id);
+      if(!id||item.workflow_state==="deleted")continue;
+      const context="course_"+courseId;
+      if(item.context_code!==context&&item.effective_context_code!==context)continue;
+      const startAt=typeof item.start_at==="string"&&Number.isFinite(Date.parse(item.start_at))?
+        item.start_at:null;
+      const endAt=typeof item.end_at==="string"&&Number.isFinite(Date.parse(item.end_at))?
+        item.end_at:null;
+      const allDayDate=item.all_day===true&&typeof item.all_day_date==="string" &&
+        /^\d{4}-\d\d-\d\d$/.test(item.all_day_date)?item.all_day_date:null;
+      result.push({id,courseId,title:cleanLabel(item.title,"Canvas 日历事项 "+id).slice(0,120),
+        startAt,endAt,allDayDate});
+    }
+    if(new Set(result.map(e=>e.id)).size!==result.length)
+      throw Error("Canvas calendar returned duplicate event identities");
+    return result;
   }
 
   async listAssignments(courseIdInput: unknown): Promise<CanvasAssignment[]> {

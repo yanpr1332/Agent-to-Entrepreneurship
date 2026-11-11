@@ -26,6 +26,7 @@ import type {
   KnowledgeGraphSnapshot, GraphNode, GraphEdge, GraphNodeInput, GraphNodeEdit, GraphEdgeInput,
 } from "../shared/knowledge-graph-model";
 
+import type {CalendarDisplayEvent} from "../shared/canvas-calendar-model";
 import type { FixedEvent,CreateFixedEventInput,EditFixedEventInput,ICSPreview,ICSImportResult,ICSExportResult } from "../shared/fixed-calendar-model";
 import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
@@ -136,7 +137,9 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.aiPlanConfirm,approvalId) as Promise<AIPlanAccepted>,
   }),
   calendar: Object.freeze({
-    list:()=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarList) as Promise<FixedEvent[]>,
+    list:()=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarList) as Promise<CalendarDisplayEvent[]>,
+    setCanvasVisibility:(input:{id:string;visible:boolean})=>
+      ipcRenderer.invoke(IPC_CHANNELS.canvasCalendarVisibility,input) as Promise<boolean>,
     create:(input:CreateFixedEventInput)=>
       ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarCreate,input) as Promise<FixedEvent[]>,
     remove:(id:string)=>
