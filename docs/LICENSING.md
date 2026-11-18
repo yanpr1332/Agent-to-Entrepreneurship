@@ -16,13 +16,13 @@
 
 在本次提案前，`main` 的基线提交为：
 `98377ad9a62baf0de16a8b6246e17c74859d419d`。
-该基线公开提供的版本带有 MPL-2.0 LICENSE。保留 Git 历史以便核查原授权，不应改写旧提交或隐瞒其存在。
+该基线公开提供的版本带有 [MPL-2.0 LICENSE](https://github.com/yanpr1332/Agent-to-Entrepreneurship/blob/98377ad9a62baf0de16a8b6246e17c74859d419d/LICENSE)。保留 Git 历史以便核查原授权，不应改写旧提交或隐瞒其存在。
 
 ## 必须完成的版权授权核对（合并前）
 
 Git 提交历史至少出现两位提交作者：
 - `Yan Pengrui`；
-- `poineme`（见提交 `4019e3e05a808fc97a6f4582f12a5dc8c5eaa822`，涉及文档、前端工程和其他文件）。
+- `poineme`（见提交 `4019e3e05a808fc97a6f4582f12a5dc8c5eaa822`，涉及文档、主进程代码、测试和项目元数据等文件）。
 
 **仅凭 Git 作者姓名不能确定全部版权归属或重新许可权限。** 提交、签核和 PR 的历史记录并不自动表示已授予 PolyForm Strict 下的重新许可权。
 

@@ -32,7 +32,7 @@ AI Agent 必须获得明确 Task ID、允许修改路径、禁止修改路径、
 
 ## 贡献许可与编辑授权
 
-当前版本拟采用 [PolyForm Strict License 1.0.0](LICENSE)；历史已按 MPL-2.0 授权的版本保留其已有授权。
+当前版本采用 [PolyForm Strict License 1.0.0](LICENSE)；历史已按 MPL-2.0 授权的版本保留其已有授权。
 PolyForm Strict **不自动允许公众修改、创建衍生作品或重新分发本项目代码**。
 GitHub 仓库公开可见、能 Fork、能提交 Pull Request，均**不等于**法律上的修改/分发授权。
 
