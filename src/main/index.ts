@@ -295,6 +295,18 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return planner().undo(id);
   });
+  handle(IPC_CHANNELS.planningManualCreate,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return planner().createManualBlock(input,localStore().listTasks());
+  });
+  handle(IPC_CHANNELS.planningBlockUpdate,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return planner().updateCommittedBlock(input);
+  });
+  handle(IPC_CHANNELS.planningBlockRemove,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return planner().removeCommittedBlock(id);
+  });
   handle(IPC_CHANNELS.aiPlanPrepare,(event,input:unknown)=>{
     requireTrustedSender(event);
     return aiPlanner().prepare(input);
@@ -699,6 +711,7 @@ app.whenReady().then(async () => {
     await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",5);
     await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",3);
     await backupBeforeMigration(app.getPath("userData"),"ate-fixed-calendar.sqlite",3);
+    await backupBeforeMigration(app.getPath("userData"),"ate-plans.sqlite",2);
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
     knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "ate-knowledge.sqlite"));
     fixedCalendarStore = new FixedCalendarStore(

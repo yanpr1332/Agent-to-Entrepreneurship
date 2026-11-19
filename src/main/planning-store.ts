@@ -3,10 +3,12 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, backup } from "node:sqlite";
 import type { LocalTask } from "../shared/local-model";
+import { parseTaskId } from "../shared/local-model";
 import type { AIPlanSlot } from "../shared/ai-plan-model";
 import {timesOverlap,type BusySlot} from "../shared/fixed-calendar-model";
 import {
   dayOffset, eligiblePlanningTasks, parsePlanApply, parsePlanningSettings, parseMinute,
+  parseManualBlockInput, parseCommittedBlockEdit,
   validCivilDay,
   type PlanBlock, type PlanningSettings, type PlanProposal, type AppliedPlanBatch,
 } from "../shared/planning-model";
@@ -40,7 +42,7 @@ export class PlanningStore {
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=3000");
     if(path!==":memory:")this.db.exec("PRAGMA journal_mode=WAL");
     const version=(this.db.prepare("PRAGMA user_version").get() as {user_version:number}).user_version;
-    if(version>1)throw Error("A newer application created this planning database");
+    if(version>2)throw Error("A newer application created this planning database");
     if(version===0)this.db.exec(`
       BEGIN IMMEDIATE;
       CREATE TABLE plan_proposals(
@@ -60,6 +62,15 @@ export class PlanningStore {
       PRAGMA user_version=1;
       COMMIT;
     `);
+    if(version<=1){
+      this.db.exec("BEGIN IMMEDIATE");
+      try {
+        this.db.exec("ALTER TABLE plan_proposals ADD COLUMN source TEXT NOT NULL DEFAULT 'generated' " +
+          "CHECK(source IN ('generated','manual'))");
+        this.db.exec("PRAGMA user_version=2");
+        this.db.exec("COMMIT");
+      }catch(error){this.db.exec("ROLLBACK");throw error;}
+    }
   }
   close():void{this.db.close();}
   async backupTo(path:string):Promise<number>{return backup(this.db,path);}
@@ -72,7 +83,7 @@ export class PlanningStore {
       .all() as unknown as BlockRow[]).map(toBlock);
   }
   proposals():PlanProposal[]{
-    const rows=this.db.prepare("SELECT * FROM plan_proposals ORDER BY created_at DESC LIMIT 15")
+    const rows=this.db.prepare("SELECT * FROM plan_proposals WHERE source='generated' ORDER BY created_at DESC LIMIT 15")
       .all() as unknown as {id:string;created_at:string;settings_json:string;skipped_json:string}[];
     return rows.map(row=>({id:row.id,createdAt:row.created_at,
       settings:JSON.parse(row.settings_json) as PlanningSettings,
@@ -80,7 +91,10 @@ export class PlanningStore {
       blocks:this.blocksFor(row.id)}));
   }
   batches():AppliedPlanBatch[]{
-    const rows=this.db.prepare("SELECT id,applied_at FROM applied_batches ORDER BY applied_at DESC LIMIT 50")
+    const rows=this.db.prepare("SELECT a.id,a.applied_at FROM applied_batches a WHERE EXISTS ("+
+        "SELECT 1 FROM plan_blocks b JOIN plan_proposals p ON p.id=b.proposal_id "+
+        "WHERE b.batch_id=a.id AND b.state='applied' AND p.source='generated') "+
+        "ORDER BY a.applied_at DESC LIMIT 50")
       .all() as unknown as {id:string;applied_at:string}[];
     const all=this.listCommitted();
     return rows.map(row=>({id:row.id,appliedAt:row.applied_at,
@@ -265,6 +279,82 @@ export class PlanningStore {
       this.db.exec("COMMIT");
     }catch(e){this.db.exec("ROLLBACK");throw e;}
     return {id:batchId,appliedAt,blocks:chosen.map(b=>({...b,state:"applied" as const,batchId}))};
+  }
+
+  /** User-chosen schedule: immediate, reviewable and reversible, no task due-date mutation. */
+  createManualBlock(raw:unknown,tasks:LocalTask[],now=new Date()):PlanBlock {
+    const input=parseManualBlockInput(raw);
+    const task=tasks.find(x=>x.id===input.taskId);
+    if(!task||!task.visible||task.completed)throw Error("Choose a visible, incomplete task");
+    if(this.listCommitted().length>=500)throw Error("Too many committed study blocks");
+    this.ensureFree(input);
+    const id=randomUUID(),proposalId=randomUUID(),batchId=randomUUID();
+    const stamp=now.toISOString();
+    const rationale="手动安排的执行时间；不更改任务截止日期";
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare(`INSERT INTO plan_proposals
+        (id,created_at,settings_json,skipped_json,source) VALUES(?,?,?,?,'manual')`)
+        .run(proposalId,stamp,"{}","[]");
+      this.db.prepare("INSERT INTO applied_batches(id,applied_at) VALUES(?,?)").run(batchId,stamp);
+      this.db.prepare(`INSERT INTO plan_blocks(
+        id,proposal_id,task_id,task_title,task_updated_at,task_due_date,
+        day,start_minute,duration_minutes,rationale,state,batch_id
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,'applied',?)`)
+        .run(id,proposalId,task.id,task.title,task.updatedAt,task.dueDate,
+          input.day,input.startMinute,input.durationMinutes,rationale,batchId);
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+    const row=this.db.prepare("SELECT * FROM plan_blocks WHERE id=?")
+      .get(id) as unknown as BlockRow;
+    return toBlock(row);
+  }
+
+  /** Update one already-confirmed block; avoid both fixed classes and study plans. */
+  updateCommittedBlock(raw:unknown):PlanBlock {
+    const edit=parseCommittedBlockEdit(raw);
+    const current=this.db.prepare("SELECT * FROM plan_blocks WHERE id=? AND state='applied'")
+      .get(edit.blockId) as unknown as BlockRow|undefined;
+    if(!current)throw Error("Confirmed study block not found");
+    this.ensureFree(edit,edit.blockId);
+    const changed=this.db.prepare("UPDATE plan_blocks SET day=?,start_minute=?,duration_minutes=? " +
+      "WHERE id=? AND state='applied'")
+      .run(edit.day,edit.startMinute,edit.durationMinutes,edit.blockId);
+    if(Number(changed.changes)!==1)throw Error("Confirmed study block not found");
+    const updated=this.db.prepare("SELECT * FROM plan_blocks WHERE id=?")
+      .get(edit.blockId) as unknown as BlockRow;
+    return toBlock(updated);
+  }
+
+  /** Delete only the selected calendar block, not its parent task or other batch entries. */
+  removeCommittedBlock(raw:unknown):boolean {
+    const id=parseTaskId(raw);
+    const current=this.db.prepare("SELECT proposal_id,batch_id FROM plan_blocks " +
+      "WHERE id=? AND state='applied'").get(id) as
+      {proposal_id:string;batch_id:string|null}|undefined;
+    if(!current)return false;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare("DELETE FROM plan_blocks WHERE id=? AND state='applied'").run(id);
+      if(current.batch_id){
+        const hasApplied=this.db.prepare("SELECT 1 FROM plan_blocks WHERE batch_id=? AND state='applied'")
+          .get(current.batch_id);
+        if(!hasApplied)this.db.prepare("DELETE FROM applied_batches WHERE id=?").run(current.batch_id);
+      }
+      const stillHasBlocks=this.db.prepare("SELECT 1 FROM plan_blocks WHERE proposal_id=? LIMIT 1")
+        .get(current.proposal_id);
+      if(!stillHasBlocks)this.db.prepare("DELETE FROM plan_proposals WHERE id=?")
+        .run(current.proposal_id);
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+    return true;
+  }
+
+  private ensureFree(slot:{day:string;startMinute:number;durationMinutes:number},
+                     excludedId:string|null=null):void {
+    if(this.listCommitted().some(b=>b.id!==excludedId&&overlaps(slot,b)) ||
+       this.fixedBusy().some(b=>timesOverlap(slot,b)))
+      throw Error("Study time overlaps an existing study block or fixed class");
   }
 
   /** Undo only this batch of generated blocks, never user tasks. */

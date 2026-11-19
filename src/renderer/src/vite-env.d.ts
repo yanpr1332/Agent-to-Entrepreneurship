@@ -30,6 +30,7 @@ import type {CalendarDisplayEvent} from "../../shared/canvas-calendar-model";
 import type { FixedEvent,CreateFixedEventInput,EditFixedEventInput,ICSPreview,ICSImportResult,ICSExportResult } from "../../shared/fixed-calendar-model";
 import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
+  ManualBlockInput, CommittedBlockEditInput,
 } from "../../shared/planning-model";
 
 import type {
@@ -123,6 +124,9 @@ declare global {
         batches: () => Promise<AppliedPlanBatch[]>;
         apply: (selection: ApplyPlanRequest) => Promise<AppliedPlanBatch>;
         undo: (id: string) => Promise<boolean>;
+        manualCreate: (input: ManualBlockInput) => Promise<PlanBlock>;
+        editBlock: (input: CommittedBlockEditInput) => Promise<PlanBlock>;
+        removeBlock: (id: string) => Promise<boolean>;
       };
       knowledge: {
         graph: () => Promise<KnowledgeGraphSnapshot>;

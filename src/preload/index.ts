@@ -30,6 +30,7 @@ import type {CalendarDisplayEvent} from "../shared/canvas-calendar-model";
 import type { FixedEvent,CreateFixedEventInput,EditFixedEventInput,ICSPreview,ICSImportResult,ICSExportResult } from "../shared/fixed-calendar-model";
 import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
+  ManualBlockInput, CommittedBlockEditInput,
 } from "../shared/planning-model";
 
 import type {
@@ -162,6 +163,12 @@ const desktopApi = Object.freeze({
     apply: (selection: ApplyPlanRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.planningApply,selection) as Promise<AppliedPlanBatch>,
     undo: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.planningUndo,id) as Promise<boolean>,
+    manualCreate: (input: ManualBlockInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.planningManualCreate,input) as Promise<PlanBlock>,
+    editBlock: (input: CommittedBlockEditInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.planningBlockUpdate,input) as Promise<PlanBlock>,
+    removeBlock: (id: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.planningBlockRemove,id) as Promise<boolean>,
   }),
   knowledge: Object.freeze({
     graph: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeGraph) as Promise<KnowledgeGraphSnapshot>,

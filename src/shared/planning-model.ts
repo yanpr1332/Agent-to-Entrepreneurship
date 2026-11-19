@@ -1,4 +1,5 @@
 import type { LocalTask } from "./local-model";
+import { parseTaskId } from "./local-model";
 
 export interface PlanningSettings {
   startDate: string;
@@ -41,6 +42,50 @@ export interface ApplyPlanRequest {
   proposalId: string;
   blockIds: string[];
   edits: PlanEdit[];
+}
+
+/** A user's manual schedule is separate from the task's due date. */
+export interface ManualBlockInput {
+  taskId: string;
+  day: string;
+  startMinute: number;
+  durationMinutes: number;
+}
+export interface CommittedBlockEditInput {
+  blockId: string;
+  day: string;
+  startMinute: number;
+  durationMinutes: number;
+}
+export function parseManualBlockInput(raw:unknown):ManualBlockInput {
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))throw Error("Invalid manual schedule");
+  const x=raw as Record<string,unknown>;
+  if(Object.keys(x).sort().join(",")!=="day,durationMinutes,startMinute,taskId")
+    throw Error("Unexpected manual schedule field");
+  const taskId=parseTaskId(x.taskId);
+  return {...parseScheduleSlot(x.day,x.startMinute,x.durationMinutes),taskId};
+}
+export function parseCommittedBlockEdit(raw:unknown):CommittedBlockEditInput {
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))throw Error("Invalid schedule update");
+  const x=raw as Record<string,unknown>;
+  if(Object.keys(x).sort().join(",")!=="blockId,day,durationMinutes,startMinute")
+    throw Error("Unexpected schedule update field");
+  return {blockId:parseTaskId(x.blockId),
+    ...parseScheduleSlot(x.day,x.startMinute,x.durationMinutes)};
+}
+/** Five-minute precision; manual blocks cannot cross a civil day. */
+function parseScheduleSlot(day:unknown,startMinute:unknown,durationMinutes:unknown):
+  {day:string;startMinute:number;durationMinutes:number} {
+  if(!validCivilDay(day) || !Number.isSafeInteger(startMinute) ||
+     !Number.isSafeInteger(durationMinutes) ||
+     (startMinute as number)<0 || (startMinute as number)>=1440 ||
+     (startMinute as number)%5!==0 ||
+     (durationMinutes as number)<15 || (durationMinutes as number)>480 ||
+     (durationMinutes as number)%5!==0 ||
+     (startMinute as number)+(durationMinutes as number)>1440) {
+    throw Error("Study block must fit one day, 15–480 minutes, at five-minute precision");
+  }
+  return {day,startMinute:startMinute as number,durationMinutes:durationMinutes as number};
 }
 
 export function validCivilDay(value: unknown): value is string {
