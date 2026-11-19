@@ -11,6 +11,7 @@ import CampusMail from "./CampusMail";
 import KnowledgeBase from "./KnowledgeBase";
 import StudyPlanner from "./StudyPlanner";
 import FixedCalendarPanel from "./FixedCalendarPanel";
+import TaskSchedulePanel from "./TaskSchedulePanel";
 import type { CalendarDisplayEvent } from "../../shared/canvas-calendar-model";
 import AIWorkspace from "./AIWorkspace";
 import { minuteString, type PlanBlock } from "../../shared/planning-model";
@@ -587,14 +588,8 @@ export default function App() {
                   <section className="panel planned-day-panel">
                     <div className="eyebrow">CONFIRMED STUDY SCHEDULE</div>
                     <h2>{formatDueDate(selectedDate)} · 学习时间块</h2>
-                    {plannedBlocks.filter(b=>b.day===selectedDate).length ?
-                    <ul className="planned-day-list">
-                      {plannedBlocks.filter(b=>b.day===selectedDate).map(block=><li key={block.id}>
-                        <span>{minuteString(block.startMinute)} – {minuteString(block.startMinute+block.durationMinutes)}</span>
-                        <strong>{block.taskTitle}</strong>
-                      </li>)}
-                    </ul>:<p className="empty-state">这一天尚无已确认的规划时间。可以在「学习规划」生成建议。</p>}
-                    <p className="privacy-note">这些是已确认的学习计划，不等于任务截止时间或真实专注记录；规划不会修改原任务。</p>
+                    <TaskSchedulePanel day={selectedDate} tasks={tasks} blocks={plannedBlocks} onChanged={refreshPlanning}/>
+                    <p className="privacy-note">计划执行时间、任务截止日期和真实专注记录彼此独立。</p>
                     <div className="actual-focus-list">
                       <h3>{formatDueDate(selectedDate)} · 实际专注记录 ({selectedFocusSegments.length})</h3>
                       {selectedFocusSegments.length ? <ul className="planned-day-list">

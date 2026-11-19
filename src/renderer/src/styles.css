@@ -413,3 +413,24 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
 .actual-focus-list .planned-day-list small{color:var(--muted);font-size:11px}
 .agenda-key.agenda-focus{background:#45ad9f}
 .agenda-entry.agenda-focus{border-inline-start-color:#45ad9f}
+
+/* ALPHA-TIME-003: explicit schedule editing without changing task deadlines. */
+.task-schedule-panel{display:grid;gap:13px;margin-top:10px}
+.task-schedule-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.task-schedule-heading h3{margin:0 0 6px;font-size:14px}
+.task-schedule-heading .help-text{margin:0;max-width:490px}
+.schedule-block-list{padding:0;margin:0;list-style:none;display:grid;gap:9px}
+.schedule-block-list li{border:1px solid var(--line);border-radius:9px;padding:10px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.schedule-block-detail{display:grid;gap:5px;min-width:170px;flex:1}
+.schedule-block-detail strong{font-size:12px;overflow-wrap:anywhere}
+.schedule-block-detail span{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.task-time-form{display:grid;gap:12px;background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:15px}
+.task-time-form h4{font-size:13px;margin:0}
+.task-time-form label{display:grid;gap:5px;color:var(--muted);font-size:11px;min-width:0}
+.task-time-form input,.task-time-form select{width:100%;max-width:100%;
+  border:1px solid var(--line);border-radius:7px;padding:9px;
+  background:var(--surface);color:var(--ink)}
+.task-time-fields{display:grid;grid-template-columns:repeat(3,minmax(135px,1fr));gap:10px}
+@media(max-width:720px){.task-time-fields{grid-template-columns:1fr}}

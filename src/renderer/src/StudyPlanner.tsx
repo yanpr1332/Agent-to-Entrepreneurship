@@ -304,6 +304,7 @@ export default function StudyPlanner({onChanged}:{
 
     <section className="panel">
       <div className="eyebrow">COMMITTED SCHEDULE</div><h2>已确认学习时间</h2>
+      <p className="help-text">要修改单个已确认的任务执行时间，请到「日历与任务」选中对应日期，使用「修改时间 / 删除本段」。撤销整批仍然保留在下方。</p>
       {blocks.length?<ul className="planner-committed">{blocks.map(b=>
         <li key={b.id}><strong>{b.taskTitle}</strong><span>{b.day} · {minuteString(b.startMinute)} – {minuteString(b.startMinute+b.durationMinutes)}</span></li>
       )}</ul>:<p className="empty-state">还没有确认的学习时间块。预览候选不会修改这里。</p>}
