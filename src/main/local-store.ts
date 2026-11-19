@@ -173,11 +173,15 @@ export class LocalStore {
           "(decision='ignored' AND task_id IS NULL)))");
       }
       if (version <= 4) {
-        this.db.exec(`
-          ALTER TABLE focus_sessions ADD COLUMN title TEXT NOT NULL DEFAULT '专注学习';
-          ALTER TABLE focus_sessions ADD COLUMN time_source TEXT NOT NULL DEFAULT 'estimated'
-            CHECK (time_source IN ('recorded','estimated'));
-        `);
+        // Legacy fixture databases can have a newer focus table while their
+        // user_version was deliberately reset for mail migration tests.
+        const columns = new Set((this.db.prepare("PRAGMA table_info(focus_sessions)").all()
+          as {name:string}[]).map(row => row.name));
+        if (!columns.has("title"))
+          this.db.exec("ALTER TABLE focus_sessions ADD COLUMN title TEXT NOT NULL DEFAULT '专注学习'");
+        if (!columns.has("time_source"))
+          this.db.exec("ALTER TABLE focus_sessions ADD COLUMN time_source TEXT NOT NULL DEFAULT 'estimated' " +
+            "CHECK (time_source IN ('recorded','estimated'))");
       }
       this.db.exec("PRAGMA user_version = 5");
       this.db.exec("COMMIT");
