@@ -41,6 +41,20 @@ describe("local knowledge FTS5 + source revisions",()=>{
     expect(db.search("privateLeakToken")).toEqual([]);
     expect(db.search("matrix rank")[0].documentId).toBe(tex.document.id);
   });
+  it("blends exact and typo matches across documents and never duplicates citations",()=>{
+    const db=memory();
+    const exact=db.importText({sourcePath:"/tmp/exact.md",title:"Exact",
+      format:"markdown",text:"DNA polymerase reads templates."}).document;
+    const close=db.importText({sourcePath:"/tmp/near.md",title:"Near",
+      format:"markdown",text:"DNA polymeraze acts on a template."}).document;
+    const results=db.search("polymerase");
+    expect(results.map(hit=>[hit.documentId,hit.matchType])).toEqual([
+      [exact.id,"exact"],[close.id,"fuzzy"],
+    ]);
+    expect(new Set(results.map(hit=>hit.documentId+":"+hit.ordinal)).size)
+      .toBe(results.length);
+    expect(results[0].excerpt).toContain("polymerase");
+  });
   it("tolerates a small typo or punctuation change with a separate fuzzy label",()=>{
     const db=memory();db.importText(first);
     expect(db.search("polymeraze")[0]).toMatchObject({

@@ -462,3 +462,22 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
 .kb-passage-evidence pre{font-size:12px;max-height:190px;overflow:auto;
   border:1px solid var(--line);border-radius:8px;padding:10px}
 .kb-source-preview{max-height:530px;overflow:auto;display:block}
+
+/* ALPHA-KB-004: explicit citation-level AI request, independent from local search */
+.kb-ai-helper{margin:16px 0;padding:15px;border:1px solid var(--line);border-radius:10px;
+  display:grid;gap:11px;min-width:0}
+.kb-ai-helper h3{font-size:14px;margin:0}
+.kb-ai-helper .help-text,.kb-ai-helper .privacy-note{line-height:1.6}
+.kb-ai-question-form{display:grid;gap:10px}
+.kb-ai-question-form label{display:grid;gap:7px;font-size:12px;color:var(--muted)}
+.kb-ai-question-form textarea{width:100%;min-height:60px;padding:10px;
+  color:var(--ink);background:var(--surface);border:1px solid var(--line);
+  border-radius:8px;font-family:inherit}
+.kb-ai-question-form .secondary-button{justify-self:start}
+.kb-ai-helper .ai-question-preview{white-space:pre-wrap;overflow-wrap:anywhere;
+  overflow-y:auto;max-height:300px;font-family:ui-monospace,Consolas,monospace;font-size:11px}
+.kb-ai-answer{display:grid;gap:10px;padding:12px;border:1px solid var(--line);
+  border-radius:9px;min-width:0}
+.kb-ai-source-evidence{font-size:11px;line-height:1.65;max-height:210px;
+  overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;
+  border:1px solid var(--line);padding:9px;border-radius:8px}
