@@ -142,15 +142,16 @@ export function parseSyncOperationResult(value: unknown): SyncOperationResult {
 }
 
 /** This is a projection only. No network or side effects. */
-export function projectPersonalTask(task: LocalTask): PersonalTaskSnapshot | null {
-  if (task.source !== null || !task.visible) return null;
+export function projectPersonalTask(task: LocalTask, explicitlyEnabled: boolean): PersonalTaskSnapshot | null {
+  // Consent must be supplied by the future per-account/scope preference flow.
+  if (explicitlyEnabled !== true || task.source !== null || !task.visible) return null;
   return taskPayload({
     title: task.title, description: task.description,
     dueDate: task.dueDate, priority: task.priority, completed: task.completed,
   });
 }
-export function projectManualCalendarEvent(event: FixedEvent): ManualCalendarSnapshot | null {
-  if (event.source !== "manual" || event.sourceUid !== null) return null;
+export function projectManualCalendarEvent(event: FixedEvent, explicitlyEnabled: boolean): ManualCalendarSnapshot | null {
+  if (explicitlyEnabled !== true || event.source !== "manual" || event.sourceUid !== null) return null;
   return eventPayload({
     title: event.title, day: event.day, startMinute: event.startMinute,
     durationMinutes: event.durationMinutes, seriesId: event.seriesId,
