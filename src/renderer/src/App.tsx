@@ -484,15 +484,22 @@ export default function App() {
 
           {page === "calendar" && (
             <>
-              <div className="page-heading"><div><div className="eyebrow">PERSONAL CALENDAR</div><h1>日历与任务</h1><p>创建和安排个人任务，所有变更保存在本机 SQLite。</p></div><span className="count-chip">{shownTasks.length} 条展示中的任务</span></div>
-              <div className="calendar-layout">
+              <div className="page-heading"><div><div className="eyebrow">PERSONAL CALENDAR</div><h1>日历与任务</h1><p>创建和安排个人任务，所有变更保存在本机 SQLite。</p></div>
+                <div className="calendar-page-actions"><span className="count-chip">{shownTasks.length} 条展示中的任务</span>
+                  <button className="primary-button" type="button" onClick={openNewTask}>+ 新建任务</button></div>
+              </div>
+              <div className={editorOpen ? "calendar-layout" : "calendar-layout editor-collapsed"}>
                 <div className="calendar-column">
                   <section className="panel calendar-panel">
                     <div className="calendar-header">
-                      <h2>{viewHeading}</h2>
+                      <div className="calendar-heading"><h2>{viewHeading}</h2>
+                        <p className="calendar-selection" role="status">当前选中：<strong>{formatCalendarSelection(selectedDate)}</strong>
+                          {selectedDate === today && <span className="calendar-today-note"> · 今天</span>}
+                        </p>
+                      </div>
                       <div className="button-row calendar-nav">
                         <button className="icon-button" aria-label={prevLabel} onClick={()=>moveCalendar(-1)}>‹</button>
-                        <button className="small-button" onClick={()=>selectCalendarDate(today)}>今天</button>
+                        <button className="small-button" onClick={()=>selectCalendarDate(today)} aria-label="回到今天">回到今天</button>
                         <button className="icon-button" aria-label={nextLabel} onClick={()=>moveCalendar(1)}>›</button>
                       </div>
                     </div>
@@ -515,7 +522,7 @@ export default function App() {
                             day.key===today?"today-day":""].join(" ")}
                           onClick={()=>selectCalendarDate(day.key)} aria-label={day.key}
                           aria-pressed={day.key===selectedDate} aria-current={day.key===today?"date":undefined}>
-                          <span>{day.day}</span>{hasTasks&&<i className="day-dot"/>}
+                          <span>{day.day}</span>{day.key===today&&<small className="calendar-today-tag">今天</small>}{hasTasks&&<i className="day-dot"/>}
                         </button>;
                       })}</div>
                     </>:<CalendarAgenda view={calendarView} selectedDay={selectedDate}
@@ -545,10 +552,11 @@ export default function App() {
                     {retentionNotice && <p className="retention-banner" role="status">{retentionNotice}</p>}
                     {expiringSoon > 0 && <p className="retention-warning" role="status">有 {expiringSoon} 条隐藏的 Canvas 任务将在 30 天内到期清理。可在「隐藏任务」中恢复。</p>}
                     {showHidden && <p className="privacy-note">隐藏的 Canvas 任务在本机数据库保留六个月，到期后自动清理。显示每条任务的预计清理日期；隐藏不会删除 Canvas 原始作业。</p>}
-                    {visibleTasks.length ? <ul className="task-list">{visibleTasks.map((task) => <TaskRow key={task.id} task={task} busy={busy} onToggle={(t) => void toggleTask(t)} onEdit={editTask} onRemove={(t) => void removeTask(t)} onRestore={(t) => void restoreCanvasTask(t)} />)}</ul> : <p className="empty-state">{showHidden ? "没有隐藏的 Canvas 任务。" : "这里还没有任务。可以在右侧创建一条。"}</p>}
+                    {visibleTasks.length ? <ul className="task-list">{visibleTasks.map((task) => <TaskRow key={task.id} task={task} busy={busy} onToggle={(t) => void toggleTask(t)} onEdit={editTask} onRemove={(t) => void removeTask(t)} onRestore={(t) => void restoreCanvasTask(t)} />)}</ul> : <p className="empty-state">{showHidden ? "没有隐藏的 Canvas 任务。" : "这里还没有任务。点击上方「+ 新建任务」创建一条。"}</p>}
                   </section>
                 </div>
-                <section className="panel task-editor"><div className="eyebrow">TASK EDITOR</div><h2>{editingId ? "编辑任务" : "新建任务"}</h2>
+                {editorOpen && <section className="panel task-editor"><div className="task-editor-heading"><div><div className="eyebrow">TASK EDITOR</div><h2>{editingId ? "编辑任务" : "新建任务"}</h2></div>
+                  <button className="small-button" type="button" onClick={() => setEditorOpen(false)}>收起面板</button></div>
                   <form onSubmit={(event) => void saveTask(event)}>
                     <label>任务名称<input required maxLength={120} autoComplete="off" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：完成项目报告" /></label>
                     <label>备注<textarea rows={4} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="补充信息（可选）" /></label>
@@ -557,8 +565,8 @@ export default function App() {
                     <button className="primary-button full-width" disabled={busy || runtime !== "connected"} type="submit">{busy ? "保存中…" : editingId ? "保存修改" : "创建任务"}</button>
                     {editingId && <button className="secondary-button full-width" type="button" onClick={resetTaskForm}>取消编辑</button>}
                   </form>
-                  <p className="privacy-note">任务仅保存在此设备。团队共享将在独立授权后接入。</p>
-                </section>
+                  <p className="privacy-note">截止日期不等于学习执行时段；计划时间可在「学习规划」中安排。任务仅保存在此设备。</p>
+                </section>}
               </div>
             </>
           )}
