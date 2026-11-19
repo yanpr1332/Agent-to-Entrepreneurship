@@ -185,7 +185,7 @@ export function parseFocusTitle(input: unknown): string {
 }
 
 function parseFocusInstant(input: unknown): string {
-  if (typeof input !== "string" || !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$/.test(input))
+  if (typeof input !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(input))
     throw new Error("Invalid focus timestamp");
   const date = new Date(input);
   if (!Number.isFinite(date.getTime()) || date.toISOString() !== input) throw new Error("Invalid focus timestamp");
