@@ -32,19 +32,171 @@
 W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全边界见 [W5 工程说明](docs/w5/README.md)；
 可复现的验证结果、环境差异与未验证项见 [W5 验收矩阵](docs/w5/00_ACCEPTANCE_MATRIX.md)。
 
-### 环境要求
+## Windows / macOS 本地 Alpha 验收指南
 
-- Node.js 24.18.x
-- npm 11.x
-- Windows 10/11 或 macOS（支持版本按发布验收矩阵确定）
+以下命令全部在包含 package.json 的**仓库根目录**执行。本指南优先使用隔离测试数据，不需要真实 Canvas、学校邮箱、OpenAI 或 Supabase 凭据。**CI 构建成功不代表完成真实 GUI 验收。**
 
-### 启动与检查
+### 0. 检查开发环境与更新仓库
 
-    npm ci
-    npm run dev
-    npm run typecheck
-    npm test
-    npm run build
+- Windows 10/11、macOS；Node.js **24.x**（项目 .nvmrc 固定 **24.18.0**）；npm **11.x**；Git。
+- 先保存本机尚未提交的修改。不要为了验收使用 git reset --hard。
+- 下列 Windows 的 cd 路径只是示例，请替换成自己的目录。
+
+Windows（PowerShell）：
+
+~~~powershell
+cd D:\Electives\AgentToEntrepreneurship\Agent-to-Entrepreneurship
+git status --short
+git switch main
+git pull --ff-only
+node --version                     # 需要 v24.x
+npm --version                      # 需要 11.x
+~~~
+
+macOS（Terminal）：
+
+~~~bash
+cd /path/to/Agent-to-Entrepreneurship
+git status --short
+git switch main
+git pull --ff-only
+node --version
+npm --version
+~~~
+
+**尚未合并的 PR 不在 main 中。** 如需提前测试某个 PR，先执行 git fetch origin，再根据 PR 中显示的分支名切换到相应远端分支；验收完成后切回 main。不要假设 git pull 会自动拉到尚未合并的功能。
+
+### 1. 安装依赖
+
+Windows/macOS 通用：
+
+~~~sh
+npm ci
+~~~
+
+npm ci 会按 package-lock.json 安装依赖。出现 deprecated、funding 提示并不意味着安装失败；出现审计漏洞请保存结果、按运行时与开发工具风险分别判断：
+
+~~~sh
+npm audit --omit=dev
+npm audit
+~~~
+
+**不要在首次验收前执行 npm audit fix --force**，它可能强制改变 Electron 构建工具的版本。安装输出的 added N packages 也**不保证 Electron 可执行文件安装完整**。
+
+### 2. 验证 Electron 已安装
+
+Windows PowerShell：
+
+~~~powershell
+Test-Path .\node_modules\electron\dist\electron.exe  # 应为 True
+Test-Path .\node_modules\electron\path.txt           # 应为 True
+~~~
+
+若结果为 False 或启动报 **Error: Electron uninstall**，可运行 Electron 自身的安装脚本：
+
+~~~powershell
+node .\node_modules\electron\install.js
+~~~
+
+如果因网络问题下载失败，只有在允许使用该镜像且信任其来源时才尝试：
+
+~~~powershell
+$env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
+node .\node_modules\electron\install.js
+~~~
+
+再运行两个 Test-Path 确认安装成功；不必反复运行 npm ci。若从其他 Electron 应用的终端启动且出现 ELECTRON_RUN_AS_NODE=1，可在 PowerShell 清除该变量：
+
+~~~powershell
+Remove-Item Env:\ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+~~~
+
+macOS：
+
+~~~bash
+test -f node_modules/electron/path.txt && echo "Electron install record exists"
+node -p "require('electron')"      # 应返回 Electron 可执行文件路径
+~~~
+
+### 3. 用独立数据目录启动应用
+
+不要直接拿真实任务、真实课程或真实密钥验证删除和导入。隔离目录内保存单独的 SQLite 数据，**切换目录不会自动迁移旧数据**。
+
+Windows PowerShell（每个**新终端窗口**都应重新设置）：
+
+~~~powershell
+$env:ATE_USER_DATA_DIR = "$env:LOCALAPPDATA\ATE-alpha-acceptance"
+npm run dev
+~~~
+
+macOS Terminal：
+
+~~~bash
+export ATE_USER_DATA_DIR="$HOME/Library/Application Support/ATE-alpha-acceptance"
+npm run dev
+~~~
+
+正常结果是 Electron 应用窗口出现，个人工作台显示 **SQLite 已连接**。仅看到 dev server 的 localhost:5173 地址，不代表桌面窗口已经打开。
+
+如果 Windows 上默认启动报 Chromium 子进程、GPU 或沙箱创建失败，参见 [本地运行排障](docs/w5/16_LOCAL_RUNTIME_TROUBLESHOOTING.md)。仅在**自己控制且可信的本地开发环境**下可临时尝试：
+
+~~~powershell
+npm run dev:compat
+~~~
+
+该模式通过 --noSandbox 关闭 Chromium OS 级沙箱，**不得用于正式打包或对外分发**。退出时关闭桌面窗口，若终端仍有残留进程再按 Ctrl+C。备份前关闭应用，避免复制处于写入状态的数据库。
+
+### 4. 类型检查、自动化单测与构建
+
+关闭或另开应用运行终端，在仓库根目录执行：
+
+~~~sh
+npm run typecheck
+npm test
+npm run build
+~~~
+
+- npm run typecheck：TypeScript 类型检查。
+- npm test：Vitest 单元及集成测试。
+- npm run build：再次进行类型检查和测试，再编译 Electron-Vite；**不会生成最终安装包**。
+- 受限 Windows 环境如出现 Timeout terminating forks worker，可额外用线程池复核，但不替代 CI：
+
+~~~sh
+node node_modules/vitest/vitest.mjs run --pool=threads
+~~~
+
+- Windows 安装包命令：npm run dist:win；macOS：npm run dist:mac。签名、公证和真实安装包仍需另做验收，不得以 npm run build 通过冒充发布完成。
+- GitHub Actions 在 Windows 与 macOS 均运行，独立于用户真机 GUI 体验。
+
+### 5. 本地人工验收顺序
+
+逐项记录通过 / 失败 / 未验证，保留触发动作与脱敏截图。
+
+1. 工作台：显示 SQLite 已连接；所有导航不出现白屏。
+2. 任务：日历页点 **+ 新建任务**，填写任务和截止日期、收起/重新打开编辑器；标记完成、撤销完成、编辑已有任务及截止日期。
+3. 日期：月视图选择一个不是今天的日期，确认顶部 **当前选中**、日历高亮、下方任务/课程一致；切月/周/日、跨月、回到今天。
+4. 固定课程：创建一门测试课程，再点 **修改本次日期/时间** 调整日期及开始/结束；修改仅影响本次，不应影响其他周。
+5. 专注：点 1 分钟预设、自定义 2 分钟，开始/暂停/继续/结束；验证记录与积分。输入 0、181 和小数应无法开始。
+6. 主题：侧边栏底部 **外观主题** 选择浅色/深色/跟随系统，重启验证保存与系统主题联动。
+7. 知识库：只导入不含私人信息的测试文件，全文搜索和复习卡；注意目前原文安全预览**尚不渲染** HTML/Markdown/LaTeX，模糊搜索后续升级。
+8. 学习规划：生成、选择性应用、核对日历占用并撤销。
+9. 关闭应用，在**同一** ATE_USER_DATA_DIR 下重新启动，核实任务、专注记录和主题保留。
+
+本轮交互变更与未实现的反馈见 [Alpha 验收反馈路线图](docs/w5/19_ALPHA_UX_FEEDBACK_ROADMAP.md)，逐功能当前证据见 [验收矩阵](docs/w5/00_ACCEPTANCE_MATRIX.md)。
+
+### 6. 常见问题
+
+| 现象 | 处理 |
+| --- | --- |
+| npm warn deprecated / npm fund | 依赖维护/赞助信息，本身不阻止 npm ci 成功 |
+| npm audit --omit=dev 为 0 但 npm audit 有告警 | 运行与开发依赖风险不同；不要直接 --force 破坏锁定版本 |
+| Error: Electron uninstall | 检查 Windows electron.exe 和 path.txt，补运行 electron/install.js |
+| GPU process isn't usable | 参考排障文档检查沙箱，dev:compat 只能用于可信本地开发 |
+| 本地数据无法打开 | 检查 ATE_USER_DATA_DIR 可写性，不要直接删除真实数据 |
+| libpng warning: iCCP: known incorrect sRGB profile | 记录出现时机和图片来源；可能是 PNG 色彩配置，单独出现不代表数据库损坏 |
+| npm test 中 fork worker timeout | 参考上文 --pool=threads，CI 标准检查仍须另行通过 |
+
+> 提交 Issue、截图和日志前，请遮盖真实 Token、邮箱、API Key 和课程资料。当前项目许可为 [PolyForm Strict 1.0.0](LICENSE)，开发者/贡献者修改授权要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 工程边界
 
