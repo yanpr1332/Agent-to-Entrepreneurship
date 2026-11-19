@@ -170,3 +170,7 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## ALPHA-KB-005 本地三路混合语义检索（规划，2026-11-19）
 
 [26 精确 + 模糊 + 本地向量语义搜索的模型可得性与开发评估](26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md) 比较 multilingual-e5-small / bge-small-zh-v1.5 / bge-m3，列出 CPU/ONNX 可行性、可选离线模型下载、增量索引、排名融合和 Windows/macOS 验收门槛。**尚无模型依赖、没有实现或发起第二个 PR**。
+
+## ALPHA-SYNC 同步优先开发（决策，2026-11-19）
+
+[27 下一阶段同步优先实施与验收计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md) 将开发队列明确为：SYNC-001 数据权威/真实 Supabase 权限验收准备 → SYNC-002 个人任务与手动日历跨设备增量同步 MVP → SYNC-003 团队 Realtime/可靠补拉及五账号联机；之后再实施 KB-005 本地 Embedding PoC/索引/融合。**当前只更新计划文档，不代表云端真实部署、多设备同步或本地向量模型已经实现。** 其他 Alpha 真机、安装包、Canvas 与邮箱真实接入验收仍须继续推进。

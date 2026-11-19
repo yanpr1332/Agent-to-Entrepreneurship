@@ -32,6 +32,10 @@
 W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全边界见 [W5 工程说明](docs/w5/README.md)；
 可复现的验证结果、环境差异与未验证项见 [W5 验收矩阵](docs/w5/00_ACCEPTANCE_MATRIX.md)。
 
+## 2026-11-19 开发顺序：同步优先
+
+下一轮优先完善 **同步基础设施与 Supabase 真实验收准备**，再开发个人任务/手动日历的跨设备增量同步 MVP、团队消息/任务实时恢复与多账号联机；**精确 + 容错 + 本地 Embedding** 保留在同步主线之后先做离线 PoC。原 Alpha 的 Canvas/邮箱真实接入、Windows/macOS GUI、安装包、权限与备份验收不被取消。计划与每轮退出条件见 [ALPHA-SYNC 同步优先开发计划](docs/w5/27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。目前这只是排期决定，**不是同步代码或真实云端验收已完成**。
+
 ## Windows / macOS 本地 Alpha 验收指南
 
 以下命令全部在包含 package.json 的**仓库根目录**执行。本指南优先使用隔离测试数据，不需要真实 Canvas、学校邮箱、OpenAI 或 Supabase 凭据。**CI 构建成功不代表完成真实 GUI 验收。**
