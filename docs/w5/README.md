@@ -146,3 +146,7 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## Alpha 验收反馈（2026-11-19）
 
 [19 Alpha 验收反馈与后续路线图](19_ALPHA_UX_FEEDBACK_ROADMAP.md) 记录本机 GUI 反馈、ALPHA-UX-001 和未完成的时间模型、知识库、团队积分需求。开发和本地验收命令详见 [根 README](../../README.md)，CI 和真实 GUI 证据仍分别记录。
+
+## ALPHA-TIME-002 专注真实时段（2026-11-19）
+
+[20 专注标题、真实时段和日历联动](20_ALPHA_TIME_002_FOCUS_CALENDAR.md) 记录 SQLite v4→v5 迁移、历史数据边界、RTC 时间来源限制、人工 GUI 复核步骤与未完成的时间模型范围。PR #27 的自动化结果与用户真机验收应分开更新。
