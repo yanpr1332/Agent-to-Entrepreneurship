@@ -434,3 +434,31 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
   background:var(--surface);color:var(--ink)}
 .task-time-fields{display:grid;grid-template-columns:repeat(3,minmax(135px,1fr));gap:10px}
 @media(max-width:720px){.task-time-fields{grid-template-columns:1fr}}
+
+/* ALPHA-KB-003: inert document preview and source/evidence separation. */
+.kb-reading-switch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0}
+.kb-rendered-document{max-height:530px;overflow:auto;overflow-wrap:anywhere;
+  line-height:1.72;padding:16px;border:1px solid var(--line);border-radius:10px;
+  background:var(--surface);color:var(--ink)}
+.kb-rendered-document h1,.kb-rendered-document h2,.kb-rendered-document h3{
+  margin:16px 0 10px;line-height:1.35}
+.kb-rendered-document h1{font-size:20px}
+.kb-rendered-document h2{font-size:18px}
+.kb-rendered-document h3{font-size:15px}
+.kb-rendered-document p{margin:10px 0}
+.kb-rendered-document pre,.kb-passage-evidence pre,.kb-source-preview{white-space:pre-wrap;
+  overflow-wrap:anywhere;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+.kb-rendered-document pre{border:1px solid var(--line);border-radius:8px;
+  padding:12px;background:var(--paper);font-size:12px}
+.kb-rendered-document blockquote{border-left:3px solid var(--accent);
+  padding-left:12px;margin:12px 0;color:var(--muted)}
+.kb-rendered-document table{border-collapse:collapse;width:100%;font-size:12px}
+.kb-rendered-document th,.kb-rendered-document td{border:1px solid var(--line);
+  padding:6px 9px;text-align:left}
+.kb-equation-block{display:block;text-align:center;margin:18px 0;overflow:auto}
+.kb-equation-inline{display:inline-block;vertical-align:middle}
+.kb-rendered-document math{font-size:1.1em}
+.kb-passage-evidence{margin:12px 0;color:var(--muted);font-size:12px}
+.kb-passage-evidence pre{font-size:12px;max-height:190px;overflow:auto;
+  border:1px solid var(--line);border-radius:8px;padding:10px}
+.kb-source-preview{max-height:530px;overflow:auto;display:block}

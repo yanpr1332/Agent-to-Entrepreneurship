@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import KnowledgeGraph from "./KnowledgeGraph";
+import SafeKnowledgePreview from "./SafeKnowledgePreview";
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
   KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage,
@@ -27,6 +28,7 @@ export default function KnowledgeBase(){
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const [activeTab,setActiveTab]=useState<"library"|"review"|"graph">("library");
+  const [readingMode,setReadingMode]=useState<"preview"|"source">("preview");
 
   async function reload():Promise<void>{
     const [docs,items,summary]=await Promise.all([
@@ -57,6 +59,7 @@ export default function KnowledgeBase(){
 
   function chooseSource(doc:KnowledgeSnapshot,part:KnowledgePassage):void{
     setSelected(doc);setPassage(part);setSourceOrdinal(part.ordinal);
+    setReadingMode("preview");
     setQuestion("");setAnswer("");
   }
 
@@ -82,7 +85,7 @@ export default function KnowledgeBase(){
       await reload();
       setResults([]);
       setNotice(imported.changed
-        ?"资料已建立本机全文索引；原始文件未被修改或上传。"
+        ?"资料已建立本机全文索引；原文件未被修改或上传，阅读预览不会执行文档代码。"
         :"文件内容未变化，已有索引保持不变。");
     });
   }
@@ -152,14 +155,14 @@ export default function KnowledgeBase(){
   return <section className="kb-page">
     <div className="page-heading">
       <div><div className="eyebrow">OFFLINE KNOWLEDGE</div><h1>个人知识库</h1>
-        <p>原文可追溯的本地索引 · 关键词检索 · 自编复习卡</p></div>
+        <p>原文可追溯的本地索引 · 安全阅读 · 离线容错检索 · 自编复习卡</p></div>
       <span className="count-chip">{documents.length} 份本机资料</span>
     </div>
     <div className="connector-warning" role="note">
-      <strong>本地优先：</strong>支持用户明确选择的 UTF-8 Markdown/TXT（最多 2 MiB）
-      与具有可选择文字的 PDF（文件最多 12 MiB、120 页）。
-      PDF 仅提取本机文本并记录真实页码，不执行文档脚本、不上传云端、不调用 AI；
-      扫描图片 PDF 的 OCR、Office、录音转写尚未实现；知识图谱为人工整理，不自动生成 AI 关系。
+      <strong>本地优先：</strong>支持明确选择的 UTF-8 Markdown、HTML、LaTeX、TXT（2 MiB）
+      与有可选择文字的 PDF（12 MiB、120 页）。预览仅支持安全标签和常用 MathML 公式，
+      不执行 HTML 脚本、远程资源或 TeX 命令。完整 TeX 编译、复杂宏包、图片 PDF OCR、
+      Office 与录音转写尚未实现；不自动上传资料到云端，也不调用 AI。
     </div>
     {error&&<div className="error-banner" role="alert"><span>{error}</span>
       <button onClick={()=>setError("")}>关闭</button></div>}
@@ -189,8 +192,8 @@ export default function KnowledgeBase(){
         <div className="kb-search-row">
           <input id="kb-search-input" type="search" maxLength={120} required value={query}
             onChange={event=>setQuery(event.target.value)}
-            placeholder="输入关键字，例如 DNA polymerase / 实验报告" />
-          <button className="secondary-button" disabled={busy} type="submit">搜索原文</button>
+            placeholder="例如 DNA polymerase / 实验报告；支持少量拼写偏差" />
+          <button className="secondary-button" disabled={busy} type="submit">本地搜索</button>
         </div>
       </form>
       {results.length>0&&<section className="panel kb-results">
@@ -198,7 +201,7 @@ export default function KnowledgeBase(){
         <ul className="kb-result-list">{results.map(hit=><li
           key={`${hit.documentId}:${hit.ordinal}`}>
           <button className="kb-source-link" disabled={busy}
-            onClick={()=>void openHit(hit)}>{hit.documentTitle} · {hit.pageNumber?`PDF 第 ${hit.pageNumber} 页 · `:""}原文片段 #{hit.ordinal+1} · v{hit.documentRevision}</button>
+            onClick={()=>void openHit(hit)}>{hit.documentTitle} · {hit.matchType==="fuzzy"?"容错匹配 · ":""}{hit.pageNumber?`PDF 第 ${hit.pageNumber} 页 · `:""}原文片段 #{hit.ordinal+1} · v{hit.documentRevision}</button>
           <p>{hit.excerpt}</p>
         </li>)}</ul>
       </section>}
@@ -209,7 +212,7 @@ export default function KnowledgeBase(){
           <ul className="kb-document-list">{documents.map(doc=><li key={doc.id}>
             <button className={selected?.id===doc.id?"kb-doc-active":"kb-doc"}
               onClick={()=>void openDocument(doc.id)} disabled={busy}>{doc.title}</button>
-            <small>{doc.format==="pdf"?"PDF":doc.format==="markdown"?"Markdown":"TXT"}
+            <small>{doc.format==="pdf"?"PDF":doc.format==="markdown"?"Markdown":doc.format==="html"?"HTML":doc.format==="latex"?"LaTeX":"TXT"}
               {doc.pageCount?` · ${doc.pageCount} 页`:""} · {Math.ceil(doc.byteLength/1024)} KiB · 第 {doc.revision} 版 · {doc.chunkCount} 段</small>
           </li>)}</ul>:
           <p className="empty-state">还没有资料。点击「选择并导入资料」开始建立私有本地知识库。</p>}
@@ -225,8 +228,22 @@ export default function KnowledgeBase(){
             {passage?.pageNumber&&<p className="kb-page-citation">
               当前定位：PDF 第 {passage.pageNumber} 页 · 片段 #{passage.ordinal+1} · 第 {passage.revision} 版
             </p>}
-            <div className="kb-source-preview">{currentSource??selected.text}</div>
-            <p className="privacy-note">上方展示选中的文档片段；不会渲染不可信 Markdown HTML。</p>
+            <div className="kb-reading-switch" role="group" aria-label="文档阅读模式">
+              <button className={readingMode==="preview"?"chip selected":"chip"}
+                type="button" onClick={()=>setReadingMode("preview")}>阅读预览</button>
+              <button className={readingMode==="source"?"chip selected":"chip"}
+                type="button" onClick={()=>setReadingMode("source")}>原始源码</button>
+            </div>
+            {readingMode==="source"?
+              <pre className="kb-source-preview">{selected.text}</pre>:
+              <SafeKnowledgePreview format={selected.format} text={selected.text}/>}
+            {passage&&<details className="kb-passage-evidence">
+              <summary>已定位原文证据 · 片段 #{passage.ordinal+1}
+                {passage.pageNumber?" · PDF 第 "+passage.pageNumber+" 页":""} · v{passage.revision}</summary>
+              <pre>{currentSource}</pre>
+            </details>}
+            <p className="privacy-note">阅读预览仅解析受限的 Markdown、HTML、LaTeX 结构；
+              忽略 HTML 属性和远程资源，未实现的 TeX 命令可能以文本显示。源码与复习卡引用均来自本机快照。</p>
             <form className="kb-card-form" onSubmit={event=>void addCard(event)}>
               <h3>以这段原文创建复习卡</h3>
               <label>问题<input value={question} required maxLength={500}

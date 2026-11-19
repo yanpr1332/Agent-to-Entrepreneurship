@@ -7,7 +7,7 @@ export const MAX_KNOWLEDGE_FILE_BYTES=2*1024*1024;
 export interface SelectedKnowledgeText {
   sourcePath:string;
   title:string;
-  format:"markdown"|"text";
+  format:"markdown"|"text"|"html"|"latex";
   text:string;
 }
 
@@ -23,8 +23,8 @@ export async function readSelectedKnowledgeText(path:string):Promise<SelectedKno
     throw Error("Only regular text files up to 2 MiB can be imported");
   }
   const extension=extname(path).toLowerCase();
-  if(extension!==".md" && extension!==".markdown" && extension!==".txt") {
-    throw Error("Only Markdown and TXT are supported in this version");
+  if(![".md",".markdown",".txt",".html",".htm",".tex",".latex"].includes(extension)) {
+    throw Error("Only Markdown, HTML, LaTeX and TXT are supported in this version");
   }
   const canonical=await realpath(path);
   const bytes=await readFile(canonical);
@@ -38,7 +38,9 @@ export async function readSelectedKnowledgeText(path:string):Promise<SelectedKno
   return {
     sourcePath:canonical,
     title:basename(canonical).slice(0,255),
-    format:extension===".txt"?"text":"markdown",
+    format:extension===".txt"?"text":
+      extension===".html"||extension===".htm"?"html":
+      extension===".tex"||extension===".latex"?"latex":"markdown",
     text,
   };
 }

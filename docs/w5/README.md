@@ -158,3 +158,7 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## ALPHA-TIME-004 手动课程批量修改（2026-11-19）
 
 [22 重复课程「仅本次/从本次起/整个系列」修改](22_ALPHA_TIME_004_COURSE_SERIES_EDIT.md) 记录 PR #29 的范围、日期偏移策略、ICS/Canvas 权限隔离、原子冲突回滚及集中 GUI 验收用例。此项不修改数据库版本。
+
+## ALPHA-KB-003 安全预览与离线容错搜索（2026-11-19）
+
+[24 本地 HTML/Markdown/LaTeX 阅读预览与模糊检索](24_ALPHA_KB_003_SAFE_PREVIEW_SEARCH.md) 记录 PR #31 的真实功能边界、安全设计、已知限制及 Windows 集中验收步骤。该版不包含完整 TeX 编译或可选 AI 语义检索。

@@ -28,6 +28,27 @@ describe("local knowledge FTS5 + source revisions",()=>{
     expect(db.getDocument(imported.document.id).text).toBe(first.text);
   });
 
+  it("indexes readable HTML and LaTeX text but preserves original sources",()=>{
+    const db=memory();
+    const html=db.importText({sourcePath:"/tmp/story.html",title:"story.html",
+      format:"html",text:"<h1>Cell biology</h1><script>privateLeakToken</script><p>Ribosome function</p>"});
+    const tex=db.importText({sourcePath:"/tmp/formula.tex",title:"formula.tex",
+      format:"latex",text:"\\section{Linear Algebra}\nThe matrix rank is important."});
+    expect(db.listDocuments().map(x=>x.format).sort()).toEqual(["html","latex"]);
+    expect(db.getDocument(html.document.id).text).toContain("<script>");
+    expect(db.getDocument(tex.document.id).format).toBe("latex");
+    expect(db.search("Ribosome")[0].documentId).toBe(html.document.id);
+    expect(db.search("privateLeakToken")).toEqual([]);
+    expect(db.search("matrix rank")[0].documentId).toBe(tex.document.id);
+  });
+  it("tolerates a small typo or punctuation change with a separate fuzzy label",()=>{
+    const db=memory();db.importText(first);
+    expect(db.search("polymeraze")[0]).toMatchObject({
+      documentTitle:"Biology.md",matchType:"fuzzy",
+    });
+    expect(db.search("polymerase")[0].matchType).toBe("exact");
+    expect(db.search("unrelated topic")).toHaveLength(0);
+  });
   it("reimporting an unchanged file does not duplicate or alter revision",()=>{
     const db=memory();
     const created=db.importText(first);

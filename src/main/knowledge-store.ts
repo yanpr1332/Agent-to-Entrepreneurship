@@ -8,6 +8,8 @@ import {
   type KnowledgeDocument, type KnowledgeSnapshot, type KnowledgeSearchHit,
   type KnowledgeReviewCard, type ReviewProgress, type ReviewRating, type KnowledgePassage,
 } from "../shared/knowledge-model";
+import {extractKnowledgeText,fuzzyCandidateExpression,fuzzySubstringMatch,normalizeFuzzy}
+  from "../shared/knowledge-search-text";
 import {parseGraphNode,parseGraphNodeEdit,parseGraphEdge,
   type KnowledgeGraphSnapshot,type GraphNode,type GraphEdge} from "../shared/knowledge-graph-model";
 
@@ -18,6 +20,7 @@ const MAX_CHUNKS = 2500;
 
 interface DocumentRow {
   id: string; title: string; format: "markdown"|"text"|"pdf";page_count:number|null;
+  source_path:string;
   content_hash: string; byte_length: number; chunk_count: number;
   imported_at: string; updated_at: string; revision: number;
 }
@@ -29,7 +32,9 @@ interface CardRow {
 }
 function fromDocument(row: DocumentRow):KnowledgeDocument {
   return {
-    id:row.id,title:row.title,format:row.format,
+    id:row.id,title:row.title,format:row.format==="text"?
+      /.(?:html?|tex|latex)$/i.test(row.source_path)?
+        /.html?$/i.test(row.source_path)?"html":"latex":"text":row.format,
     contentHash:row.content_hash,byteLength:row.byte_length,chunkCount:row.chunk_count,
     importedAt:row.imported_at,updatedAt:row.updated_at,revision:row.revision,
     pageCount:row.page_count??null,
@@ -190,7 +195,7 @@ export class KnowledgeStore {
   async backupTo(path:string):Promise<number>{return backup(this.db,path);}
 
   listDocuments():KnowledgeDocument[]{
-    return (this.db.prepare(`SELECT d.id,d.title,
+    return (this.db.prepare(`SELECT d.id,d.title,d.source_path,
       CASE WHEN pdf.document_id IS NULL THEN d.format ELSE 'pdf' END AS format,
       d.content_hash,d.byte_length,d.chunk_count,d.imported_at,d.updated_at,d.revision,
       pdf.page_count
@@ -233,11 +238,11 @@ export class KnowledgeStore {
   }
 
   /** Called only after Electron's native file-picker grants access to a path. */
-  importText(source:{sourcePath:string;title:string;format:"markdown"|"text";text:string},now=new Date()):
+  importText(source:{sourcePath:string;title:string;format:"markdown"|"text"|"html"|"latex";text:string},now=new Date()):
     {document:KnowledgeDocument;changed:boolean}{
     if(typeof source.sourcePath!=="string" || !source.sourcePath ||
        typeof source.title!=="string" || !source.title.trim() ||
-       source.title.length>255 || (source.format!=="markdown"&&source.format!=="text") ||
+       source.title.length>255 || !["markdown","text","html","latex"].includes(source.format) ||
        typeof source.text!=="string" || !source.text.trim())throw Error("Invalid knowledge source");
     const length=Buffer.byteLength(source.text,"utf8");
     if(length>MAX_DOCUMENT_BYTES)throw Error("Document exceeds 2 MiB limit");
@@ -246,13 +251,18 @@ export class KnowledgeStore {
     const previous=this.db.prepare("SELECT id,content_hash FROM knowledge_documents WHERE source_path=?")
       .get(source.sourcePath) as {id:string;content_hash:string}|undefined;
     if(previous?.content_hash===hash)return {document:this.getDocument(previous.id),changed:false};
-    const id=previous?.id??randomUUID(),stamp=now.toISOString(),parts=chunks(text);
+    const readable=extractKnowledgeText(source.format,text);
+    if(!readable)throw Error("Source contains no indexable readable text");
+    const id=previous?.id??randomUUID(),stamp=now.toISOString(),parts=chunks(readable);
+    // The old SQLite CHECK allows markdown/text only. Preserve source_path and
+    // original text, and infer HTML/TeX display format from the native-picked extension.
+    const persistedFormat=source.format==="html"||source.format==="latex"?"text":source.format;
     this.db.exec("BEGIN IMMEDIATE");
     try{
       if(previous){
         this.db.prepare(`UPDATE knowledge_documents SET title=?,format=?,content=?,
           content_hash=?,byte_length=?,chunk_count=?,revision=revision+1,updated_at=?
-          WHERE id=?`).run(source.title,source.format,text,hash,length,parts.length,stamp,id);
+          WHERE id=?`).run(source.title,persistedFormat,text,hash,length,parts.length,stamp,id);
         this.db.prepare("UPDATE knowledge_cards SET needs_review=1 WHERE document_id=?").run(id);
         this.db.prepare("UPDATE knowledge_graph_nodes SET needs_review=1 WHERE document_id=?").run(id);
         this.db.prepare("DELETE FROM knowledge_chunk_pages WHERE document_id=?").run(id);
@@ -263,7 +273,7 @@ export class KnowledgeStore {
           (id,source_path,title,format,content,content_hash,byte_length,chunk_count,
            revision,imported_at,updated_at)
           VALUES(?,?,?,?,?,?,?,?,1,?,?)`).run(
-            id,source.sourcePath,source.title,source.format,text,hash,length,parts.length,stamp,stamp);
+            id,source.sourcePath,source.title,persistedFormat,text,hash,length,parts.length,stamp,stamp);
       }
       const insert=this.db.prepare("INSERT INTO knowledge_chunks(document_id,ordinal,body) VALUES(?,?,?)");
       parts.forEach((part,index)=>insert.run(id,index,part));
@@ -345,9 +355,19 @@ export class KnowledgeStore {
 
   search(value:unknown):KnowledgeSearchHit[]{
     const query=parseKnowledgeQuery(value);
+    type Row={document_id:string;ordinal:number;body:string;title:string;
+      revision:number;page_number:number|null};
+    const fromMatches=(rows:Row[],mode:"exact"|"fuzzy"):KnowledgeSearchHit[]=>
+      rows.map(row=>{
+        const idx=row.body.toLowerCase().indexOf(query.toLowerCase());
+        const start=idx<0?0:Math.max(0,idx-100);
+        return {documentId:row.document_id,documentTitle:row.title,
+          documentRevision:row.revision,ordinal:row.ordinal,
+          pageNumber:row.page_number??null,
+          excerpt:row.body.slice(start,start+500),matchType:mode};
+      });
     const long=Array.from(query).length>=3;
-    const rows=long ?
-      this.db.prepare(`
+    const exact=long ? this.db.prepare(`
         SELECT c.document_id,c.ordinal,c.body,d.title,d.revision,cp.page_number
         FROM knowledge_fts JOIN knowledge_chunks c ON c.id=knowledge_fts.rowid
         JOIN knowledge_documents d ON d.id=c.document_id
@@ -362,16 +382,33 @@ export class KnowledgeStore {
         WHERE instr(lower(c.body),lower(?))>0 OR instr(lower(d.title),lower(?))>0
         ORDER BY d.updated_at DESC,c.ordinal LIMIT 40
       `).all(query,query);
-    return (rows as unknown as {
-      document_id:string;ordinal:number;body:string;title:string;revision:number;page_number:number|null
-    }[]).map(row=>{
-      const idx=row.body.toLowerCase().indexOf(query.toLowerCase());
-      const start=idx<0?0:Math.max(0,idx-100);
-      return {
-        documentId:row.document_id,documentTitle:row.title,
-        documentRevision:row.revision,ordinal:row.ordinal,pageNumber:row.page_number??null,
-        excerpt:row.body.slice(start,start+500),
-      };
+    if(exact.length)return fromMatches(exact as Row[],"exact");
+    // Fuzzy fallback is bounded, offline, and only applies to queries with
+    // four to sixty normalized characters. No user text is spliced into SQL.
+    const fuzzyExpression=fuzzyCandidateExpression(query);
+    if(!fuzzyExpression)return [];
+    const candidates=this.db.prepare(`
+        SELECT c.document_id,c.ordinal,c.body,d.title,d.revision,cp.page_number
+        FROM knowledge_fts JOIN knowledge_chunks c ON c.id=knowledge_fts.rowid
+        JOIN knowledge_documents d ON d.id=c.document_id
+        LEFT JOIN knowledge_chunk_pages cp ON cp.document_id=c.document_id AND cp.ordinal=c.ordinal
+        WHERE knowledge_fts MATCH ?
+        ORDER BY bm25(knowledge_fts) LIMIT 200
+      `).all(fuzzyExpression) as unknown as Row[];
+    const length=Array.from(normalizeFuzzy(query)).length;
+    const threshold=length<=5?1:2;
+    const scored=candidates.map(row=>({
+      row,match:fuzzySubstringMatch(query,row.body,threshold),
+    })).filter((r):r is {row:Row;match:{distance:number;end:number}}=>r.match!==null)
+      .sort((a,b)=>a.match.distance-b.match.distance||
+        a.row.title.localeCompare(b.row.title)||a.row.ordinal-b.row.ordinal)
+      .slice(0,40);
+    return scored.map(({row,match})=>{
+      const rawStart=Math.max(0,match.end-length-100);
+      return {documentId:row.document_id,documentTitle:row.title,
+        documentRevision:row.revision,ordinal:row.ordinal,
+        pageNumber:row.page_number??null,excerpt:row.body.slice(rawStart,rawStart+500),
+        matchType:"fuzzy" as const};
     });
   }
 
