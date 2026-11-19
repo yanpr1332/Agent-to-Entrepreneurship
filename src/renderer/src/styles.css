@@ -369,3 +369,28 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
 @media(max-width:1180px){
  .agenda-week-grid{grid-template-columns:repeat(7,minmax(155px,1fr))}
 }
+
+/* ALPHA-UX-001: date selection, discoverable task editor, focus and appearance. */
+.sidebar-theme{display:grid;gap:6px;padding:10px 4px 0}
+.sidebar-theme label{font-size:11px;font-weight:650;color:var(--ink)}
+.sidebar-theme select{width:100%;padding:8px 10px;background:var(--surface);color:var(--ink);
+  border:1px solid var(--line);border-radius:8px;font-size:11px}
+.calendar-page-actions{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.calendar-layout.editor-collapsed{grid-template-columns:minmax(0,1fr)}
+.calendar-heading{display:grid;gap:5px;min-width:0}
+.calendar-selection{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+.calendar-selection strong{color:var(--accent);font-size:13px}
+.calendar-today-note{font-weight:600}
+.calendar-today-tag{color:var(--accent);font-size:9px;font-weight:700}
+.calendar-day.today-day>span{text-decoration:none}
+.calendar-day.today-day:not(.selected-day){box-shadow:inset 0 0 0 1px var(--muted)}
+.task-complete-toggle{display:grid;gap:5px;justify-items:center;align-content:start;
+  min-width:80px;color:var(--muted);font-size:10px;cursor:pointer;text-align:center}
+.task-complete-toggle input{accent-color:var(--accent);margin:3px 0}
+.task-complete-toggle:has(input:disabled){cursor:not-allowed;opacity:.6}
+.task-editor-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px}
+.task-editor-heading h2{margin-bottom:0}
+.focus-duration-field{display:grid;gap:8px;justify-content:center;justify-items:center;
+  font-size:12px;color:var(--muted);margin:-5px auto 18px}
+.focus-duration-field input{width:135px;max-width:100%;text-align:center;padding:9px;
+  border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}

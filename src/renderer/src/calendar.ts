@@ -30,3 +30,15 @@ export function formatDueDate(key: string | null): string {
   const [year, month, day] = key.split("-");
   return `${year}年${Number(month)}月${Number(day)}日`;
 }
+
+/** Explicitly label the selected civil day; today is a separate marker. */
+export function formatCalendarSelection(key: string): string {
+  const [year, month, day] = key.split("-").map(Number);
+  const date = new Date(year, month - 1, day, 12);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(key) ||
+      date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    throw new Error("Invalid calendar selection");
+  }
+  const weekday = ["日", "一", "二", "三", "四", "五", "六"][date.getDay()];
+  return `${year}年${month}月${day}日 · 星期${weekday}`;
+}
