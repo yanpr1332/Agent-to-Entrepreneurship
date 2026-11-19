@@ -252,8 +252,9 @@ export class FixedCalendarStore {
     return found;
   }
   /** Transactionally update a manually created recurring course.
-   * The chosen occurrence is the anchor; its date delta shifts every selected
-   * member by the same count of civil days, preserving relative weekly spacing.
+   * The chosen occurrence is the anchor except in custom-range mode, where
+   * the first selected member is the date anchor. Each selected member shifts
+   * by the same number of civil days, preserving relative spacing.
    * Existing unrelated events are never changed. Imported/Canvas sources are
    * intentionally excluded, even if they contain a series_id.
    */
@@ -270,9 +271,20 @@ export class FixedCalendarStore {
       const index=group.findIndex(row=>row.id===anchor.id);
       if(index<0||group.length<2||group.length>16)
         throw Error("Recurring course group cannot be edited");
-      const selected=input.scope==="future"?group.slice(index):group;
+      let selected:EventRow[];
+      let dateAnchor=anchor;
+      if(input.scope==="range"){
+        const start=group.findIndex(row=>row.id===input.rangeStartId);
+        const end=group.findIndex(row=>row.id===input.rangeEndId);
+        if(start<0||end<0||start>end)
+          throw Error("Invalid recurring course range: endpoints must belong to one series in date order");
+        selected=group.slice(start,end+1);
+        dateAnchor=group[start];
+      }else{
+        selected=input.scope==="future"?group.slice(index):group;
+      }
       const delta=Math.round((Date.parse(input.day+"T00:00:00.000Z") -
-        Date.parse(anchor.day+"T00:00:00.000Z"))/86400000);
+        Date.parse(dateAnchor.day+"T00:00:00.000Z"))/86400000);
       const changed=selected.map(row=>{
         const day=dayOffset(row.day,delta);
         const slot=validateFixedSlot(day,input.startMinute,input.durationMinutes);
