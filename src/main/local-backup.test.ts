@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { KnowledgeStore } from "./knowledge-store";
 import { LocalStore } from "./local-store";
+import { PlanningStore } from "./planning-store";
 import { createLocalBackup, backupBeforeMigration } from "./local-backup";
 
 const directories:string[]=[];
@@ -53,6 +54,23 @@ describe("verified online SQLite snapshots",()=>{
     expect(migrated.listTasks()).toHaveLength(1);
     migrated.close();
     expect(await backupBeforeMigration(dir,"ate-local.sqlite",4)).toBeNull();
+  });
+
+  it("snapshots a v1 planning database before the v2 migration",async()=>{
+    const dir=fixture(),path=join(dir,"ate-plans.sqlite");
+    const planner=new PlanningStore(path);
+    planner.close();
+    const prior=new DatabaseSync(path);
+    prior.exec("ALTER TABLE plan_proposals DROP COLUMN source; PRAGMA user_version=1");
+    prior.close();
+    const snapshot=await backupBeforeMigration(dir,"ate-plans.sqlite",2);
+    expect(snapshot).toBeTruthy();
+    const saved=new DatabaseSync(join(snapshot!,"ate-plans.sqlite"),{readOnly:true});
+    expect((saved.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(1);
+    saved.close();
+    const upgraded=new PlanningStore(path);
+    upgraded.close();
+    expect(await backupBeforeMigration(dir,"ate-plans.sqlite",2)).toBeNull();
   });
 
   it("does not replace originals or silently overwrite existing backups",async()=>{

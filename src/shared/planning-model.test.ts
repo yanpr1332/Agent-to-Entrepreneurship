@@ -1,7 +1,7 @@
 import {describe,expect,it} from "vitest";
 import {
   dayOffset, parseMinute, parsePlanApply, parsePlanningSettings, validCivilDay,
-  eligiblePlanningTasks,
+  eligiblePlanningTasks, parseManualBlockInput, parseCommittedBlockEdit,
 } from "./planning-model";
 import type {LocalTask} from "./local-model";
 
@@ -29,6 +29,21 @@ describe("planning API rejects forged / impossible time selections",()=>{
     expect(()=>parsePlanApply({proposalId:id,blockIds:[b],edits:[
       {blockId:b,day:"2026-11-12",startMinute:1085},
     ]})).toThrow();
+  });
+  it("rejects bad/forged manual schedules before hitting SQLite",()=>{
+    const taskId="4db060d8-cb99-46fb-82f2-ff17fdc1cb22";
+    const blockId="9bba14e0-7ed1-4f0e-b040-9a614c01b5f9";
+    const slot={taskId,day:"2026-11-21",startMinute:1080,durationMinutes:45};
+    expect(parseManualBlockInput(slot)).toEqual(slot);
+    expect(parseCommittedBlockEdit({blockId,day:slot.day,startMinute:slot.startMinute,durationMinutes:45}))
+      .toMatchObject({blockId});
+    for(const bad of [
+      {...slot,day:"2026-02-30"}, {...slot,startMinute:1435},
+      {...slot,durationMinutes:0}, {...slot,durationMinutes:14},
+      {...slot,durationMinutes:485}, {...slot,startMinute:1083},
+      {...slot,taskId:"a"}, {...slot,extra:true},
+    ])expect(()=>parseManualBlockInput(bad)).toThrow();
+    expect(()=>parseCommittedBlockEdit({blockId,...slot})).toThrow();
   });
   it("never includes hidden or completed tasks",()=>{
     const blank:LocalTask={id:"a",title:"A",description:"",dueDate:null,priority:"low",
