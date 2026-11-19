@@ -150,3 +150,7 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## ALPHA-TIME-002 专注真实时段（2026-11-19）
 
 [20 专注标题、真实时段和日历联动](20_ALPHA_TIME_002_FOCUS_CALENDAR.md) 记录 SQLite v4→v5 迁移、历史数据边界、RTC 时间来源限制、人工 GUI 复核步骤与未完成的时间模型范围。PR #27 的自动化结果与用户真机验收应分开更新。
+
+## ALPHA-TIME-003 任务执行时间（2026-11-19）
+
+[21 手动任务时间和单段修改](21_ALPHA_TIME_003_TASK_SCHEDULES.md) 记录 PR #28 实现、规划库 v1→v2 升级快照和集中 GUI 验收脚本。不会把尚未完成的重复课程批量修改或知识库升级标记为已完成。

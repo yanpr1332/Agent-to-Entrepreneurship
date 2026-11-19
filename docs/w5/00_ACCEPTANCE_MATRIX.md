@@ -78,6 +78,14 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - **GUI**：尚未真实点击；用户计划在本轮完成后集中 Windows 验收，macOS GUI 仍待安排。
 - **未实现**：任务计划/截止时刻、课程系列编辑等仍不能标为完成。详细验收见 [20](20_ALPHA_TIME_002_FOCUS_CALENDAR.md)。
 
+### ALPHA-TIME-003 任务执行时间编辑（2026-11-19）
+
+- PR #28 已提交“手动安排可见任务执行时间”“修改/删除单个已确认时间块”及规划库 v2 迁移相关代码。
+- 新增单段冲突校验、校验器和数据库迁移/备份测试；**最终自动化结论以 PR 最新 Checks 为准**。
+- 真机 Windows、macOS GUI 以及旧版数据库恢复演练：**尚未执行，集中验收时核对**。
+- 不在本轮范围：任务具体截止时刻、重复课程批量编辑、MD/HTML/LaTeX 渲染、团队积分榜。
+- 详细测试： [21 Alpha 任务时间安排](21_ALPHA_TIME_003_TASK_SCHEDULES.md)。
+
 ## 4. 未验证项清单（按风险排序）
 
 1. **双平台安装包**：从未执行 `npm run dist:win` / `dist:mac`，无签名、无公证、无安装包产物。
