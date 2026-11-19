@@ -144,7 +144,7 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
       </label>
       {configuredMinutes === null && <p className="error-message" role="alert">请输入 1–180 之间的整数分钟数</p>}
       <div className="button-row centered">
-        {phase === "idle" && <button className="primary-button" disabled={configuredMinutes === null} onClick={begin}>开始专注</button>
+        {phase === "idle" && <button className="primary-button" disabled={configuredMinutes === null} onClick={begin}>开始专注</button>}
         {phase === "running" && <button className="secondary-button" onClick={pause}>暂停</button>}
         {phase === "paused" && <button className="primary-button" onClick={begin}>继续计时</button>}
         {phase === "finished" && <span className="success-text">计时完成，可以保存并领取积分</span>}
