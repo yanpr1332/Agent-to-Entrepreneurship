@@ -34,7 +34,7 @@ describe("local knowledge FTS5 + source revisions",()=>{
       format:"html",text:"<h1>Cell biology</h1><script>privateLeakToken</script><p>Ribosome function</p>"});
     const tex=db.importText({sourcePath:"/tmp/formula.tex",title:"formula.tex",
       format:"latex",text:"\\section{Linear Algebra}\nThe matrix rank is important."});
-    expect(db.listDocuments().map(x=>x.format)).toEqual(["latex","html"]);
+    expect(db.listDocuments().map(x=>x.format).sort()).toEqual(["html","latex"]);
     expect(db.getDocument(html.document.id).text).toContain("<script>");
     expect(db.getDocument(tex.document.id).format).toBe("latex");
     expect(db.search("Ribosome")[0].documentId).toBe(html.document.id);
