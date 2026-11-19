@@ -27,7 +27,7 @@ import type {
 } from "../../shared/knowledge-graph-model";
 
 import type {CalendarDisplayEvent} from "../../shared/canvas-calendar-model";
-import type { FixedEvent,CreateFixedEventInput,EditFixedEventInput,ICSPreview,ICSImportResult,ICSExportResult } from "../../shared/fixed-calendar-model";
+import type { FixedEvent,CreateFixedEventInput,EditFixedEventInput,EditFixedSeriesInput,ICSPreview,ICSImportResult,ICSExportResult } from "../../shared/fixed-calendar-model";
 import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
   ManualBlockInput, CommittedBlockEditInput,
@@ -112,6 +112,7 @@ declare global {
         remove:(id:string)=>Promise<boolean>;
         edit:(input:EditFixedEventInput)=>Promise<FixedEvent>;
         removeSeries:(id:string)=>Promise<number>;
+        editSeries:(input:EditFixedSeriesInput)=>Promise<FixedEvent[]>;
         previewICS:()=>Promise<ICSPreview|null>;
         confirmICS:(id:string)=>Promise<ICSImportResult>;
         cancelICS:(id:string)=>Promise<{canceled:true}>;

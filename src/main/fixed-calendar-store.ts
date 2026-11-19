@@ -3,11 +3,13 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync,backup } from "node:sqlite";
 import { LocalStore } from "./local-store";
+import { dayOffset } from "../shared/planning-model";
 import { toLocalCanvasSlot,type CanvasCalendarEvent,type CanvasCalendarFixedEvent,
   type CanvasCalendarSyncResult } from "../shared/canvas-calendar-model";
 import type { CalendarDisplayEvent } from "../shared/canvas-calendar-model";
 import {
-  parseCreateFixedEvent,parseEditFixedEvent,validateFixedSlot,validateFixedTitle,weeklyOccurrences,timesOverlap,
+  parseCreateFixedEvent,parseEditFixedEvent,parseEditFixedSeries,
+  validateFixedSlot,validateFixedTitle,weeklyOccurrences,timesOverlap,
   type BusySlot,type FixedEvent,type FixedEventDraft,type ICSImportResult,
 } from "../shared/fixed-calendar-model";
 
@@ -248,6 +250,48 @@ export class FixedCalendarStore {
     const found=this.list().find(item=>item.id===input.id);
     if(!found)throw Error("Calendar event no longer exists");
     return found;
+  }
+  /** Transactionally update a manually created recurring course.
+   * The chosen occurrence is the anchor; its date delta shifts every selected
+   * member by the same count of civil days, preserving relative weekly spacing.
+   * Existing unrelated events are never changed. Imported/Canvas sources are
+   * intentionally excluded, even if they contain a series_id.
+   */
+  editSeries(raw:unknown):FixedEvent[] {
+    const input=parseEditFixedSeries(raw);
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const anchor=this.db.prepare("SELECT * FROM fixed_events WHERE id=?")
+        .get(input.id) as unknown as EventRow|undefined;
+      if(!anchor||anchor.source!=="manual"||!anchor.series_id?.startsWith("manual:"))
+        throw Error("Only manually created recurring courses can be edited as a series");
+      const group=this.db.prepare("SELECT * FROM fixed_events WHERE series_id=? ORDER BY day,start_minute,id")
+        .all(anchor.series_id) as unknown as EventRow[];
+      const index=group.findIndex(row=>row.id===anchor.id);
+      if(index<0||group.length<2||group.length>16)
+        throw Error("Recurring course group cannot be edited");
+      const selected=input.scope==="future"?group.slice(index):group;
+      const delta=Math.round((Date.parse(input.day+"T00:00:00.000Z") -
+        Date.parse(anchor.day+"T00:00:00.000Z"))/86400000);
+      const changed=selected.map(row=>{
+        const day=dayOffset(row.day,delta);
+        const slot=validateFixedSlot(day,input.startMinute,input.durationMinutes);
+        return {id:row.id,title:input.title,...slot};
+      });
+      // No partial writes if one moved occurrence would conflict with a study plan.
+      this.guardStudyConflicts(changed);
+      const apply=this.db.prepare(
+        "UPDATE fixed_events SET title=?,day=?,start_minute=?,duration_minutes=? "+
+        "WHERE id=? AND source='manual' AND series_id=?");
+      for(const row of changed){
+        if(Number(apply.run(row.title,row.day,row.startMinute,
+          row.durationMinutes,row.id,anchor.series_id).changes)!==1)
+          throw Error("Recurring course changed during editing");
+      }
+      this.db.exec("COMMIT");
+      const selectedIds=new Set(changed.map(row=>row.id));
+      return this.list().filter(item=>selectedIds.has(item.id));
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
   /** Delete only entries explicitly belonging to this occurrence's stored series. */
   deleteSeries(id:unknown):number{

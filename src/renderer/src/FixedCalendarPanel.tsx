@@ -14,6 +14,7 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
   const [end,setEnd]=useState("10:00");
   const [weeks,setWeeks]=useState(1);
   const [editing,setEditing]=useState<string|null>(null);
+  const [editScope,setEditScope]=useState<"single"|"future"|"all">("single");
   const [showHiddenCanvas,setShowHiddenCanvas]=useState(false);
   const [editDay,setEditDay]=useState(day);
   const [preview,setPreview]=useState<ICSPreview|null>(null);
@@ -27,9 +28,13 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
     try{await callback();}catch(e){setError(errorText(e));}
     finally{setBusy(false);}
   }
-  function cancelEdit():void{setEditing(null);setTitle("");setEditDay(day);setStart("09:00");setEnd("10:00");}
+  function cancelEdit():void{
+    setEditing(null);setEditScope("single");setTitle("");
+    setEditDay(day);setStart("09:00");setEnd("10:00");
+  }
   function beginEdit(item:FixedEvent):void{
-    setEditing(item.id);setEditDay(item.day);setTitle(item.title);
+    setEditing(item.id);setEditScope("single");
+    setEditDay(item.day);setTitle(item.title);
     setStart(minuteString(item.startMinute));
     setEnd(minuteString(item.startMinute+item.durationMinutes));
     setWeeks(1);
@@ -40,10 +45,25 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
       const from=parseMinute(start),to=parseMinute(end);
       if(to-from<15)throw Error("课程结束时间必须晚于开始时间，且至少 15 分钟");
       if(editing){
-        await window.desktop.calendar.edit({id:editing,title,day:editDay,
-          startMinute:from,durationMinutes:to-from});
-        await onChanged();cancelEdit();
-        setNotice("已保存这一条事件的修改，不影响同一系列的其他日期。");
+        if(editScope==="single"){
+          await window.desktop.calendar.edit({id:editing,title,day:editDay,
+            startMinute:from,durationMinutes:to-from});
+          await onChanged();cancelEdit();
+          setNotice("已保存本次课程修改，其余课程未改变。");
+        }else{
+          if(!manualSeries||!editingEvent)
+            throw Error("只有本机手动创建的重复课程可以批量修改");
+          const count=affectedSeriesEvents.length;
+          if(!window.confirm("确认批量修改「"+editingEvent.title+"」的 "+count+
+            " 次课程？范围："+(editScope==="future"?"从本次起":"整个系列")+
+            "。日期会按相同天数整体移动；与已确认学习计划冲突则整组拒绝修改。"))return;
+          const updated=await window.desktop.calendar.editSeries({
+            id:editing,title,day:editDay,startMinute:from,
+            durationMinutes:to-from,scope:editScope,
+          });
+          await onChanged();cancelEdit();
+          setNotice("已完整修改 "+updated.length+" 次课程，未调整其他课程或学习计划。");
+        }
       }else{
         const result=await window.desktop.calendar.create({
           title,day,startMinute:from,durationMinutes:to-from,weeks,
@@ -114,6 +134,14 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
       setNotice(result.saved?"已导出 "+result.eventCount+" 个固定事件。文件保存在你选择的本地位置。":"已取消导出。");
     });
   }
+  const editingEvent=events.find(item=>item.id===editing);
+  const manualSeries=!!editingEvent&&editingEvent.source==="manual"&&
+    !!editingEvent.seriesId?.startsWith("manual:");
+  const group=manualSeries?events.filter(item=>item.source==="manual"&&
+    item.seriesId===editingEvent?.seriesId).sort((a,b)=>
+    a.day.localeCompare(b.day)||a.startMinute-b.startMinute||a.id.localeCompare(b.id)):[];
+  const groupIndex=group.findIndex(item=>item.id===editing);
+  const affectedSeriesEvents=editScope==="future"?group.slice(groupIndex>=0?groupIndex:group.length):group;
   const current=events.filter(e=>e.day===day &&
     (e.source!=="canvas"||e.visible||showHiddenCanvas));
   const activeEvents=events.filter(e=>e.source!=="canvas"||(e.visible&&!e.missing));
@@ -122,10 +150,19 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
     let from:number,to:number;
     try{from=parseMinute(start);to=parseMinute(end);}catch{return [];}
     if(to-from<15)return [];
-    const group=editing? [{day:editDay,startMinute:from,durationMinutes:to-from}] :
-      Array.from({length:weeks},(_,i)=>({day:dayOffset(day,i*7),startMinute:from,durationMinutes:to-from}));
-    return group.flatMap(slot=>[
-      ...activeEvents.filter(e=>e.id!==editing&&timesOverlap(e,slot)).map(e=>slot.day+" · 与固定事项「"+e.title+"」重叠"),
+    const batch=editing&&editScope!=="single"&&manualSeries&&editingEvent
+      ? affectedSeriesEvents.map(item=>({
+          day:dayOffset(item.day,Math.round((Date.parse(editDay+"T00:00:00Z")-
+            Date.parse(editingEvent.day+"T00:00:00Z"))/86400000)),
+          startMinute:from,durationMinutes:to-from,
+        }))
+      : editing?[{day:editDay,startMinute:from,durationMinutes:to-from}]
+      : Array.from({length:weeks},(_,i)=>({day:dayOffset(day,i*7),startMinute:from,durationMinutes:to-from}));
+    const editedIds=new Set(editing&&editScope!=="single"&&manualSeries
+      ? affectedSeriesEvents.map(item=>item.id):[editing]);
+    return batch.flatMap(slot=>[
+      ...activeEvents.filter(e=>!editedIds.has(e.id)&&timesOverlap(e,slot))
+        .map(e=>slot.day+" · 与固定事项「"+e.title+"」重叠"),
       ...studyBlocks.filter(b=>timesOverlap(b,slot)).map(()=>slot.day+" · 与已确认学习时间重叠，保存将被拒绝"),
     ]).slice(0,12);
   })();
@@ -136,7 +173,7 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
   return <section className="panel fixed-calendar-panel">
     <div className="eyebrow">LOCAL FIXED EVENTS</div>
     <h2>固定课程与 ICS 日历</h2>
-    <p className="help-text">手动创建的课程可以修改本次日期、开始和结束时间；整组重复课程的批量修改将在后续版本提供。</p>
+    <p className="help-text">手动重复课程可选择「仅本次 / 从本次起 / 整个系列」，修改日期、名称和时间。批量修改仅适用于本机手动创建的系列，不更改 Canvas 或 ICS 来源。</p>
     <p className="privacy-note">课程、ICS 和 Canvas 日历事件缓存在本机，与任务截止日期分离。Canvas 自动同步仅更新所选账号和课程的有效日程，不替你修改已确认的学习计划。学习规划、AI 候选及最终应用均避开这些时间。手动按周重复最多 16 周；日历数据不自动同步至 Canvas 或其他服务。</p>
     {error&&<div className="error-banner" role="alert">{error}
       <button onClick={()=>setError("")}>关闭</button></div>}
@@ -168,6 +205,18 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
       <h3>{editing?"编辑单次事件":"创建固定课程"}</h3>
       {editing&&<label>修改后的日期<input type="date" required value={editDay}
         disabled={busy} onChange={e=>setEditDay(e.target.value)}/></label>}
+      {editing&&manualSeries&&group.length>1&&<label>修改范围
+        <select value={editScope} disabled={busy}
+          onChange={e=>setEditScope(e.target.value as "single"|"future"|"all")}>
+          <option value="single">仅修改本次</option>
+          <option value="future">从本次起（含本次）</option>
+          <option value="all">整个系列（包括之前）</option>
+        </select>
+      </label>}
+      {editing&&manualSeries&&editScope!=="single"&&<p className="privacy-note">
+        本次修改将影响 {affectedSeriesEvents.length} 条本机课程。新日期与所选课程的日期差会应用到全部选定课程，
+        各次之间的间隔保持不变；不影响 Canvas、ICS 或已确认的学习时间块。
+      </p>}
       <label>课程或事项名称<input required maxLength={120} value={title}
         disabled={busy} onChange={e=>setTitle(e.target.value)} placeholder="例如：微积分课"/></label>
       <div className="fixed-clock-row">
@@ -184,7 +233,7 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
       {manualConflicts.length>0&&<div className="retention-warning" role="status">
         <strong>时间冲突提示（显示前 12 条）</strong><ul>{manualConflicts.map((msg,i)=><li key={i}>{msg}</li>)}</ul>
       </div>}
-      <button className="primary-button" disabled={busy} type="submit">{editing?"保存单次修改":"在选中日期创建固定事件"}</button>
+      <button className="primary-button" disabled={busy} type="submit">{editing?(editScope==="single"?"保存本次修改":"批量修改 "+affectedSeriesEvents.length+" 次课程"):"在选中日期创建固定事件"}</button>
       {editing&&<button className="secondary-button" type="button" disabled={busy} onClick={cancelEdit}>取消编辑</button>}
     </form>
     <div className="button-row">
@@ -207,6 +256,6 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
         <button className="secondary-button" disabled={busy} onClick={()=>void cancelImport()}>取消预览</button>
       </div>
     </div>}
-    <p className="privacy-note">ICS 导出仅包含人工/ICS 固定事项，不包含 Canvas 或任务。ICS 支持单日事件、UTC/本地浮动时间、IANA TZID 时区以及有限周重复（COUNT 1–250、BYDAY、INTERVAL 1–8，最多两年）。夏令时跳时或歧义时刻、UNTIL/EXDATE、跨夜课程及其他不支持的复杂规则会整文件拒绝，避免错误安排。可编辑单次事件，新增重复系列可整组删除；旧版本独立课程仍需单条删除。导出使用设备本地浮动时间，不覆盖已有文件。</p>
+    <p className="privacy-note">ICS 导出仅包含人工/ICS 固定事项，不包含 Canvas 或任务。ICS 支持单日事件、UTC/本地浮动时间、IANA TZID 时区以及有限周重复（COUNT 1–250、BYDAY、INTERVAL 1–8，最多两年）。夏令时跳时或歧义时刻、UNTIL/EXDATE、跨夜课程及其他不支持的复杂规则会整文件拒绝，避免错误安排。手动重复课程可按范围批量修改或整组删除，ICS 仍可编辑单次或删除原有系列；旧版本独立课程仍需单条操作。导出使用设备本地浮动时间，不覆盖已有文件。</p>
   </section>;
 }
