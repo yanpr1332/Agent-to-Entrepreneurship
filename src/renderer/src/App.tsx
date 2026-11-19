@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import type { FocusSession, FocusSummary, LocalTask, TaskPriority } from "../../shared/local-model";
 import { formatCalendarSelection, formatDueDate, localDateKey, monthCells } from "./calendar";
 import { parseFocusMinutes } from "./focus-duration";
+import { focusCalendarSegments } from "./focus-calendar";
 import CalendarAgenda from "./CalendarAgenda";
 import { calendarWeekDays,shiftCalendarView,type CalendarView } from "./calendar-agenda";
 import CanvasConnector from "./CanvasConnector";
@@ -40,6 +41,7 @@ function errorMessage(error: unknown): string {
 
 function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
   const [minuteText, setMinuteText] = useState("25");
+  const [focusTitle, setFocusTitle] = useState("专注学习");
   const configuredMinutes = parseFocusMinutes(minuteText);
   // Locked during a session; saving cannot use a different preset.
   const plannedMinutes = configuredMinutes ?? 25;
@@ -49,13 +51,19 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
   const [error, setError] = useState("");
   const deadline = useRef(0);
   const sessionId = useRef<string | null>(null);
+  const startedAtRef = useRef<string | null>(null);
+  const finishedAtRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (phase !== "running") return;
     const tick = () => {
       const seconds = Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000));
       setRemaining(seconds);
-      if (seconds === 0) setPhase("finished");
+      if (seconds === 0) {
+        // Record the countdown endpoint instead of the eventual save-click time.
+        finishedAtRef.current ??= new Date(deadline.current).toISOString();
+        setPhase("finished");
+      }
     };
     tick();
     const handle = setInterval(tick, 500);
@@ -66,9 +74,15 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
     setPhase("idle");
     setRemaining(plannedMinutes * 60);
     sessionId.current = null;
+    startedAtRef.current = null;
+    finishedAtRef.current = null;
   }
 
   function begin(): void {
+    if (phase === "idle" && focusTitle.trim().length === 0) {
+      setError("请输入专注标题");
+      return;
+    }
     if (phase === "idle" && configuredMinutes === null) {
       setError("请输入 1–180 之间的整数分钟数");
       return;
@@ -76,6 +90,8 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
     setError("");
     if (phase === "idle") {
       sessionId.current = crypto.randomUUID();
+      startedAtRef.current = new Date().toISOString();
+      finishedAtRef.current = null;
       setRemaining(plannedMinutes * 60);
       deadline.current = Date.now() + plannedMinutes * 60_000;
     } else if (phase === "paused") {
@@ -101,6 +117,11 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
         sessionId: sessionId.current,
         plannedMinutes,
         elapsedSeconds: plannedMinutes * 60 - left,
+        title: focusTitle,
+        startedAt: startedAtRef.current ?? undefined,
+        endedAt: phase === "finished"
+          ? (finishedAtRef.current ?? new Date(deadline.current).toISOString())
+          : new Date().toISOString(),
       });
       await onSaved();
       reset();
@@ -118,7 +139,13 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
     <section className="panel timer-panel">
       <div className="eyebrow">FOCUS SESSION</div>
       <h2>开始一段专注时间</h2>
-      <p className="help-text">完成预定时长后可获得同等分钟数的积分，提前结束不奖励积分。</p>
+      <p className="help-text">完成预定时长后可获得同等分钟数的积分，提前结束不奖励积分。保存后可在日历查看实际学习时段。</p>
+      <label className="focus-title-field">本次专注标题
+        <input type="text" required maxLength={120} value={focusTitle}
+          disabled={phase !== "idle" || saving}
+          onChange={(event)=>setFocusTitle(event.target.value)}
+          placeholder="例如：复习线性代数" />
+      </label>
       <div className="timer-display" role="timer" aria-live="off">{mm}:{ss}</div>
       <div className="timer-presets">
         {[1, 15, 25, 50].map((minutes) => (
@@ -144,7 +171,7 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
       </label>
       {configuredMinutes === null && <p className="error-message" role="alert">请输入 1–180 之间的整数分钟数</p>}
       <div className="button-row centered">
-        {phase === "idle" && <button className="primary-button" disabled={configuredMinutes === null} onClick={begin}>开始专注</button>}
+        {phase === "idle" && <button className="primary-button" disabled={configuredMinutes === null || focusTitle.trim().length === 0} onClick={begin}>开始专注</button>}
         {phase === "running" && <button className="secondary-button" onClick={pause}>暂停</button>}
         {phase === "paused" && <button className="primary-button" onClick={begin}>继续计时</button>}
         {phase === "finished" && <span className="success-text">计时完成，可以保存并领取积分</span>}
@@ -156,7 +183,7 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
         {phase !== "idle" && <button className="ghost-button" disabled={saving} onClick={reset}>取消本次</button>}
       </div>
       {error && <p className="error-message" role="alert">{error}</p>}
-      <p className="privacy-note">计时和积分保存在本机。当前不限制其他应用或网站。</p>
+      <p className="privacy-note">计时、标题和实际起止时间仅保存在本机。暂停时间包含在日历时段中，但不计入有效专注分钟。历史估算时间不自动写入日历。当前不限制其他应用或网站。</p>
     </section>
   );
 }
@@ -206,6 +233,9 @@ export default function App() {
   const [version, setVersion] = useState("—");
   const [tasks, setTasks] = useState<LocalTask[]>([]);
   const [sessions, setSessions] = useState<FocusSession[]>([]);
+  const [renamingFocusId, setRenamingFocusId] = useState<string | null>(null);
+  const [renamingFocusTitle, setRenamingFocusTitle] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
   const [summary, setSummary] = useState<FocusSummary>(emptySummary);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -267,6 +297,22 @@ export default function App() {
     setSessions(localSessions);
     setSummary(localSummary);
   }, []);
+
+  async function saveFocusTitle(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!renamingFocusId || renameBusy) return;
+    setRenameBusy(true);
+    setError("");
+    try {
+      await window.desktop.focus.rename({id:renamingFocusId,title:renamingFocusTitle});
+      await refresh();
+      setRenamingFocusId(null);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setRenameBusy(false);
+    }
+  }
 
   const refreshCalendar=useCallback(async():Promise<void>=>{
     setFixedEvents(await window.desktop.calendar.list());
@@ -389,6 +435,9 @@ export default function App() {
     }
   }
 
+  const focusSegments = focusCalendarSegments(sessions);
+  const focusDays = new Set(focusSegments.map(segment => segment.day));
+  const selectedFocusSegments = focusSegments.filter(segment => segment.day === selectedDate);
   const shownTasks = tasks.filter((task) => task.visible);
   const hiddenTasks = tasks.filter((task) => !task.visible && task.source);
   const expiringSoon = hiddenTasks.filter((task) => task.retentionExpiresAt &&
