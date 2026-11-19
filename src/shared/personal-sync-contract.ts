@@ -76,7 +76,10 @@ function parseVersion(value: unknown): number | null {
 function taskPayload(value: unknown): PersonalTaskSnapshot {
   const row = record(value);
   exactKeys(row, ["title", "description", "dueDate", "priority", "completed"]);
-  const parsed = parseCreateTask(row);
+  const parsed = parseCreateTask({
+    title: row.title, description: row.description,
+    dueDate: row.dueDate, priority: row.priority,
+  });
   if (typeof row.completed !== "boolean") throw Error("Invalid task completion flag");
   return { ...parsed, completed: row.completed };
 }
