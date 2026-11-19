@@ -91,13 +91,14 @@ describe("ALPHA-SYNC-001 strict wire envelope, without enabling sync", () => {
       source: null, visible: true, hiddenAt: null, retentionExpiresAt: null,
       createdAt: "2026-11-19T15:00:00.000Z", updatedAt: "2026-11-19T15:00:00.000Z",
     };
-    expect(projectPersonalTask(task)).toEqual(operation.payload);
-    expect(projectPersonalTask({...task, visible: false})).toBeNull();
+    expect(projectPersonalTask(task, false)).toBeNull();
+    expect(projectPersonalTask(task, true)).toEqual(operation.payload);
+    expect(projectPersonalTask({...task, visible: false}, true)).toBeNull();
     expect(projectPersonalTask({...task, source: {
       provider: "canvas", instanceUrl: "https://example.instructure.com",
       accountId: 1, courseId: 2, assignmentId: 3,
       sourceUrl: null, lastSyncedAt: "2026-11-19",
-    }})).toBeNull();
+    }}, true)).toBeNull();
 
     const event: FixedEvent = {
       id: operation.entityId, sourceUid: null, seriesId: calendarPayload.seriesId,
@@ -105,9 +106,10 @@ describe("ALPHA-SYNC-001 strict wire envelope, without enabling sync", () => {
       startMinute: calendarPayload.startMinute, durationMinutes: calendarPayload.durationMinutes,
       createdAt: "2026-11-19T15:00:00.000Z",
     };
-    expect(projectManualCalendarEvent(event)).toEqual(calendarPayload);
-    expect(projectManualCalendarEvent({...event, source: "ics"})).toBeNull();
-    expect(projectManualCalendarEvent({...event, sourceUid: "ical-item"})).toBeNull();
+    expect(projectManualCalendarEvent(event, false)).toBeNull();
+    expect(projectManualCalendarEvent(event, true)).toEqual(calendarPayload);
+    expect(projectManualCalendarEvent({...event, source: "ics"}, true)).toBeNull();
+    expect(projectManualCalendarEvent({...event, sourceUid: "ical-item"}, true)).toBeNull();
   });
 
   it("only accepts bounded, versioned acknowledgement and opaque cursor", () => {
