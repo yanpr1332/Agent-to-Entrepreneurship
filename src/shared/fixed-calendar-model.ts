@@ -21,9 +21,9 @@ export interface CreateFixedEventInput {
 }
 export interface EditFixedEventInput {id:string;title:string;day:string;startMinute:number;durationMinutes:number;}
 /** Series updates operate only on manually created recurring courses. */
-export interface EditFixedSeriesInput extends EditFixedEventInput {
-  scope:"future"|"all";
-}
+export type EditFixedSeriesInput =
+  | (EditFixedEventInput & {scope:"future"|"all"})
+  | (EditFixedEventInput & {scope:"range";rangeStartId:string;rangeEndId:string});
 export interface BusySlot {day:string;startMinute:number;durationMinutes:number}
 export interface ICSPreview {
   approvalId:string;
@@ -77,16 +77,26 @@ export function parseEditFixedSeries(value:unknown):EditFixedSeriesInput {
   if(!value||typeof value!=="object"||Array.isArray(value))
     throw Error("Invalid series edit");
   const x=value as Record<string,unknown>;
-  if(Object.keys(x).sort().join(",")!=="day,durationMinutes,id,scope,startMinute,title" ||
-     (x.scope!=="future"&&x.scope!=="all"))
+  const keys=Object.keys(x).sort().join(",");
+  const baseKeys="day,durationMinutes,id,scope,startMinute,title";
+  const rangeKeys="day,durationMinutes,id,rangeEndId,rangeStartId,scope,startMinute,title";
+  if(x.scope!=="future"&&x.scope!=="all"&&x.scope!=="range")
     throw Error("Invalid series edit scope");
-  return {
-    ...parseEditFixedEvent({
-      id:x.id,title:x.title,day:x.day,startMinute:x.startMinute,
-      durationMinutes:x.durationMinutes,
-    }),
-    scope:x.scope,
-  };
+  if(keys!==(x.scope==="range"?rangeKeys:baseKeys))
+    throw Error("Invalid series edit scope fields");
+  const base=parseEditFixedEvent({
+    id:x.id,title:x.title,day:x.day,startMinute:x.startMinute,
+    durationMinutes:x.durationMinutes,
+  });
+  if(x.scope==="range") {
+    const isId=(v:unknown)=>typeof v==="string" &&
+      /^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(v);
+    if(!isId(x.rangeStartId)||!isId(x.rangeEndId))
+      throw Error("Invalid recurring course range identifiers");
+    return {...base,scope:"range",rangeStartId:x.rangeStartId as string,
+      rangeEndId:x.rangeEndId as string};
+  }
+  return {...base,scope:x.scope};
 }
 export function timesOverlap(a:BusySlot,b:BusySlot):boolean {
   return a.day===b.day&&a.startMinute<b.startMinute+b.durationMinutes&&

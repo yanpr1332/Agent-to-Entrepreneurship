@@ -14,7 +14,9 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
   const [end,setEnd]=useState("10:00");
   const [weeks,setWeeks]=useState(1);
   const [editing,setEditing]=useState<string|null>(null);
-  const [editScope,setEditScope]=useState<"single"|"future"|"all">("single");
+  const [editScope,setEditScope]=useState<"single"|"future"|"all"|"range">("single");
+  const [rangeStartId,setRangeStartId]=useState("");
+  const [rangeEndId,setRangeEndId]=useState("");
   const [showHiddenCanvas,setShowHiddenCanvas]=useState(false);
   const [editDay,setEditDay]=useState(day);
   const [preview,setPreview]=useState<ICSPreview|null>(null);
@@ -29,11 +31,13 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
     finally{setBusy(false);}
   }
   function cancelEdit():void{
-    setEditing(null);setEditScope("single");setTitle("");
+    setEditing(null);setEditScope("single");setRangeStartId("");setRangeEndId("");
+    setTitle("");
     setEditDay(day);setStart("09:00");setEnd("10:00");
   }
   function beginEdit(item:FixedEvent):void{
     setEditing(item.id);setEditScope("single");
+    setRangeStartId(item.id);setRangeEndId(item.id);
     setEditDay(item.day);setTitle(item.title);
     setStart(minuteString(item.startMinute));
     setEnd(minuteString(item.startMinute+item.durationMinutes));
@@ -54,13 +58,20 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
           if(!manualSeries||!editingEvent)
             throw Error("只有本机手动创建的重复课程可以批量修改");
           const count=affectedSeriesEvents.length;
+          if(!count||!dateAnchorEvent)throw Error("请先选择有效的重复课程修改区间");
+          const scopeText=editScope==="future"?"从本次起":
+            editScope==="range"
+              ?"第 "+(rangeStartIndex+1)+" 次到第 "+(rangeEndIndex+1)+" 次（含）"
+              :"整个系列";
           if(!window.confirm("确认批量修改「"+editingEvent.title+"」的 "+count+
-            " 次课程？范围："+(editScope==="future"?"从本次起":"整个系列")+
-            "。日期会按相同天数整体移动；与已确认学习计划冲突则整组拒绝修改。"))return;
-          const updated=await window.desktop.calendar.editSeries({
-            id:editing,title,day:editDay,startMinute:from,
-            durationMinutes:to-from,scope:editScope,
-          });
+            " 次课程？范围："+scopeText+
+            "。范围外的课程完全不变；与已确认学习计划冲突则整组拒绝修改。"))return;
+          const input=editScope==="range"?
+            {id:editing,title,day:editDay,startMinute:from,durationMinutes:to-from,
+              scope:"range" as const,rangeStartId,rangeEndId}:
+            {id:editing,title,day:editDay,startMinute:from,durationMinutes:to-from,
+              scope:editScope};
+          const updated=await window.desktop.calendar.editSeries(input);
           await onChanged();cancelEdit();
           setNotice("已完整修改 "+updated.length+" 次课程，未调整其他课程或学习计划。");
         }
@@ -141,7 +152,13 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
     item.seriesId===editingEvent?.seriesId).sort((a,b)=>
     a.day.localeCompare(b.day)||a.startMinute-b.startMinute||a.id.localeCompare(b.id)):[];
   const groupIndex=group.findIndex(item=>item.id===editing);
-  const affectedSeriesEvents=editScope==="future"?group.slice(groupIndex>=0?groupIndex:group.length):group;
+  const rangeStartIndex=group.findIndex(item=>item.id===rangeStartId);
+  const rangeEndIndex=group.findIndex(item=>item.id===rangeEndId);
+  const validRange=rangeStartIndex>=0&&rangeEndIndex>=rangeStartIndex;
+  const affectedSeriesEvents=editScope==="range"
+    ? validRange?group.slice(rangeStartIndex,rangeEndIndex+1):[]
+    : editScope==="future"?group.slice(groupIndex>=0?groupIndex:group.length):group;
+  const dateAnchorEvent=editScope==="range"?group[rangeStartIndex]:editingEvent;
   const current=events.filter(e=>e.day===day &&
     (e.source!=="canvas"||e.visible||showHiddenCanvas));
   const activeEvents=events.filter(e=>e.source!=="canvas"||(e.visible&&!e.missing));
@@ -150,10 +167,10 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
     let from:number,to:number;
     try{from=parseMinute(start);to=parseMinute(end);}catch{return [];}
     if(to-from<15)return [];
-    const batch=editing&&editScope!=="single"&&manualSeries&&editingEvent
+    const batch=editing&&editScope!=="single"&&manualSeries&&dateAnchorEvent
       ? affectedSeriesEvents.map(item=>({
           day:dayOffset(item.day,Math.round((Date.parse(editDay+"T00:00:00Z")-
-            Date.parse(editingEvent.day+"T00:00:00Z"))/86400000)),
+            Date.parse(dateAnchorEvent.day+"T00:00:00Z"))/86400000)),
           startMinute:from,durationMinutes:to-from,
         }))
       : editing?[{day:editDay,startMinute:from,durationMinutes:to-from}]
@@ -207,15 +224,52 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
         disabled={busy} onChange={e=>setEditDay(e.target.value)}/></label>}
       {editing&&manualSeries&&group.length>1&&<label>修改范围
         <select value={editScope} disabled={busy}
-          onChange={e=>setEditScope(e.target.value as "single"|"future"|"all")}>
+          onChange={e=>{
+            const next=e.target.value as "single"|"future"|"all"|"range";
+            setEditScope(next);
+            if(editingEvent){
+              setEditDay(editingEvent.day);
+              if(next==="range"){
+                setRangeStartId(editingEvent.id);
+                setRangeEndId(editingEvent.id);
+              }
+            }
+          }}>
           <option value="single">仅修改本次</option>
           <option value="future">从本次起（含本次）</option>
           <option value="all">整个系列（包括之前）</option>
+          <option value="range">指定区间（从第 N 次到第 M 次）</option>
         </select>
       </label>}
+      {editing&&manualSeries&&editScope==="range"&&<div className="fixed-clock-row">
+        <label>从第几次
+          <select value={rangeStartId} disabled={busy} onChange={e=>{
+            const id=e.target.value;
+            const startIndex=group.findIndex(item=>item.id===id);
+            const selected=group[startIndex];
+            if(!selected)return;
+            setRangeStartId(id);
+            setEditDay(selected.day);
+            if(rangeEndIndex<startIndex)setRangeEndId(id);
+          }}>
+            {group.map((item,i)=><option key={item.id} value={item.id}>
+              第 {i+1} 次 · {item.day} {minuteString(item.startMinute)}
+            </option>)}
+          </select>
+        </label>
+        <label>到第几次（含）
+          <select value={rangeEndId} disabled={busy} onChange={e=>setRangeEndId(e.target.value)}>
+            {group.slice(Math.max(0,rangeStartIndex)).map((item,i)=><option key={item.id} value={item.id}>
+              第 {Math.max(0,rangeStartIndex)+i+1} 次 · {item.day} {minuteString(item.startMinute)}
+            </option>)}
+          </select>
+        </label>
+      </div>}
       {editing&&manualSeries&&editScope!=="single"&&<p className="privacy-note">
-        本次修改将影响 {affectedSeriesEvents.length} 条本机课程。新日期与所选课程的日期差会应用到全部选定课程，
-        各次之间的间隔保持不变；不影响 Canvas、ICS 或已确认的学习时间块。
+        本次仅修改 {affectedSeriesEvents.length} 条本机课程{editScope==="range"?
+          "（第 "+(rangeStartIndex+1)+" 次至第 "+(rangeEndIndex+1)+" 次，含两端）":""}。
+        新日期相对{editScope==="range"?"所选区间第一条":"当前选中课程"}的日期差会应用到全部选定课程；
+        范围外的课程保持原样，Canvas、ICS、已确认学习时间块也不会被改动。
       </p>}
       <label>课程或事项名称<input required maxLength={120} value={title}
         disabled={busy} onChange={e=>setTitle(e.target.value)} placeholder="例如：微积分课"/></label>

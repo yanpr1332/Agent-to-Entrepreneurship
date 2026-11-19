@@ -93,6 +93,13 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - Windows/macOS 真机 GUI 尚未验收，用户计划集中验收。操作与预期见 [22](22_ALPHA_TIME_004_COURSE_SERIES_EDIT.md)。
 - 不在范围：Canvas/ICS 批量编辑、任务具体截止时刻、知识库安全渲染/模糊搜索、团队积分榜。
 
+### ALPHA-TIME-005 手动重复课程指定闭区间修改（2026-11-19）
+
+- 新增「指定区间：第 N 次至第 M 次（含）」；只影响区间内成员。以区间起点为日期偏移基准。
+- 新增输入校验、范围外保持原样、跨系列与逆序拒绝、时间冲突原子回滚测试。
+- 最新 CI 结论以相应 PR 的 Checks 为准；**Windows/macOS GUI 尚未集中验收**。
+- 详细手工步骤：[23](23_ALPHA_TIME_005_COURSE_CUSTOM_RANGE.md)。
+
 ### ALPHA-KB-003 知识库安全预览与容错检索（2026-11-19）
 
 - PR #31 已提交 HTML/TeX UTF-8 导入、受限 HTML/Markdown/LaTeX 阅读器、基础 MathML、源码切换、有限离线编辑距离检索及来源标记。

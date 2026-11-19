@@ -89,6 +89,43 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     expect(new Set(entire.map(x=>x.seriesId)).size).toBe(1);
   });
 
+  it("edits only a bounded inclusive interval and preserves outside occurrences",()=>{
+    const db=calendar();
+    const series=db.create({title:"Statistics",day:"2026-11-11",
+      startMinute:480,durationMinutes:60,weeks:6},now);
+    const original=db.list();
+    const change=db.editSeries({id:series[0].id,scope:"range",
+      rangeStartId:series[2].id,rangeEndId:series[4].id,
+      title:"Statistics workshop",day:"2026-11-26",
+      startMinute:600,durationMinutes:90});
+    expect(change.map(x=>x.id)).toEqual(series.slice(2,5).map(x=>x.id));
+    expect(change.map(x=>x.day)).toEqual(["2026-11-26","2026-12-03","2026-12-10"]);
+    const after=db.list();
+    for(const originalItem of original.filter(x=>
+      x.id===series[0].id||x.id===series[1].id||x.id===series[5].id)){
+      expect(after.find(x=>x.id===originalItem.id)).toEqual(originalItem);
+    }
+    expect(after.filter(x=>change.some(c=>c.id===x.id)).every(x=>
+      x.title==="Statistics workshop"&&x.startMinute===600)).toBe(true);
+  });
+  it("rejects reversed endpoints, foreign series and conflicting middle occurrences atomically",()=>{
+    const occupied:BusySlot={day:"2026-12-03",startMinute:600,durationMinutes:90};
+    const db=calendar(()=>[occupied]);
+    const series=db.create({title:"Economics",day:"2026-11-11",
+      startMinute:480,durationMinutes:60,weeks:6},now);
+    const other=db.create({title:"Chemistry",day:"2026-11-12",
+      startMinute:480,durationMinutes:60,weeks:2},now);
+    const original=db.list();
+    const payload={id:series[0].id,scope:"range" as const,
+      rangeStartId:series[2].id,rangeEndId:series[4].id,
+      title:"Changed",day:"2026-11-26",startMinute:600,durationMinutes:90};
+    expect(()=>db.editSeries(payload)).toThrow("overlaps");
+    expect(()=>db.editSeries({...payload,rangeStartId:series[4].id,rangeEndId:series[2].id}))
+      .toThrow("range");
+    expect(()=>db.editSeries({...payload,rangeEndId:other[0].id})).toThrow("range");
+    expect(db.list()).toEqual(original);
+  });
+
   it("rejects a conflicting future course edit atomically, preserving all rows",()=>{
     const busySlot:BusySlot={day:"2026-11-26",startMinute:540,durationMinutes:60};
     const db=calendar(()=>[busySlot]);
