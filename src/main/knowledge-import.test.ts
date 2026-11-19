@@ -18,6 +18,16 @@ describe("native-picker-only local text import security",()=>{
     expect(result).toMatchObject({title:"学习笔记.md",format:"markdown",text:"# 光合作用\n原文证据"});
   });
 
+  it("imports UTF-8 HTML and TeX as text, without executing or rewriting source",async()=>{
+    const dir=fixture();
+    const html=join(dir,"notes.html"),tex=join(dir,"algebra.tex");
+    writeFileSync(html,"<h1>Title</h1><script>steal()</script>");
+    writeFileSync(tex,"\\section{Matrix} $x^2$");
+    expect(await readSelectedKnowledgeText(html)).toMatchObject({
+      format:"html",text:"<h1>Title</h1><script>steal()</script>",
+    });
+    expect(await readSelectedKnowledgeText(tex)).toMatchObject({format:"latex"});
+  });
   it("rejects non-text extensions, large content, invalid UTF-8 and links",async()=>{
     const dir=fixture();
     const file=join(dir,"safe.txt");writeFileSync(file,"safe");
@@ -30,7 +40,7 @@ describe("native-picker-only local text import security",()=>{
       if(!["EPERM","EACCES"].includes((error as NodeJS.ErrnoException).code ?? ""))throw error;
     }
     const fake=join(dir,"image.png");writeFileSync(fake,"picture");
-    await expect(readSelectedKnowledgeText(fake)).rejects.toThrow("Markdown and TXT");
+    await expect(readSelectedKnowledgeText(fake)).rejects.toThrow("Markdown, HTML, LaTeX");
     const bad=join(dir,"broken.md");writeFileSync(bad,Buffer.from([0xc3,0x28]));
     await expect(readSelectedKnowledgeText(bad)).rejects.toThrow("UTF-8");
     const large=join(dir,"large.md");writeFileSync(large,"x".repeat(2*1024*1024+1));

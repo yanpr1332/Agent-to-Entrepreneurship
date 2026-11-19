@@ -1,4 +1,4 @@
-export type KnowledgeFormat = "markdown" | "text" | "pdf";
+export type KnowledgeFormat = "markdown" | "text" | "pdf" | "html" | "latex";
 export interface KnowledgeDocument {
   id: string;
   title: string;
@@ -24,6 +24,7 @@ export interface KnowledgeSearchHit {
   ordinal: number;
   excerpt: string;
   pageNumber: number | null;
+  matchType?: "exact" | "fuzzy";
 }
 export interface KnowledgePassage {
   documentId: string;

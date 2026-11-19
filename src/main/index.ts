@@ -385,9 +385,10 @@ function registerIpcHandlers(): void {
     const owner=BrowserWindow.fromWebContents(event.sender);
     if(!owner || owner.isDestroyed())throw new Error("Knowledge import requires a trusted window");
     const selection=await dialog.showOpenDialog(owner,{
-      title:"选择 PDF、Markdown 或 UTF-8 文本资料",
+      title:"选择 PDF、Markdown、HTML、LaTeX 或 UTF-8 文本资料",
       properties:["openFile"],
-      filters:[{name:"PDF / Markdown / UTF-8 TXT",extensions:["pdf","md","markdown","txt"]}],
+      filters:[{name:"PDF / Markdown / HTML / LaTeX / TXT",
+        extensions:["pdf","md","markdown","html","htm","tex","latex","txt"]}],
     });
     if(selection.canceled || !selection.filePaths.length)return null;
     const source=await readSelectedKnowledgeFile(selection.filePaths[0]);
