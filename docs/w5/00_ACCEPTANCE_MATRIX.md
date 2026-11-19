@@ -93,6 +93,12 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - Windows/macOS 真机 GUI 尚未验收，用户计划集中验收。操作与预期见 [22](22_ALPHA_TIME_004_COURSE_SERIES_EDIT.md)。
 - 不在范围：Canvas/ICS 批量编辑、任务具体截止时刻、知识库安全渲染/模糊搜索、团队积分榜。
 
+### ALPHA-KB-003 知识库安全预览与容错检索（2026-11-19）
+
+- PR #31 已提交 HTML/TeX UTF-8 导入、受限 HTML/Markdown/LaTeX 阅读器、基础 MathML、源码切换、有限离线编辑距离检索及来源标记。
+- 自动化测试和构建状态以 **PR 最新 Checks** 为准；不等于安全审计或用户真实 GUI 通过。
+- Windows/macOS GUI 尚未执行；按 [24](24_ALPHA_KB_003_SAFE_PREVIEW_SEARCH.md) 集中验收。全文排版、AI 语义搜索等未实现，不可误标。
+
 ## 4. 未验证项清单（按风险排序）
 
 1. **双平台安装包**：从未执行 `npm run dist:win` / `dist:mac`，无签名、无公证、无安装包产物。
