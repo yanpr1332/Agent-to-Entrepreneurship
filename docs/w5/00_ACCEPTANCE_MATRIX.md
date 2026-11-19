@@ -114,6 +114,12 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - 单测与 CI 结果以 PR #32 的**最新提交检查**为准。真人 Windows/macOS GUI 与自愿的真 API 计费验收**尚未执行**。
 - 详细本机测试用例见 [25](25_ALPHA_KB_004_AI_SOURCE_EXPLANATION.md)。
 
+### ALPHA-KB-005 本地三路检索（后续规划，未实现）
+
+- 用户希望继续演进为**精确搜索 + 模糊搜索 + 本地向量语义搜索**，已记录在 Backlog 与 [26 选型及工程难度评估](26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md)。
+- **当前未安装 embedding 模型、未建立向量索引、未运行 CPU/内存性能测试**。后续分 PoC、增量向量索引、三路结果合并，均须独立 CI 与真实 Windows/macOS GUI 验收。
+- 不把 PR #32 的可选 OpenAI 单段解释误称为全库本地语义检索。
+
 ## 4. 未验证项清单（按风险排序）
 
 1. **双平台安装包**：从未执行 `npm run dist:win` / `dist:mac`，无签名、无公证、无安装包产物。

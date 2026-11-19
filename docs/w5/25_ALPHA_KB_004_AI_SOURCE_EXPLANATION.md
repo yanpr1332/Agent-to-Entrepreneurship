@@ -62,7 +62,7 @@ npm run dev
 
 ## 不属于本轮完成的内容
 
-- 真正的本地 embedding 模型、多语言向量检索、AI 对全知识库自动扫描；
+- 真正的本地 embedding 模型、多语言向量检索（已作为后续 **ALPHA-KB-005** 登记，参见 [26 技术可行性评估](26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md)），本轮并未实现；AI 对全知识库自动扫描不在本轮；
 - 多文档综合问答、可信多段 RAG 引用和跨语义同义词扩展；
 - 完整 LaTeX 引擎、OCR 与相关安全审计；
 - 团队自律积分排行榜及反作弊框架；
