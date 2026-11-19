@@ -3,6 +3,7 @@ import { LocalStore } from "./local-store";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 const stores: LocalStore[] = [];
 function memory(): LocalStore {
@@ -44,6 +45,59 @@ describe("local-first SQLite store", () => {
     expect(db.focusSummary()).toEqual({
       sessions: 1, completedSessions: 1, totalMinutes: 25, points: 25,
     });
+  });
+
+  it("stores real bounds and title, while edits never change earned points", () => {
+    const db = memory();
+    const now = Date.now();
+    const start = new Date(now - 5 * 60_000).toISOString();
+    const end = new Date(now - 60_000).toISOString();
+    const payload = {
+      sessionId: "f4692ac2-2942-4f64-8de4-c37800f86ab7",
+      title: "数学复习", plannedMinutes: 3, elapsedSeconds: 180,
+      startedAt: start, endedAt: end,
+    };
+    expect(db.recordFocusSession(payload)).toMatchObject({
+      title: "数学复习", timeSource: "recorded", startedAt: start,
+      endedAt: end, points: 3,
+    });
+    const renamed = db.renameFocusSession({id:payload.sessionId, title:"英语练习"});
+    expect(renamed.title).toBe("英语练习");
+    expect(renamed.points).toBe(3);
+    expect(db.recordFocusSession({...payload,title:"重试不得改名"}).title).toBe("英语练习");
+    expect(db.focusSummary().points).toBe(3);
+    expect(() => db.renameFocusSession({id:payload.sessionId,title:"",points:500})).toThrow();
+  });
+
+  it("migrates legacy focus rows without inventing accurate start times", () => {
+    const directory = mkdtempSync(join(tmpdir(), "ate-focus-migrate-"));
+    const file = join(directory, "local.sqlite");
+    try {
+      const old = new DatabaseSync(file);
+      old.exec(`
+        CREATE TABLE focus_sessions (
+          id TEXT PRIMARY KEY, planned_minutes INTEGER NOT NULL,
+          elapsed_seconds INTEGER NOT NULL, completed INTEGER NOT NULL,
+          points INTEGER NOT NULL, started_at TEXT NOT NULL, ended_at TEXT NOT NULL
+        );
+        INSERT INTO focus_sessions VALUES (
+          'e70d140f-cd1b-45d6-bcf7-892ab3f8039d',25,1500,1,25,
+          '2026-11-08T12:00:00.000Z','2026-11-08T12:25:00.000Z'
+        );
+        PRAGMA user_version = 4;
+      `);
+      old.close();
+      const next = new LocalStore(file);
+      expect(next.listFocusSessions()[0]).toMatchObject({
+        title:"专注学习",timeSource:"estimated",points:25,
+      });
+      next.close();
+      const again = new LocalStore(file);
+      expect(again.listFocusSessions()).toHaveLength(1);
+      again.close();
+    } finally {
+      rmSync(directory,{recursive:true,force:true});
+    }
   });
 
   it("does not award points for incomplete focus", () => {

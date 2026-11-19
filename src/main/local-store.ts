@@ -7,7 +7,7 @@ import type { MailCandidateAction, MailCandidateChoiceResult, MailCandidateDecis
 import { suggestedTaskTitle } from "../shared/mail-candidates";
 import type { MailRecord } from "../shared/mail-model";
 import {
-  parseCreateTask, parseFocusCompletion, parseTaskId, parseUpdateTask,
+  parseCreateTask, parseFocusCompletion, parseFocusTitleUpdate, parseTaskId, parseUpdateTask,
   type FocusSession, type FocusSummary, type LocalTask, type TaskPriority,
 } from "../shared/local-model";
 
@@ -35,12 +35,14 @@ interface TaskRow {
 
 interface FocusRow {
   id: string;
+  title: string;
   planned_minutes: number;
   elapsed_seconds: number;
   completed: number;
   points: number;
   started_at: string;
   ended_at: string;
+  time_source: "recorded" | "estimated";
 }
 
 function taskFromRow(row: TaskRow): LocalTask {
@@ -63,9 +65,10 @@ function taskFromRow(row: TaskRow): LocalTask {
 
 function focusFromRow(row: FocusRow): FocusSession {
   return {
-    id: row.id, plannedMinutes: row.planned_minutes,
+    id: row.id, title: row.title, plannedMinutes: row.planned_minutes,
     elapsedSeconds: row.elapsed_seconds, completed: row.completed === 1,
     points: row.points, startedAt: row.started_at, endedAt: row.ended_at,
+    timeSource: row.time_source,
   };
 }
 
@@ -87,8 +90,8 @@ export class LocalStore {
 
   private migrate(): void {
     const version = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (version > 4) throw new Error("Database created by a newer application; refusing to downgrade");
-    if (version === 4) return;
+    if (version > 5) throw new Error("Database created by a newer application; refusing to downgrade");
+    if (version === 5) return;
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -169,7 +172,14 @@ export class LocalStore {
           "CHECK((decision='accepted' AND task_id IS NOT NULL) OR " +
           "(decision='ignored' AND task_id IS NULL)))");
       }
-      this.db.exec("PRAGMA user_version = 4");
+      if (version <= 4) {
+        this.db.exec(`
+          ALTER TABLE focus_sessions ADD COLUMN title TEXT NOT NULL DEFAULT '专注学习';
+          ALTER TABLE focus_sessions ADD COLUMN time_source TEXT NOT NULL DEFAULT 'estimated'
+            CHECK (time_source IN ('recorded','estimated'));
+        `);
+      }
+      this.db.exec("PRAGMA user_version = 5");
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -540,7 +550,7 @@ export class LocalStore {
 
   listFocusSessions(): FocusSession[] {
     const rows = this.db.prepare(
-      "SELECT * FROM focus_sessions ORDER BY ended_at DESC LIMIT 100",
+      "SELECT * FROM focus_sessions ORDER BY ended_at DESC LIMIT 500",
     ).all() as unknown as FocusRow[];
     return rows.map(focusFromRow);
   }
@@ -550,22 +560,44 @@ export class LocalStore {
     const now = new Date();
     const completed = session.elapsedSeconds === session.plannedMinutes * 60;
     const points = completed ? session.plannedMinutes : 0;
+    // Recorded instants are for local display, not an independently verified time authority.
+    // Restrict future/backdated wall times rather than accepting arbitrary calendar history.
+    if (session.startedAt !== null && session.endedAt !== null) {
+      if (Date.parse(session.endedAt) > now.getTime() + 60_000 ||
+          Date.parse(session.startedAt) < now.getTime() - 48 * 3600000) {
+        throw new Error("Focus wall-clock times are outside the accepted window");
+      }
+    }
+    const started = session.startedAt ??
+      new Date(now.getTime() - session.elapsedSeconds * 1000).toISOString();
+    const ended = session.endedAt ?? now.toISOString();
     // The session ID is an idempotency key. Repeated IPC calls cannot earn points twice.
     this.db.prepare(`
       INSERT INTO focus_sessions
-      (id, planned_minutes, elapsed_seconds, completed, points, started_at, ended_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      (id, title, planned_minutes, elapsed_seconds, completed, points,
+       started_at, ended_at, time_source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO NOTHING
     `).run(
-      session.sessionId, session.plannedMinutes, session.elapsedSeconds,
-      completed ? 1 : 0, points,
-      new Date(now.getTime() - session.elapsedSeconds * 1000).toISOString(),
-      now.toISOString(),
+      session.sessionId, session.title, session.plannedMinutes, session.elapsedSeconds,
+      completed ? 1 : 0, points, started, ended,
+      session.startedAt !== null ? "recorded" : "estimated",
     );
     const row = this.db.prepare(
       "SELECT * FROM focus_sessions WHERE id = ?",
     ).get(session.sessionId) as unknown as FocusRow | undefined;
     if (!row) throw new Error("Focus record could not be loaded");
+    return focusFromRow(row);
+  }
+
+  /** Post-hoc edits are limited to presentation data, never points or timestamps. */
+  renameFocusSession(input: unknown): FocusSession {
+    const update = parseFocusTitleUpdate(input);
+    const result = this.db.prepare("UPDATE focus_sessions SET title = ? WHERE id = ?")
+      .run(update.title, update.id);
+    if (Number(result.changes) !== 1) throw new Error("Focus session not found");
+    const row = this.db.prepare("SELECT * FROM focus_sessions WHERE id = ?")
+      .get(update.id) as unknown as FocusRow;
     return focusFromRow(row);
   }
 

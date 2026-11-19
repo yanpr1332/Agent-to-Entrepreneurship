@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc-channels";
 import type {
-  CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary,
+  CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary, FocusTitleUpdate,
   LocalTask, UpdateTaskInput,
 } from "../shared/local-model";
 
@@ -196,6 +196,8 @@ const desktopApi = Object.freeze({
     list: () => ipcRenderer.invoke(IPC_CHANNELS.focusList) as Promise<FocusSession[]>,
     finish: (input: FocusCompletionInput) =>
       ipcRenderer.invoke(IPC_CHANNELS.focusFinish, input) as Promise<FocusSession>,
+    rename: (input: FocusTitleUpdate) =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusRename, input) as Promise<FocusSession>,
     summary: () => ipcRenderer.invoke(IPC_CHANNELS.focusSummary) as Promise<FocusSummary>,
   }),
 });
