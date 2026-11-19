@@ -55,6 +55,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "cloud:workspaces",
       "focus:finish",
       "focus:list",
+      "focus:rename",
       "focus:summary",
       "knowledge:cards",
       "knowledge:create-card",

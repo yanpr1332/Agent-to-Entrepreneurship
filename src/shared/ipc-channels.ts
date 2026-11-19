@@ -50,6 +50,7 @@ export const IPC_CHANNELS = {
   tasksRemove: "tasks:remove",
   focusList: "focus:list",
   focusFinish: "focus:finish",
+  focusRename: "focus:rename",
   focusSummary: "focus:summary",
   canvasStatus: "canvas:status",
   canvasConnect: "canvas:connect",

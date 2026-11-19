@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import type { FocusSession, FocusSummary, LocalTask, TaskPriority } from "../../shared/local-model";
 import { formatCalendarSelection, formatDueDate, localDateKey, monthCells } from "./calendar";
 import { parseFocusMinutes } from "./focus-duration";
+import { focusCalendarSegments } from "./focus-calendar";
 import CalendarAgenda from "./CalendarAgenda";
 import { calendarWeekDays,shiftCalendarView,type CalendarView } from "./calendar-agenda";
 import CanvasConnector from "./CanvasConnector";
@@ -40,6 +41,7 @@ function errorMessage(error: unknown): string {
 
 function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
   const [minuteText, setMinuteText] = useState("25");
+  const [focusTitle, setFocusTitle] = useState("专注学习");
   const configuredMinutes = parseFocusMinutes(minuteText);
   // Locked during a session; saving cannot use a different preset.
   const plannedMinutes = configuredMinutes ?? 25;
@@ -49,13 +51,19 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
   const [error, setError] = useState("");
   const deadline = useRef(0);
   const sessionId = useRef<string | null>(null);
+  const startedAtRef = useRef<string | null>(null);
+  const finishedAtRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (phase !== "running") return;
     const tick = () => {
       const seconds = Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000));
       setRemaining(seconds);
-      if (seconds === 0) setPhase("finished");
+      if (seconds === 0) {
+        // Record the countdown endpoint instead of the eventual save-click time.
+        finishedAtRef.current ??= new Date(deadline.current).toISOString();
+        setPhase("finished");
+      }
     };
     tick();
     const handle = setInterval(tick, 500);
@@ -66,9 +74,15 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
     setPhase("idle");
     setRemaining(plannedMinutes * 60);
     sessionId.current = null;
+    startedAtRef.current = null;
+    finishedAtRef.current = null;
   }
 
   function begin(): void {
+    if (phase === "idle" && focusTitle.trim().length === 0) {
+      setError("请输入专注标题");
+      return;
+    }
     if (phase === "idle" && configuredMinutes === null) {
       setError("请输入 1–180 之间的整数分钟数");
       return;
@@ -76,6 +90,8 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
     setError("");
     if (phase === "idle") {
       sessionId.current = crypto.randomUUID();
+      startedAtRef.current = new Date().toISOString();
+      finishedAtRef.current = null;
       setRemaining(plannedMinutes * 60);
       deadline.current = Date.now() + plannedMinutes * 60_000;
     } else if (phase === "paused") {
@@ -101,6 +117,11 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
         sessionId: sessionId.current,
         plannedMinutes,
         elapsedSeconds: plannedMinutes * 60 - left,
+        title: focusTitle,
+        startedAt: startedAtRef.current ?? undefined,
+        endedAt: phase === "finished"
+          ? (finishedAtRef.current ?? new Date(deadline.current).toISOString())
+          : new Date().toISOString(),
       });
       await onSaved();
       reset();
@@ -118,7 +139,13 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
     <section className="panel timer-panel">
       <div className="eyebrow">FOCUS SESSION</div>
       <h2>开始一段专注时间</h2>
-      <p className="help-text">完成预定时长后可获得同等分钟数的积分，提前结束不奖励积分。</p>
+      <p className="help-text">完成预定时长后可获得同等分钟数的积分，提前结束不奖励积分。保存后可在日历查看实际学习时段。</p>
+      <label className="focus-title-field">本次专注标题
+        <input type="text" required maxLength={120} value={focusTitle}
+          disabled={phase !== "idle" || saving}
+          onChange={(event)=>setFocusTitle(event.target.value)}
+          placeholder="例如：复习线性代数" />
+      </label>
       <div className="timer-display" role="timer" aria-live="off">{mm}:{ss}</div>
       <div className="timer-presets">
         {[1, 15, 25, 50].map((minutes) => (
@@ -144,7 +171,7 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
       </label>
       {configuredMinutes === null && <p className="error-message" role="alert">请输入 1–180 之间的整数分钟数</p>}
       <div className="button-row centered">
-        {phase === "idle" && <button className="primary-button" disabled={configuredMinutes === null} onClick={begin}>开始专注</button>}
+        {phase === "idle" && <button className="primary-button" disabled={configuredMinutes === null || focusTitle.trim().length === 0} onClick={begin}>开始专注</button>}
         {phase === "running" && <button className="secondary-button" onClick={pause}>暂停</button>}
         {phase === "paused" && <button className="primary-button" onClick={begin}>继续计时</button>}
         {phase === "finished" && <span className="success-text">计时完成，可以保存并领取积分</span>}
@@ -156,7 +183,7 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
         {phase !== "idle" && <button className="ghost-button" disabled={saving} onClick={reset}>取消本次</button>}
       </div>
       {error && <p className="error-message" role="alert">{error}</p>}
-      <p className="privacy-note">计时和积分保存在本机。当前不限制其他应用或网站。</p>
+      <p className="privacy-note">计时、标题和实际起止时间仅保存在本机。暂停时间包含在日历时段中，但不计入有效专注分钟。历史估算时间不自动写入日历。当前不限制其他应用或网站。</p>
     </section>
   );
 }
@@ -206,6 +233,9 @@ export default function App() {
   const [version, setVersion] = useState("—");
   const [tasks, setTasks] = useState<LocalTask[]>([]);
   const [sessions, setSessions] = useState<FocusSession[]>([]);
+  const [renamingFocusId, setRenamingFocusId] = useState<string | null>(null);
+  const [renamingFocusTitle, setRenamingFocusTitle] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
   const [summary, setSummary] = useState<FocusSummary>(emptySummary);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -267,6 +297,22 @@ export default function App() {
     setSessions(localSessions);
     setSummary(localSummary);
   }, []);
+
+  async function saveFocusTitle(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!renamingFocusId || renameBusy) return;
+    setRenameBusy(true);
+    setError("");
+    try {
+      await window.desktop.focus.rename({id:renamingFocusId,title:renamingFocusTitle});
+      await refresh();
+      setRenamingFocusId(null);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setRenameBusy(false);
+    }
+  }
 
   const refreshCalendar=useCallback(async():Promise<void>=>{
     setFixedEvents(await window.desktop.calendar.list());
@@ -389,6 +435,9 @@ export default function App() {
     }
   }
 
+  const focusSegments = focusCalendarSegments(sessions);
+  const focusDays = new Set(focusSegments.map(segment => segment.day));
+  const selectedFocusSegments = focusSegments.filter(segment => segment.day === selectedDate);
   const shownTasks = tasks.filter((task) => task.visible);
   const hiddenTasks = tasks.filter((task) => !task.visible && task.source);
   const expiringSoon = hiddenTasks.filter((task) => task.retentionExpiresAt &&
@@ -519,7 +568,7 @@ export default function App() {
                     {calendarView==="month"?<>
                       <div className="weekday-row">{["一","二","三","四","五","六","日"].map(day=><span key={day}>{day}</span>)}</div>
                       <div className="calendar-grid">{calendar.map(day=>{
-                        const hasTasks=shownTasks.some(task=>task.dueDate===day.key) ||
+                        const hasTasks=shownTasks.some(task=>task.dueDate===day.key) || focusDays.has(day.key) ||
                           plannedBlocks.some(block=>block.day===day.key) ||
                           fixedEvents.some(event=>event.day===day.key &&
                             (event.source!=="canvas"||(event.visible&&!event.missing)));
@@ -532,7 +581,7 @@ export default function App() {
                         </button>;
                       })}</div>
                     </>:<CalendarAgenda view={calendarView} selectedDay={selectedDate}
-                      today={today} tasks={tasks} blocks={plannedBlocks} events={fixedEvents}
+                      today={today} tasks={tasks} blocks={plannedBlocks} events={fixedEvents} sessions={sessions}
                       onSelectDate={selectCalendarDate} onEditTask={editTask}/>}
                   </section>
                   <section className="panel planned-day-panel">
@@ -545,7 +594,17 @@ export default function App() {
                         <strong>{block.taskTitle}</strong>
                       </li>)}
                     </ul>:<p className="empty-state">这一天尚无已确认的规划时间。可以在「学习规划」生成建议。</p>}
-                    <p className="privacy-note">这些是单独确认的学习时间，不等于任务截止时间；规划不会修改原任务。</p>
+                    <p className="privacy-note">这些是已确认的学习计划，不等于任务截止时间或真实专注记录；规划不会修改原任务。</p>
+                    <div className="actual-focus-list">
+                      <h3>{formatDueDate(selectedDate)} · 实际专注记录 ({selectedFocusSegments.length})</h3>
+                      {selectedFocusSegments.length ? <ul className="planned-day-list">
+                        {selectedFocusSegments.map(segment=><li key={segment.id}>
+                          <span>{minuteString(segment.startMinute)} – {minuteString(segment.startMinute+segment.durationMinutes)}</span>
+                          <strong>{segment.title}</strong>
+                          <small>整段有效专注 {Math.floor(segment.elapsedSeconds/60)} 分钟 · {segment.completed ? "已完成" : "提前结束"}</small>
+                        </li>)}
+                      </ul> : <p className="empty-state">这一天没有新记录的实际专注。保存专注后会自动出现在这里。</p>}
+                    </div>
                   </section>
                   <FixedCalendarPanel day={selectedDate} events={fixedEvents} studyBlocks={plannedBlocks} onChanged={refreshCalendar}/>
                   <section className="panel task-list-panel"><div className="panel-heading"><div><div className="eyebrow">MY TASKS</div><h2>{showHidden ? "隐藏的 Canvas 任务" : filter === "day" ? formatDueDate(selectedDate) : filter === "undated" ? "未安排日期" : "全部任务"}</h2></div><span className="muted-tag">{visibleTasks.length} 条</span></div>
@@ -578,18 +637,40 @@ export default function App() {
           )}
 
           {page === "focus" && (
-            <>
-              <div className="page-heading"><div><div className="eyebrow">FOCUS & REWARD</div><h1>专注与自律</h1><p>按自己的节奏执行计划，每次专注均留下本地记录。</p></div><span className="count-chip">{summary.points} 积分</span></div>
-              <div className="focus-layout"><FocusTimer onSaved={refresh} />
-                <div className="focus-side"><section className="panel"><div className="eyebrow">YOUR PROGRESS</div><h2>累计成绩</h2>
-                  <div className="focus-summary"><div><strong>{summary.completedSessions}</strong><span>完成场次</span></div><div><strong>{summary.totalMinutes}</strong><span>专注分钟</span></div><div><strong>{summary.points}</strong><span>已获积分</span></div></div>
-                </section>
-                <section className="panel"><div className="eyebrow">HISTORY</div><h2>最近记录</h2>
-                  {sessions.length ? <ul className="history-list">{sessions.slice(0, 8).map((session) => <li key={session.id}><div><strong>{session.completed ? "已完成" : "提前结束"} · {Math.floor(session.elapsedSeconds / 60)} 分钟</strong><small>{new Date(session.endedAt).toLocaleString("zh-CN")}</small></div><span>+{session.points}</span></li>)}</ul> : <p className="empty-state">暂无专注记录。</p>}
-                </section></div>
-              </div>
-            </>
+            <div className="page-heading"><div><div className="eyebrow">FOCUS & REWARD</div><h1>专注与自律</h1><p>按自己的节奏执行计划，完成或提前结束后点击「记录」即可在本机日历查询实际学习时间。</p></div><span className="count-chip">{summary.points} 积分</span></div>
           )}
+          {/* Keep the timer mounted while navigating between modules. */}
+          <div className="focus-layout" hidden={page !== "focus"}><FocusTimer onSaved={refresh} />
+            <div className="focus-side"><section className="panel"><div className="eyebrow">YOUR PROGRESS</div><h2>累计成绩</h2>
+              <div className="focus-summary"><div><strong>{summary.completedSessions}</strong><span>完成场次</span></div><div><strong>{summary.totalMinutes}</strong><span>专注分钟</span></div><div><strong>{summary.points}</strong><span>已获积分</span></div></div>
+            </section>
+            <section className="panel"><div className="eyebrow">HISTORY</div><h2>最近记录</h2>
+              {sessions.length ? <ul className="history-list">{sessions.slice(0, 8).map((session) => <li key={session.id}>
+                <div className="history-copy">
+                  {renamingFocusId === session.id ? (
+                    <form className="focus-rename-form" onSubmit={(event)=>void saveFocusTitle(event)}>
+                      <label>修改专注标题<input required maxLength={120} value={renamingFocusTitle}
+                        disabled={renameBusy} onChange={(event)=>setRenamingFocusTitle(event.target.value)} /></label>
+                      <div className="button-row"><button type="submit" className="small-button"
+                        disabled={renameBusy || renamingFocusTitle.trim().length===0}>保存名称</button>
+                        <button type="button" className="small-button" disabled={renameBusy}
+                          onClick={()=>setRenamingFocusId(null)}>取消</button></div>
+                    </form>
+                  ) : (
+                    <>
+                      <strong>{session.title}</strong>
+                      <small>{session.completed ? "已完成" : "提前结束"} · 有效 {Math.floor(session.elapsedSeconds / 60)} 分钟</small>
+                      <small>{new Date(session.startedAt).toLocaleString("zh-CN")} — {new Date(session.endedAt).toLocaleString("zh-CN")}</small>
+                      {session.timeSource === "estimated" && <small>旧版记录：开始时间为估算，不展示为真实日历时段</small>}
+                      <button className="small-button" type="button" onClick={()=>{
+                        setRenamingFocusId(session.id);setRenamingFocusTitle(session.title);
+                      }}>修改标题</button>
+                    </>
+                  )}
+                </div><span>+{session.points}</span>
+              </li>)}</ul> : <p className="empty-state">暂无专注记录。</p>}
+            </section></div>
+          </div>
 
           {page === "knowledge" && <KnowledgeBase />}
           {page === "ai" && <StudyPlanner onChanged={refreshPlanning} />}

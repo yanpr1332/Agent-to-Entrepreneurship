@@ -50,16 +50,38 @@ export interface FocusCompletionInput {
   sessionId: string;
   plannedMinutes: number;
   elapsedSeconds: number;
+  /** Optional for compatibility with clients from before ALPHA-TIME-002. */
+  title?: string;
+  /** The actual wall-clock bounds, distinct from effective focus duration. */
+  startedAt?: string;
+  endedAt?: string;
+}
+
+export interface ParsedFocusCompletion {
+  sessionId: string;
+  plannedMinutes: number;
+  elapsedSeconds: number;
+  title: string;
+  startedAt: string | null;
+  endedAt: string | null;
+}
+
+export interface FocusTitleUpdate {
+  id: string;
+  title: string;
 }
 
 export interface FocusSession {
   id: string;
+  title: string;
   plannedMinutes: number;
   elapsedSeconds: number;
   completed: boolean;
   points: number;
   startedAt: string;
   endedAt: string;
+  /** Legacy sessions have a derived start time and are not actual calendar events. */
+  timeSource: "recorded" | "estimated";
 }
 
 export interface FocusSummary {
@@ -154,9 +176,31 @@ export function parseUpdateTask(input: unknown): UpdateTaskInput {
   return patch;
 }
 
-export function parseFocusCompletion(input: unknown): FocusCompletionInput {
+/** User-controlled titles never become HTML or executable source. */
+export function parseFocusTitle(input: unknown): string {
+  if (typeof input !== "string") throw new Error("Invalid focus title");
+  const title = input.trim();
+  if (title.length < 1 || title.length > 120) throw new Error("Focus title must contain 1–120 characters");
+  return title;
+}
+
+function parseFocusInstant(input: unknown): string {
+  if (typeof input !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(input))
+    throw new Error("Invalid focus timestamp");
+  const date = new Date(input);
+  if (!Number.isFinite(date.getTime()) || date.toISOString() !== input) throw new Error("Invalid focus timestamp");
+  return input;
+}
+
+export function parseFocusTitleUpdate(input: unknown): FocusTitleUpdate {
   const record = asRecord(input);
-  onlyKeys(record, ["sessionId", "plannedMinutes", "elapsedSeconds"]);
+  onlyKeys(record, ["id", "title"]);
+  return { id: parseTaskId(record.id), title: parseFocusTitle(record.title) };
+}
+
+export function parseFocusCompletion(input: unknown): ParsedFocusCompletion {
+  const record = asRecord(input);
+  onlyKeys(record, ["sessionId", "plannedMinutes", "elapsedSeconds", "title", "startedAt", "endedAt"]);
   const sessionId = parseTaskId(record.sessionId);
   const { plannedMinutes, elapsedSeconds } = record;
   if (typeof plannedMinutes !== "number" || !Number.isInteger(plannedMinutes) || plannedMinutes < 1 || plannedMinutes > 180) {
@@ -165,5 +209,22 @@ export function parseFocusCompletion(input: unknown): FocusCompletionInput {
   if (typeof elapsedSeconds !== "number" || !Number.isInteger(elapsedSeconds) || elapsedSeconds < 0 || elapsedSeconds > plannedMinutes * 60) {
     throw new Error("Invalid focus duration");
   }
-  return { sessionId, plannedMinutes, elapsedSeconds };
+  // Both bounds must be provided together; old clients may omit both.
+  if ((record.startedAt === undefined) !== (record.endedAt === undefined)) {
+    throw new Error("Focus timestamps must be paired");
+  }
+  const startedAt = record.startedAt === undefined ? null : parseFocusInstant(record.startedAt);
+  const endedAt = record.endedAt === undefined ? null : parseFocusInstant(record.endedAt);
+  if (startedAt !== null && endedAt !== null) {
+    const wallMilliseconds = Date.parse(endedAt) - Date.parse(startedAt);
+    if (wallMilliseconds < 0 || wallMilliseconds > 48 * 3600000 ||
+        wallMilliseconds + 1500 < elapsedSeconds * 1000) {
+      throw new Error("Invalid focus wall-clock interval");
+    }
+  }
+  return {
+    sessionId, plannedMinutes, elapsedSeconds,
+    title: record.title === undefined ? "专注学习" : parseFocusTitle(record.title),
+    startedAt, endedAt,
+  };
 }

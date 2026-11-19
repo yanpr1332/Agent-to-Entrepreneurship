@@ -1,4 +1,4 @@
-import type {LocalTask} from "../../shared/local-model";
+import type {FocusSession,LocalTask} from "../../shared/local-model";
 import type {CalendarDisplayEvent} from "../../shared/canvas-calendar-model";
 import {minuteString,type PlanBlock} from "../../shared/planning-model";
 import {formatDueDate} from "./calendar";
@@ -15,7 +15,7 @@ function clock(start:number,duration:number):string{
 }
 
 export default function CalendarAgenda({
-  view,selectedDay,today,tasks,blocks,events,onSelectDate,onEditTask,
+  view,selectedDay,today,tasks,blocks,events,sessions,onSelectDate,onEditTask,
 }:{
   view:Extract<CalendarView,"day"|"week">;
   selectedDay:string;
@@ -23,11 +23,12 @@ export default function CalendarAgenda({
   tasks:readonly LocalTask[];
   blocks:readonly PlanBlock[];
   events:readonly CalendarDisplayEvent[];
+  sessions:readonly FocusSession[];
   onSelectDate:(day:string)=>void;
   onEditTask:(task:LocalTask)=>void;
 }){
   const dates=view==="day"?[selectedDay]:calendarWeekDays(selectedDay);
-  const days=buildCalendarAgenda(dates,tasks,blocks,events);
+  const days=buildCalendarAgenda(dates,tasks,blocks,events,sessions);
   const conflictCount=days.reduce((sum,day)=>sum+
     day.timed.filter(e=>e.conflict).length,0);
   return <div className={view==="week"?"agenda-week":"agenda-day"} aria-label={view==="week"?"每周日程":"每日时间线"}>
@@ -35,6 +36,7 @@ export default function CalendarAgenda({
       <span><i className="agenda-key agenda-fixed"/>固定课程 / ICS</span>
       <span><i className="agenda-key agenda-canvas"/>Canvas 课程</span>
       <span><i className="agenda-key agenda-study"/>已确认学习时间</span>
+      <span><i className="agenda-key agenda-focus"/>实际专注记录</span>
       <span><i className="agenda-key agenda-deadline"/>任务截止日（不占用时间）</span>
     </div>
     {conflictCount>0&&<p className="retention-warning" role="status">
@@ -62,7 +64,9 @@ export default function CalendarAgenda({
                   className={"agenda-entry agenda-"+entry.kind+(entry.conflict?" agenda-conflict":"")}>
                   <span className="agenda-clock">{clock(entry.startMinute,entry.durationMinutes)}</span>
                   <strong>{entry.title}</strong>
-                  <small>{entry.kind==="study"?"学习计划":entry.kind==="canvas"?"Canvas":"固定事项"}
+                  <small>{entry.kind==="focus"
+                    ? `实际专注 · 整段有效 ${Math.floor((entry.effectiveFocusSeconds ?? 0)/60)} 分钟${entry.focusCompleted?" · 完成":" · 提前结束"}`
+                    : entry.kind==="study"?"学习计划":entry.kind==="canvas"?"Canvas":"固定事项"}
                     {entry.conflict?" · 时间重叠":""}</small>
                 </li>)}
               </ol>}
@@ -81,6 +85,6 @@ export default function CalendarAgenda({
         </section>;
       })}
     </div>
-    <p className="privacy-note">截止日期不是有具体时刻的日历事件。隐藏或已从 Canvas 消失的事项不会在时间线中显示，也不占用规划时间。周视图点选日期可更新下方任务和课程编辑区。</p>
+    <p className="privacy-note">实际专注是设备记录的起止区间，可能包含暂停；有效专注分钟数另行统计，不与学习计划混为一谈。历史估算时间不显示为真实日历时段。任务截止日期不占用时间，隐藏的 Canvas 事项不会占用规划时间。</p>
   </div>;
 }

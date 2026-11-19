@@ -71,6 +71,13 @@ DOM 验证，不是人手工走查；其余切片仍为 ❌。在补齐之前，
 
 ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship/pull/26) 已有 [Windows/macOS 双平台 CI 成功证据](https://github.com/yanpr1332/Agent-to-Entrepreneurship/actions/runs/44446851977)（提交 92e8e710）；**后续提交仍需看 PR 最新 Checks**，用户真实 GUI 回归未执行。其余需求为未来轮次。此记录不改变上表真机验收结论。
 
+### ALPHA-TIME-002 专注时间模型（2026-11-19）
+
+- **代码**：PR #27 新增专注标题、更名、实时时段、SQLite v5 迁移及独立日历回显。
+- **测试**：增加旧版数据迁移、幂等与更名、日期拆分等测试，最终结果以 PR #27 最新 CI 为准。
+- **GUI**：尚未真实点击；用户计划在本轮完成后集中 Windows 验收，macOS GUI 仍待安排。
+- **未实现**：任务计划/截止时刻、课程系列编辑等仍不能标为完成。详细验收见 [20](20_ALPHA_TIME_002_FOCUS_CALENDAR.md)。
+
 ## 4. 未验证项清单（按风险排序）
 
 1. **双平台安装包**：从未执行 `npm run dist:win` / `dist:mac`，无签名、无公证、无安装包产物。

@@ -1,5 +1,6 @@
 import {describe,expect,it} from "vitest";
-import type {LocalTask} from "../../shared/local-model";
+import type {FocusSession,LocalTask} from "../../shared/local-model";
+import { focusCalendarSegments } from "./focus-calendar";
 import type {PlanBlock} from "../../shared/planning-model";
 import type {CalendarDisplayEvent} from "../../shared/canvas-calendar-model";
 import {
@@ -46,6 +47,35 @@ describe("calendar navigation uses device civil dates",()=>{
     expect(()=>shiftCalendarDay("2026-02-30",1)).toThrow("Invalid");
   });
 });
+describe("retrospective focus spans in local calendar",()=>{
+  const sample = (start:Date,end:Date,elapsedSeconds=1800):FocusSession=>({
+    id:"2d30f7a3-4598-43b9-a1ba-53ff5d92dbb4",title:"学习数学",
+    plannedMinutes:90,elapsedSeconds,completed:false,points:0,
+    startedAt:start.toISOString(),endedAt:end.toISOString(),timeSource:"recorded",
+  });
+  it("splits cross-midnight spans, preserving one session and original effective time",()=>{
+    const session=sample(new Date(2026,10,11,23,50),new Date(2026,10,12,0,20));
+    const segments=focusCalendarSegments([session]);
+    expect(segments.map(x=>({day:x.day,start:x.startMinute,end:x.startMinute+x.durationMinutes})))
+      .toEqual([
+        {day:"2026-11-11",start:1430,end:1440},
+        {day:"2026-11-12",start:0,end:20},
+      ]);
+    expect(new Set(segments.map(s=>s.sessionId)).size).toBe(1);
+    expect(segments.every(s=>s.elapsedSeconds===1800)).toBe(true);
+  });
+  it("omits old estimated sessions and ignores real focus as planned-time conflicts",()=>{
+    const session=sample(new Date(2026,10,11,9,30),new Date(2026,10,11,11,0),3600);
+    expect(focusCalendarSegments([{...session,timeSource:"estimated"}])).toHaveLength(0);
+    const days=buildCalendarAgenda(["2026-11-11"],[],[study],[fixed],[session]);
+    expect(days[0].timed.filter(e=>e.kind==="focus")).toHaveLength(1);
+    const focus=days[0].timed.find(e=>e.kind==="focus")!;
+    expect(focus.conflict).toBe(false);
+    expect(focus.effectiveFocusSeconds).toBe(3600);
+    expect(days[0].timed.filter(e=>e.kind!=="focus").every(e=>e.conflict)).toBe(true);
+  });
+});
+
 describe("combined daily and weekly agenda",()=>{
   it("keeps deadline tasks distinct from occupied time blocks",()=>{
     const result=buildCalendarAgenda(["2026-11-11"],[

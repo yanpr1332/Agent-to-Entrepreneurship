@@ -424,6 +424,10 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return localStore().recordFocusSession(input);
   });
+  handle(IPC_CHANNELS.focusRename, (event, input: unknown) => {
+    requireTrustedSender(event);
+    return localStore().renameFocusSession(input);
+  });
   handle(IPC_CHANNELS.focusSummary, (event) => {
     requireTrustedSender(event);
     return localStore().focusSummary();
@@ -692,7 +696,7 @@ app.whenReady().then(async () => {
   if(sandboxDisabled)report("SANDBOX_DISABLED","app");
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
-    await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",4);
+    await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",5);
     await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",3);
     await backupBeforeMigration(app.getPath("userData"),"ate-fixed-calendar.sqlite",3);
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
