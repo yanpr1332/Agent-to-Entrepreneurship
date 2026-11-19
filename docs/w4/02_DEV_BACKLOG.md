@@ -46,7 +46,8 @@
 | ALPHA-TIME-002 | 专注标题、真实时段、v5 迁移及日历联动见 PR #27；任务具体截止/计划时间、课程系列编辑后续开发 | 专注子范围已提交；CI/真机待确认 |
 | ALPHA-TIME-003 | 手动任务时间块、逐段编辑与删除、规划库 v2 升级见 PR #28 | 代码已提交；待 CI 与 GUI 集中验收 |
 | ALPHA-TIME-004 | 本机重复课程「仅本次/从本次起/整个系列」批量修改、冲突原子回滚，见 PR #29 | 已提交；待 CI 与 GUI 验收 |
-| ALPHA-KB-003 | 本地 HTML/LaTeX 导入、Markdown/HTML/TeX 受限安全预览、离线容错检索见 PR #31；完整 TeX 与 AI 语义检索未实现 | 代码已提交；待 CI 和 GUI 验收 |
+| ALPHA-KB-003 | 本地 HTML/LaTeX 导入、Markdown/HTML/TeX 受限安全预览、离线容错检索见 PR #31；完整 TeX 与 AI 语义检索未实现 | PR 已合并，GUI 待验收 |
+| ALPHA-KB-004 | 精确/容错混合结果、用户明确授权的 AI 单段原文解释，见 PR #32；全库 embedding/多文档语义检索未实现 | 本轮代码已提交；待最新 CI 与 GUI 验收 |
 | ALPHA-TEAM-004 | 自愿加入的小组积分排名、隐私及反刷分 | 未开发 |
 | ALPHA-APP-005 | libpng 警告来源、安装/备份恢复/安全验收 | 待排查 |
 

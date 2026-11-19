@@ -106,6 +106,14 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - 自动化测试和构建状态以 **PR 最新 Checks** 为准；不等于安全审计或用户真实 GUI 通过。
 - Windows/macOS GUI 尚未执行；按 [24](24_ALPHA_KB_003_SAFE_PREVIEW_SEARCH.md) 集中验收。全文排版、AI 语义搜索等未实现，不可误标。
 
+### ALPHA-KB-004 精确+容错混合搜索与授权 AI 单段解释（2026-11-19）
+
+- PR #32 在本地知识库混合输出精确和容错命中，同时防重复；单段 AI 解释需要用户先预览**实际外发文本**再明确确认，复用已有每日限额与个人加密 Key。
+- 仅在用户确认时向 OpenAI API 发送当前片段（最多 1150 字符）与问题；不发送文件路径、其他文件或 Canvas/邮箱资料。未连接时仍可离线搜索。
+- 模型回答作为参考，不是已验证引用，不自动存知识库、复习卡或日历。此功能**不等于**已开发全库 AI 语义搜索。
+- 单测与 CI 结果以 PR #32 的**最新提交检查**为准。真人 Windows/macOS GUI 与自愿的真 API 计费验收**尚未执行**。
+- 详细本机测试用例见 [25](25_ALPHA_KB_004_AI_SOURCE_EXPLANATION.md)。
+
 ## 4. 未验证项清单（按风险排序）
 
 1. **双平台安装包**：从未执行 `npm run dist:win` / `dist:mac`，无签名、无公证、无安装包产物。

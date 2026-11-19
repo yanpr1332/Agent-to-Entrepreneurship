@@ -162,3 +162,7 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## ALPHA-KB-003 安全预览与离线容错搜索（2026-11-19）
 
 [24 本地 HTML/Markdown/LaTeX 阅读预览与模糊检索](24_ALPHA_KB_003_SAFE_PREVIEW_SEARCH.md) 记录 PR #31 的真实功能边界、安全设计、已知限制及 Windows 集中验收步骤。该版不包含完整 TeX 编译或可选 AI 语义检索。
+
+## ALPHA-KB-004 本地混合检索与自愿 AI 单段解释（2026-11-19）
+
+[25 本地检索与明确授权的单段 AI 辅助解释](25_ALPHA_KB_004_AI_SOURCE_EXPLANATION.md) 说明 PR #32 精确/容错并列、仅单段引用来源的最小外发文本、两步确认、费用提示、集中 GUI 验收及未开发的全库 AI 向量语义搜索。
