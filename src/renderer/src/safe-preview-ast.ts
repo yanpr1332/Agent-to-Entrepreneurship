@@ -38,7 +38,10 @@ export function parseSafeHtml(source:string):PreviewNode[] {
     if(++nodes>6000)break;
     const closing=/^<\s*\/\s*([a-z][a-z0-9]*)[^>]*>$/i.exec(part);
     if(closing){
-      const index=stack.findLastIndex(item=>item.tag===closing[1].toLowerCase());
+      let index=-1;
+      for(let j=stack.length-1;j>=0;j--){
+        if(stack[j].tag===closing[1].toLowerCase()){index=j;break;}
+      }
       if(index>0)stack.length=index;
       continue;
     }
