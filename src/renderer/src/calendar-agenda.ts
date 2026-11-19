@@ -1,4 +1,5 @@
-import type { LocalTask } from "../../shared/local-model";
+import type { FocusSession, LocalTask } from "../../shared/local-model";
+import { focusCalendarSegments } from "./focus-calendar";
 import type { CalendarDisplayEvent } from "../../shared/canvas-calendar-model";
 import type { PlanBlock } from "../../shared/planning-model";
 import { validCivilDay } from "../../shared/planning-model";
@@ -9,7 +10,9 @@ export type CalendarView = "month" | "week" | "day";
 
 export interface AgendaEntry {
   id:string;
-  kind:"study"|"fixed"|"canvas";
+  kind:"study"|"fixed"|"canvas"|"focus";
+  effectiveFocusSeconds?:number;
+  focusCompleted?:boolean;
   day:string;
   title:string;
   startMinute:number;
@@ -58,13 +61,15 @@ export function shiftCalendarView(day:string,view:CalendarView,direction:-1|1):s
 /**
  * Deadline-only tasks are not time reservations; neither assign midnight to
  * due dates nor include hidden Canvas records in visible calendar data.
- * Only actual fixed events and committed study blocks can overlap.
+ * Only actual fixed events and committed study blocks can conflict.
+ * Retrospective focus periods may intentionally overlap scheduled study blocks.
  */
 export function buildCalendarAgenda(
   days:readonly string[],
   tasks:readonly LocalTask[],
   blocks:readonly PlanBlock[],
   events:readonly CalendarDisplayEvent[],
+  sessions:readonly FocusSession[] = [],
 ):AgendaDay[]{
   const shownTasks=tasks.filter(t=>t.visible&&t.dueDate!==null);
   const shownEvents=events.filter(e=>e.source!=="canvas"||(e.visible&&!e.missing));
@@ -85,10 +90,20 @@ export function buildCalendarAgenda(
       durationMinutes:event.durationMinutes,conflict:false});
     indexed.set(event.day,list);
   }
+  for(const segment of focusCalendarSegments(sessions)){
+    if(!daySet.has(segment.day))continue;
+    const list=indexed.get(segment.day)??[];
+    list.push({id:segment.id,kind:"focus",day:segment.day,title:segment.title,
+      startMinute:segment.startMinute,durationMinutes:segment.durationMinutes,
+      conflict:false,effectiveFocusSeconds:segment.elapsedSeconds,
+      focusCompleted:segment.completed});
+    indexed.set(segment.day,list);
+  }
   return days.map(day=>{
     const records=indexed.get(day)??[];
     const timed=records.map((entry,i)=>({
-      ...entry,conflict:records.some((other,j)=>i!==j&&timesOverlap(entry,other)),
+      ...entry,conflict:entry.kind!=="focus" &&
+        records.some((other,j)=>i!==j&&other.kind!=="focus"&&timesOverlap(entry,other)),
     })).sort((a,b)=>a.startMinute-b.startMinute||
       a.durationMinutes-b.durationMinutes||a.id.localeCompare(b.id));
     return {day,timed,deadlines:shownTasks
