@@ -27,7 +27,7 @@ import type {
 } from "../shared/knowledge-graph-model";
 
 import type {CalendarDisplayEvent} from "../shared/canvas-calendar-model";
-import type { FixedEvent,CreateFixedEventInput,EditFixedEventInput,ICSPreview,ICSImportResult,ICSExportResult } from "../shared/fixed-calendar-model";
+import type { FixedEvent,CreateFixedEventInput,EditFixedEventInput,EditFixedSeriesInput,ICSPreview,ICSImportResult,ICSExportResult } from "../shared/fixed-calendar-model";
 import type {
   PlanningSettings, PlanProposal, PlanBlock, AppliedPlanBatch, ApplyPlanRequest,
   ManualBlockInput, CommittedBlockEditInput,
@@ -149,6 +149,8 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarEdit,input) as Promise<FixedEvent>,
     removeSeries:(id:string)=>
       ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarDeleteSeries,id) as Promise<number>,
+    editSeries:(input:EditFixedSeriesInput)=>
+      ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarEditSeries,input) as Promise<FixedEvent[]>,
     previewICS:()=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarPreviewICS) as Promise<ICSPreview|null>,
     confirmICS:(id:string)=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarConfirmICS,id) as Promise<ICSImportResult>,
     cancelICS:(id:string)=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarCancelICS,id) as Promise<{canceled:true}>,

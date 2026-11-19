@@ -20,6 +20,10 @@ export interface CreateFixedEventInput {
   weeks:number;
 }
 export interface EditFixedEventInput {id:string;title:string;day:string;startMinute:number;durationMinutes:number;}
+/** Series updates operate only on manually created recurring courses. */
+export interface EditFixedSeriesInput extends EditFixedEventInput {
+  scope:"future"|"all";
+}
 export interface BusySlot {day:string;startMinute:number;durationMinutes:number}
 export interface ICSPreview {
   approvalId:string;
@@ -68,6 +72,21 @@ export function parseEditFixedEvent(value:unknown):EditFixedEventInput{
     throw Error("Invalid calendar event edit");
   return {id:x.id,title:validateFixedTitle(x.title),
     ...validateFixedSlot(x.day,x.startMinute,x.durationMinutes)};
+}
+export function parseEditFixedSeries(value:unknown):EditFixedSeriesInput {
+  if(!value||typeof value!=="object"||Array.isArray(value))
+    throw Error("Invalid series edit");
+  const x=value as Record<string,unknown>;
+  if(Object.keys(x).sort().join(",")!=="day,durationMinutes,id,scope,startMinute,title" ||
+     (x.scope!=="future"&&x.scope!=="all"))
+    throw Error("Invalid series edit scope");
+  return {
+    ...parseEditFixedEvent({
+      id:x.id,title:x.title,day:x.day,startMinute:x.startMinute,
+      durationMinutes:x.durationMinutes,
+    }),
+    scope:x.scope,
+  };
 }
 export function timesOverlap(a:BusySlot,b:BusySlot):boolean {
   return a.day===b.day&&a.startMinute<b.startMinute+b.durationMinutes&&

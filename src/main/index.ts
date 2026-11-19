@@ -213,6 +213,10 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return fixedCalendar().edit(input);
   });
+  handle(IPC_CHANNELS.fixedCalendarEditSeries,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return fixedCalendar().editSeries(input);
+  });
   handle(IPC_CHANNELS.fixedCalendarDeleteSeries,(event,id:unknown)=>{
     requireTrustedSender(event);
     return fixedCalendar().deleteSeries(id);
