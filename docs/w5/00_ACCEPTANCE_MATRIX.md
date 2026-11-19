@@ -86,6 +86,13 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - 不在本轮范围：任务具体截止时刻、重复课程批量编辑、MD/HTML/LaTeX 渲染、团队积分榜。
 - 详细测试： [21 Alpha 任务时间安排](21_ALPHA_TIME_003_TASK_SCHEDULES.md)。
 
+### ALPHA-TIME-004 手动重复课程修改（2026-11-19）
+
+- PR #29 已开发手动重复课程的单次/未来/整组范围编辑及冲突保护。**不涉及数据库版本变更**。
+- 新增 SQLite 原子回滚、日期偏移、ICS 权限隔离与输入校验测试；**以 PR 最新提交的 CI 结果为准**。
+- Windows/macOS 真机 GUI 尚未验收，用户计划集中验收。操作与预期见 [22](22_ALPHA_TIME_004_COURSE_SERIES_EDIT.md)。
+- 不在范围：Canvas/ICS 批量编辑、任务具体截止时刻、知识库安全渲染/模糊搜索、团队积分榜。
+
 ## 4. 未验证项清单（按风险排序）
 
 1. **双平台安装包**：从未执行 `npm run dist:win` / `dist:mac`，无签名、无公证、无安装包产物。

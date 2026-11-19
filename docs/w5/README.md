@@ -154,3 +154,7 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## ALPHA-TIME-003 任务执行时间（2026-11-19）
 
 [21 手动任务时间和单段修改](21_ALPHA_TIME_003_TASK_SCHEDULES.md) 记录 PR #28 实现、规划库 v1→v2 升级快照和集中 GUI 验收脚本。不会把尚未完成的重复课程批量修改或知识库升级标记为已完成。
+
+## ALPHA-TIME-004 手动课程批量修改（2026-11-19）
+
+[22 重复课程「仅本次/从本次起/整个系列」修改](22_ALPHA_TIME_004_COURSE_SERIES_EDIT.md) 记录 PR #29 的范围、日期偏移策略、ICS/Canvas 权限隔离、原子冲突回滚及集中 GUI 验收用例。此项不修改数据库版本。
