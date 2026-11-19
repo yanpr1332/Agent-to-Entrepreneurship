@@ -39,13 +39,13 @@ PR #29 实现手动重复课程「仅本次 / 从本次起 / 整个系列」范�
 
 PR #31 增加 HTML/LaTeX UTF-8 原文导入、Markdown/HTML/LaTeX **受限且不执行的安全阅读预览**、源码切换、MathML 基础公式，以及离线 FTS5 候选+有限编辑距离的拼写容错搜索；保留来源文档、证据片段、版本和 PDF 页码。完整 TeX 引擎、复杂 HTML CSS、专业搜索排序和 AI 语义检索**仍未实现**。具体见 [24 知识库升级与安全边界](24_ALPHA_KB_003_SAFE_PREVIEW_SEARCH.md)。
 
-### ALPHA-KB-004：本地检索混合排序与自愿 AI 单段解释（PR #32）
+### ALPHA-KB-004：本地检索混合排序与自愿 AI 单段解释（PR #32 已合并；GUI 待验收）
 
 新增精确+容错结果合并，复用现有两步确认的 AI Provider，在用户选择**一段原文并完整预览实际发送内容**后才可请求单轮辅助解释；回答只作为参考，附有可追溯的本机原文，但不自动存入复习卡。默认不上传私人文档。**这不是全文 AI 向量语义搜索，也不支持多文档 RAG。** 集中测试与隐私规则见 [25](25_ALPHA_KB_004_AI_SOURCE_EXPLANATION.md)。
 
 ### ALPHA-KB-005：精确 + 模糊 + **本地向量语义搜索**（已列入后续开发，未实现）
 
-已根据用户新要求明确列入 Backlog：保持现有 SQLite FTS5 精确检索与字符编辑距离容错检索，再增加 **用户可选、可断网运行的本地 embedding 向量检索**，三路融合、去重和原文证据跳转。优先评估 multilingual-e5-small（中英多语言）与 bge-small-zh-v1.5（中文/低资源），分 PoC、离线索引、三路融合三个子阶段。**模型尚未下载/集成，功能尚未实现；当前 PR #32 不包含它**。详细难易度、许可证、模型体积、Electron 兼容与集中验收见 [26 可行性及分阶段方案](26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md)。
+已根据用户新要求明确列入 Backlog：保持现有 SQLite FTS5 精确检索与字符编辑距离容错检索，再增加 **用户可选、可断网运行的本地 embedding 向量检索**，三路融合、去重和原文证据跳转。优先评估 multilingual-e5-small（中英多语言）与 bge-small-zh-v1.5（中文/低资源），分 PoC、离线索引、三路融合三个子阶段。**模型尚未下载/集成，功能尚未实现；已合并的 PR #32 不包含它**。详细难易度、许可证、模型体积、Electron 兼容与集中验收见 [26 可行性及分阶段方案](26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md)。
 
 ### 剩余的知识库扩展（仍未实现）
 
@@ -63,6 +63,10 @@ PR #31 增加 HTML/LaTeX UTF-8 原文导入、Markdown/HTML/LaTeX **受限且不
 
 - 退出时的 libpng warning: iCCP: known incorrect sRGB profile：调查图片资源和 ICC Profile，记录是否同时发生崩溃；单独的警告不等于数据库损坏。
 - 安装包、备份恢复 UI、Electron 沙箱异常、真实账号/授权与安全检查，仍是 Alpha 发布前的独立风险。
+
+## 下一开发主线：同步优先（2026-11-19 决策）
+
+先完成 **ALPHA-SYNC-001**（同步源边界、独立 Supabase 测试项目的五账号/RLS 验收准备），再推进 **ALPHA-SYNC-002**（个人任务与手动日历跨设备 MVP）及 **ALPHA-SYNC-003**（团队 Realtime + 增量补拉 + 离线/撤权验证）。知识库 ALPHA-KB-005 改为同步核心门槛之后先做本地 embedding PoC；未实现的团队积分、复杂时间编辑、安装包与 GUI 验收没有取消。**这是实施顺序变化，不等于原 PRD P0 被降级，也不等于同步已完成。** 批次边界和 2026-11-25 Alpha 的条件性验收目标见 [27](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。
 
 ## 验收证据要求
 
