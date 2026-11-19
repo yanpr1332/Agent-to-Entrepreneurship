@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import KnowledgeGraph from "./KnowledgeGraph";
 import SafeKnowledgePreview from "./SafeKnowledgePreview";
+import KnowledgeAIHelper from "./KnowledgeAIHelper";
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
   KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage,
@@ -162,7 +163,8 @@ export default function KnowledgeBase(){
       <strong>本地优先：</strong>支持明确选择的 UTF-8 Markdown、HTML、LaTeX、TXT（2 MiB）
       与有可选择文字的 PDF（12 MiB、120 页）。预览仅支持安全标签和常用 MathML 公式，
       不执行 HTML 脚本、远程资源或 TeX 命令。完整 TeX 编译、复杂宏包、图片 PDF OCR、
-      Office 与录音转写尚未实现；不自动上传资料到云端，也不调用 AI。
+      Office 与录音转写尚未实现。离线阅读和搜索不会上传资料；
+      只有你在下方逐段核对并明确确认时，才会进行可计费的单次 AI 解释。
     </div>
     {error&&<div className="error-banner" role="alert"><span>{error}</span>
       <button onClick={()=>setError("")}>关闭</button></div>}
@@ -244,6 +246,8 @@ export default function KnowledgeBase(){
             </details>}
             <p className="privacy-note">阅读预览仅解析受限的 Markdown、HTML、LaTeX 结构；
               忽略 HTML 属性和远程资源，未实现的 TeX 命令可能以文本显示。源码与复习卡引用均来自本机快照。</p>
+            {passage&&<KnowledgeAIHelper
+              key={selected.id+":"+selected.revision+":"+passage.ordinal} passage={passage}/>}
             <form className="kb-card-form" onSubmit={event=>void addCard(event)}>
               <h3>以这段原文创建复习卡</h3>
               <label>问题<input value={question} required maxLength={500}

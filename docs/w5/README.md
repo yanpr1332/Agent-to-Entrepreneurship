@@ -162,3 +162,11 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## ALPHA-KB-003 安全预览与离线容错搜索（2026-11-19）
 
 [24 本地 HTML/Markdown/LaTeX 阅读预览与模糊检索](24_ALPHA_KB_003_SAFE_PREVIEW_SEARCH.md) 记录 PR #31 的真实功能边界、安全设计、已知限制及 Windows 集中验收步骤。该版不包含完整 TeX 编译或可选 AI 语义检索。
+
+## ALPHA-KB-004 本地混合检索与自愿 AI 单段解释（2026-11-19）
+
+[25 本地检索与明确授权的单段 AI 辅助解释](25_ALPHA_KB_004_AI_SOURCE_EXPLANATION.md) 说明 PR #32 精确/容错并列、仅单段引用来源的最小外发文本、两步确认、费用提示、集中 GUI 验收及未开发的全库 AI 向量语义搜索。
+
+## ALPHA-KB-005 本地三路混合语义检索（规划，2026-11-19）
+
+[26 精确 + 模糊 + 本地向量语义搜索的模型可得性与开发评估](26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md) 比较 multilingual-e5-small / bge-small-zh-v1.5 / bge-m3，列出 CPU/ONNX 可行性、可选离线模型下载、增量索引、排名融合和 Windows/macOS 验收门槛。**尚无模型依赖、没有实现或发起第二个 PR**。

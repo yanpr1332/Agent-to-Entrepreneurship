@@ -382,11 +382,13 @@ export class KnowledgeStore {
         WHERE instr(lower(c.body),lower(?))>0 OR instr(lower(d.title),lower(?))>0
         ORDER BY d.updated_at DESC,c.ordinal LIMIT 40
       `).all(query,query);
-    if(exact.length)return fromMatches(exact as Row[],"exact");
-    // Fuzzy fallback is bounded, offline, and only applies to queries with
-    // four to sixty normalized characters. No user text is spliced into SQL.
+    const exactRows=exact as Row[];
+    const exactHits=fromMatches(exactRows,"exact");
+    // Previously one exact result suppressed fuzzy matches in all other documents.
+    if(exactHits.length>=40)return exactHits;
     const fuzzyExpression=fuzzyCandidateExpression(query);
-    if(!fuzzyExpression)return [];
+    if(!fuzzyExpression)return exactHits;
+    const seen=new Set(exactRows.map(row=>row.document_id+":"+row.ordinal));
     const candidates=this.db.prepare(`
         SELECT c.document_id,c.ordinal,c.body,d.title,d.revision,cp.page_number
         FROM knowledge_fts JOIN knowledge_chunks c ON c.id=knowledge_fts.rowid
@@ -397,19 +399,20 @@ export class KnowledgeStore {
       `).all(fuzzyExpression) as unknown as Row[];
     const length=Array.from(normalizeFuzzy(query)).length;
     const threshold=length<=5?1:2;
-    const scored=candidates.map(row=>({
-      row,match:fuzzySubstringMatch(query,row.body,threshold),
-    })).filter((r):r is {row:Row;match:{distance:number;end:number}}=>r.match!==null)
+    const scored=candidates.filter(row=>!seen.has(row.document_id+":"+row.ordinal))
+      .map(row=>({row,match:fuzzySubstringMatch(query,row.body,threshold)}))
+      .filter((r):r is {row:Row;match:{distance:number;end:number}}=>r.match!==null)
       .sort((a,b)=>a.match.distance-b.match.distance||
         a.row.title.localeCompare(b.row.title)||a.row.ordinal-b.row.ordinal)
-      .slice(0,40);
-    return scored.map(({row,match})=>{
+      .slice(0,40-exactHits.length);
+    const fuzzyHits=scored.map(({row,match})=>{
       const rawStart=Math.max(0,match.end-length-100);
       return {documentId:row.document_id,documentTitle:row.title,
         documentRevision:row.revision,ordinal:row.ordinal,
         pageNumber:row.page_number??null,excerpt:row.body.slice(rawStart,rawStart+500),
         matchType:"fuzzy" as const};
     });
+    return [...exactHits,...fuzzyHits];
   }
 
   /** All graph records are local. Evidence is copied from the current trusted FTS passage. */
