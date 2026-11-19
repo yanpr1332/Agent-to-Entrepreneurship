@@ -486,7 +486,13 @@ export default function App() {
             <>
               <div className="page-heading"><div><div className="eyebrow">PERSONAL CALENDAR</div><h1>日历与任务</h1><p>创建和安排个人任务，所有变更保存在本机 SQLite。</p></div>
                 <div className="calendar-page-actions"><span className="count-chip">{shownTasks.length} 条展示中的任务</span>
-                  <button className="primary-button" type="button" onClick={openNewTask}>+ 新建任务</button></div>
+                  <button className="primary-button" type="button" onClick={() => {
+                    if (!editorOpen && (editingId !== null || title.trim() !== "" || description.trim() !== "")) {
+                      setEditorOpen(true);
+                    } else {
+                      openNewTask();
+                    }
+                  }}>{!editorOpen && (editingId !== null || title.trim() !== "" || description.trim() !== "") ? "继续编辑任务" : "+ 新建任务"}</button></div>
               </div>
               <div className={editorOpen ? "calendar-layout" : "calendar-layout editor-collapsed"}>
                 <div className="calendar-column">

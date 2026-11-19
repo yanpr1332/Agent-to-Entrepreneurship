@@ -69,7 +69,7 @@ DOM 验证，不是人手工走查；其余切片仍为 ❌。在补齐之前，
 
 已记录实际用户提出的日期选中、任务编辑、课程编辑入口、专注自定义、主题、知识库渲染/模糊搜索、积分排名及专注进日历要求。详见 [19 Alpha 反馈路线图](19_ALPHA_UX_FEEDBACK_ROADMAP.md)。
 
-ALPHA-UX-001 **代码待独立 CI 和用户真实 GUI 回归**；其余需求为未来轮次。此记录不改变上表真机验收结论。
+ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship/pull/26) 已有 [Windows/macOS 双平台 CI 成功证据](https://github.com/yanpr1332/Agent-to-Entrepreneurship/actions/runs/44446851977)（提交 92e8e710）；**后续提交仍需看 PR 最新 Checks**，用户真实 GUI 回归未执行。其余需求为未来轮次。此记录不改变上表真机验收结论。
 
 ## 4. 未验证项清单（按风险排序）
 
