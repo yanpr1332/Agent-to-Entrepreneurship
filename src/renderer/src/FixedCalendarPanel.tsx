@@ -136,6 +136,7 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
   return <section className="panel fixed-calendar-panel">
     <div className="eyebrow">LOCAL FIXED EVENTS</div>
     <h2>固定课程与 ICS 日历</h2>
+    <p className="help-text">手动创建的课程可以修改本次日期、开始和结束时间；整组重复课程的批量修改将在后续版本提供。</p>
     <p className="privacy-note">课程、ICS 和 Canvas 日历事件缓存在本机，与任务截止日期分离。Canvas 自动同步仅更新所选账号和课程的有效日程，不替你修改已确认的学习计划。学习规划、AI 候选及最终应用均避开这些时间。手动按周重复最多 16 周；日历数据不自动同步至 Canvas 或其他服务。</p>
     {error&&<div className="error-banner" role="alert">{error}
       <button onClick={()=>setError("")}>关闭</button></div>}
@@ -157,7 +158,7 @@ export default function FixedCalendarPanel({day,events,studyBlocks,onChanged}:{
           onClick={()=>void setCanvasVisible(item)}>{item.visible?"隐藏此项":"重新显示"}</button>
       </>:<>
         {item.startMinute+item.durationMinutes<1440&&<button className="text-button" disabled={busy}
-          onClick={()=>beginEdit(item)}>编辑单次</button>}
+          onClick={()=>beginEdit(item)}>修改本次日期/时间</button>}
         {item.seriesId&&<button className="text-button" disabled={busy}
           onClick={()=>void removeSeries(item)}>删除整组</button>}
         <button className="text-button" disabled={busy} onClick={()=>void remove(item)}>删除单次</button>

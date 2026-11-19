@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { FocusSession, FocusSummary, LocalTask, TaskPriority } from "../../shared/local-model";
-import { formatDueDate, localDateKey, monthCells } from "./calendar";
+import { formatCalendarSelection, formatDueDate, localDateKey, monthCells } from "./calendar";
+import { parseFocusMinutes } from "./focus-duration";
 import CalendarAgenda from "./CalendarAgenda";
 import { calendarWeekDays,shiftCalendarView,type CalendarView } from "./calendar-agenda";
 import CanvasConnector from "./CanvasConnector";
@@ -38,7 +39,10 @@ function errorMessage(error: unknown): string {
 }
 
 function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
-  const [plannedMinutes, setPlannedMinutes] = useState(25);
+  const [minuteText, setMinuteText] = useState("25");
+  const configuredMinutes = parseFocusMinutes(minuteText);
+  // Locked during a session; saving cannot use a different preset.
+  const plannedMinutes = configuredMinutes ?? 25;
   const [remaining, setRemaining] = useState(25 * 60);
   const [phase, setPhase] = useState<"idle" | "running" | "paused" | "finished">("idle");
   const [saving, setSaving] = useState(false);
@@ -65,6 +69,10 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
   }
 
   function begin(): void {
+    if (phase === "idle" && configuredMinutes === null) {
+      setError("请输入 1–180 之间的整数分钟数");
+      return;
+    }
     setError("");
     if (phase === "idle") {
       sessionId.current = crypto.randomUUID();
@@ -118,12 +126,25 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
             className={minutes === plannedMinutes ? "chip selected" : "chip"}
             key={minutes}
             disabled={phase !== "idle" || saving}
-            onClick={() => { setPlannedMinutes(minutes); setRemaining(minutes * 60); }}
+            onClick={() => { setMinuteText(String(minutes)); setRemaining(minutes * 60); }}
           >{minutes} 分钟</button>
         ))}
       </div>
+      <label className="focus-duration-field">
+        自定义专注时长（1–180 分钟）
+        <input type="number" min={1} max={180} step={1} inputMode="numeric"
+          value={minuteText} disabled={phase !== "idle" || saving}
+          aria-invalid={configuredMinutes === null}
+          onChange={(event) => {
+            const next = event.target.value;
+            setMinuteText(next);
+            const duration = parseFocusMinutes(next);
+            if (duration !== null) setRemaining(duration * 60);
+          }} />
+      </label>
+      {configuredMinutes === null && <p className="error-message" role="alert">请输入 1–180 之间的整数分钟数</p>}
       <div className="button-row centered">
-        {phase === "idle" && <button className="primary-button" onClick={begin}>开始专注</button>}
+        {phase === "idle" && <button className="primary-button" disabled={configuredMinutes === null} onClick={begin}>开始专注</button>}
         {phase === "running" && <button className="secondary-button" onClick={pause}>暂停</button>}
         {phase === "paused" && <button className="primary-button" onClick={begin}>继续计时</button>}
         {phase === "finished" && <span className="success-text">计时完成，可以保存并领取积分</span>}
@@ -152,10 +173,12 @@ function TaskRow({
 }) {
   return (
     <li className={task.completed ? "task-item completed" : "task-item"}>
-      <input
-        type="checkbox" aria-label={`完成任务：${task.title}`} checked={task.completed}
-        disabled={busy || !task.visible} onChange={() => onToggle(task)}
-      />
+      <label className="task-complete-toggle">
+        <input type="checkbox" aria-label={`${task.completed ? "取消完成" : "标记完成"}：${task.title}`}
+          checked={task.completed} disabled={busy || !task.visible}
+          onChange={() => onToggle(task)} />
+        <span>{task.completed ? "已完成 · 点击撤销" : "标记完成"}</span>
+      </label>
       <div className="task-copy">
         <strong>{task.title}</strong>
         <div className="task-meta">
@@ -187,6 +210,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState(today);
@@ -198,12 +222,22 @@ export default function App() {
   const [fixedEvents,setFixedEvents]=useState<CalendarDisplayEvent[]>([]);
   const [showHidden, setShowHidden] = useState(false);
   const [retentionNotice, setRetentionNotice] = useState("");
-  const [dark, setDark] = useState(() => window.localStorage.getItem("ate.theme") === "dark");
+  const [theme, setTheme] = useState<"system" | "light" | "dark">(() => {
+    const stored = window.localStorage.getItem("ate.theme");
+    return stored === "light" || stored === "dark" ? stored : "system";
+  });
 
   useEffect(() => {
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
-    window.localStorage.setItem("ate.theme", dark ? "dark" : "light");
-  }, [dark]);
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () => {
+      document.documentElement.dataset.theme =
+        theme === "system" ? (systemTheme.matches ? "dark" : "light") : theme;
+    };
+    apply();
+    window.localStorage.setItem("ate.theme", theme);
+    if (theme === "system") systemTheme.addEventListener("change", apply);
+    return () => systemTheme.removeEventListener("change", apply);
+  }, [theme]);
 
   useEffect(() => {
     let active = true;
@@ -267,7 +301,14 @@ export default function App() {
     setPriority("normal");
   }
 
+  function openNewTask(): void {
+    if (editingId && !window.confirm("当前任务的编辑内容尚未保存，确定切换为新建任务？")) return;
+    resetTaskForm();
+    setEditorOpen(true);
+  }
+
   function editTask(task: LocalTask): void {
+    setEditorOpen(true);
     setPage("calendar");
     setEditingId(task.id);
     setTitle(task.title);
@@ -293,6 +334,7 @@ export default function App() {
       }
       await refresh();
       resetTaskForm();
+      setEditorOpen(false);
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -324,7 +366,7 @@ export default function App() {
       await window.desktop.tasks.remove(task.id);
       await refresh();
       if (task.source) setRetentionNotice("已隐藏 Canvas 任务。它将在本机保留六个月，可随时从「隐藏任务」恢复；到期前 30 天会提醒。");
-      if (editingId === task.id) resetTaskForm();
+      if (editingId === task.id) { resetTaskForm(); setEditorOpen(false); }
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -391,8 +433,15 @@ export default function App() {
             ><span className="nav-icon">{item.icon}</span><span>{item.label}</span>{!item.ready && <span className="nav-pending">·</span>}</button>
           ))}
         </nav>
-        <div className="sidebar-bottom"><div className="avatar">U</div><div><strong>本地用户</strong><span>个人数据只保存在本机</span></div>
-          <button className="icon-button" title="切换主题" aria-label="切换浅色或深色主题" onClick={() => setDark(!dark)}>{dark ? "☀" : "☾"}</button>
+        <div className="sidebar-bottom"><div className="avatar">U</div><div><strong>本地用户</strong><span>个人数据只保存在本机</span></div></div>
+        <div className="sidebar-theme">
+          <label htmlFor="ate-theme-select">外观主题</label>
+          <select id="ate-theme-select" value={theme}
+            onChange={(event) => setTheme(event.target.value as "system" | "light" | "dark")}>
+            <option value="system">跟随系统</option>
+            <option value="light">浅色主题</option>
+            <option value="dark">深色主题</option>
+          </select>
         </div>
       </aside>
 
@@ -435,15 +484,28 @@ export default function App() {
 
           {page === "calendar" && (
             <>
-              <div className="page-heading"><div><div className="eyebrow">PERSONAL CALENDAR</div><h1>日历与任务</h1><p>创建和安排个人任务，所有变更保存在本机 SQLite。</p></div><span className="count-chip">{shownTasks.length} 条展示中的任务</span></div>
-              <div className="calendar-layout">
+              <div className="page-heading"><div><div className="eyebrow">PERSONAL CALENDAR</div><h1>日历与任务</h1><p>创建和安排个人任务，所有变更保存在本机 SQLite。</p></div>
+                <div className="calendar-page-actions"><span className="count-chip">{shownTasks.length} 条展示中的任务</span>
+                  <button className="primary-button" type="button" onClick={() => {
+                    if (!editorOpen && (editingId !== null || title.trim() !== "" || description.trim() !== "")) {
+                      setEditorOpen(true);
+                    } else {
+                      openNewTask();
+                    }
+                  }}>{!editorOpen && (editingId !== null || title.trim() !== "" || description.trim() !== "") ? "继续编辑任务" : "+ 新建任务"}</button></div>
+              </div>
+              <div className={editorOpen ? "calendar-layout" : "calendar-layout editor-collapsed"}>
                 <div className="calendar-column">
                   <section className="panel calendar-panel">
                     <div className="calendar-header">
-                      <h2>{viewHeading}</h2>
+                      <div className="calendar-heading"><h2>{viewHeading}</h2>
+                        <p className="calendar-selection" role="status">当前选中：<strong>{formatCalendarSelection(selectedDate)}</strong>
+                          {selectedDate === today && <span className="calendar-today-note"> · 今天</span>}
+                        </p>
+                      </div>
                       <div className="button-row calendar-nav">
                         <button className="icon-button" aria-label={prevLabel} onClick={()=>moveCalendar(-1)}>‹</button>
-                        <button className="small-button" onClick={()=>selectCalendarDate(today)}>今天</button>
+                        <button className="small-button" onClick={()=>selectCalendarDate(today)} aria-label="回到今天">回到今天</button>
                         <button className="icon-button" aria-label={nextLabel} onClick={()=>moveCalendar(1)}>›</button>
                       </div>
                     </div>
@@ -466,7 +528,7 @@ export default function App() {
                             day.key===today?"today-day":""].join(" ")}
                           onClick={()=>selectCalendarDate(day.key)} aria-label={day.key}
                           aria-pressed={day.key===selectedDate} aria-current={day.key===today?"date":undefined}>
-                          <span>{day.day}</span>{hasTasks&&<i className="day-dot"/>}
+                          <span>{day.day}</span>{day.key===today&&<small className="calendar-today-tag">今天</small>}{hasTasks&&<i className="day-dot"/>}
                         </button>;
                       })}</div>
                     </>:<CalendarAgenda view={calendarView} selectedDay={selectedDate}
@@ -496,10 +558,11 @@ export default function App() {
                     {retentionNotice && <p className="retention-banner" role="status">{retentionNotice}</p>}
                     {expiringSoon > 0 && <p className="retention-warning" role="status">有 {expiringSoon} 条隐藏的 Canvas 任务将在 30 天内到期清理。可在「隐藏任务」中恢复。</p>}
                     {showHidden && <p className="privacy-note">隐藏的 Canvas 任务在本机数据库保留六个月，到期后自动清理。显示每条任务的预计清理日期；隐藏不会删除 Canvas 原始作业。</p>}
-                    {visibleTasks.length ? <ul className="task-list">{visibleTasks.map((task) => <TaskRow key={task.id} task={task} busy={busy} onToggle={(t) => void toggleTask(t)} onEdit={editTask} onRemove={(t) => void removeTask(t)} onRestore={(t) => void restoreCanvasTask(t)} />)}</ul> : <p className="empty-state">{showHidden ? "没有隐藏的 Canvas 任务。" : "这里还没有任务。可以在右侧创建一条。"}</p>}
+                    {visibleTasks.length ? <ul className="task-list">{visibleTasks.map((task) => <TaskRow key={task.id} task={task} busy={busy} onToggle={(t) => void toggleTask(t)} onEdit={editTask} onRemove={(t) => void removeTask(t)} onRestore={(t) => void restoreCanvasTask(t)} />)}</ul> : <p className="empty-state">{showHidden ? "没有隐藏的 Canvas 任务。" : "这里还没有任务。点击上方「+ 新建任务」创建一条。"}</p>}
                   </section>
                 </div>
-                <section className="panel task-editor"><div className="eyebrow">TASK EDITOR</div><h2>{editingId ? "编辑任务" : "新建任务"}</h2>
+                {editorOpen && <section className="panel task-editor"><div className="task-editor-heading"><div><div className="eyebrow">TASK EDITOR</div><h2>{editingId ? "编辑任务" : "新建任务"}</h2></div>
+                  <button className="small-button" type="button" onClick={() => setEditorOpen(false)}>收起面板</button></div>
                   <form onSubmit={(event) => void saveTask(event)}>
                     <label>任务名称<input required maxLength={120} autoComplete="off" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：完成项目报告" /></label>
                     <label>备注<textarea rows={4} maxLength={2000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="补充信息（可选）" /></label>
@@ -508,8 +571,8 @@ export default function App() {
                     <button className="primary-button full-width" disabled={busy || runtime !== "connected"} type="submit">{busy ? "保存中…" : editingId ? "保存修改" : "创建任务"}</button>
                     {editingId && <button className="secondary-button full-width" type="button" onClick={resetTaskForm}>取消编辑</button>}
                   </form>
-                  <p className="privacy-note">任务仅保存在此设备。团队共享将在独立授权后接入。</p>
-                </section>
+                  <p className="privacy-note">截止日期不等于学习执行时段；计划时间可在「学习规划」中安排。任务仅保存在此设备。</p>
+                </section>}
               </div>
             </>
           )}

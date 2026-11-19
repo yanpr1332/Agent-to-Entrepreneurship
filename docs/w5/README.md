@@ -142,3 +142,7 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## APP-004 主进程安全诊断
 
 全部 IPC 处理器增加统一的异常输出白名单，启动和 Canvas/邮箱等自动同步使用本机结构化诊断记录。日志不接受原始异常、用户输入或凭据，仅保留固定事件和操作码；原始第三方错误不会通过 IPC 输出到界面。详细边界和测试见 [18_APP_004_SAFE_DIAGNOSTICS.md](18_APP_004_SAFE_DIAGNOSTICS.md)。实际服务故障场景和用户侧交互仍需本机验收。
+
+## Alpha 验收反馈（2026-11-19）
+
+[19 Alpha 验收反馈与后续路线图](19_ALPHA_UX_FEEDBACK_ROADMAP.md) 记录本机 GUI 反馈、ALPHA-UX-001 和未完成的时间模型、知识库、团队积分需求。开发和本地验收命令详见 [根 README](../../README.md)，CI 和真实 GUI 证据仍分别记录。
