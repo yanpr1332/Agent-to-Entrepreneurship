@@ -175,8 +175,8 @@ export class LocalStore {
       if (version <= 4) {
         // Legacy fixture databases can have a newer focus table while their
         // user_version was deliberately reset for mail migration tests.
-        const columns = new Set((this.db.prepare("PRAGMA table_info(focus_sessions)").all()
-          as {name:string}[]).map(row => row.name));
+        const columnRows = this.db.prepare("PRAGMA table_info(focus_sessions)").all() as {name:string}[];
+        const columns = new Set(columnRows.map(row => row.name));
         if (!columns.has("title"))
           this.db.exec("ALTER TABLE focus_sessions ADD COLUMN title TEXT NOT NULL DEFAULT '专注学习'");
         if (!columns.has("time_source"))
