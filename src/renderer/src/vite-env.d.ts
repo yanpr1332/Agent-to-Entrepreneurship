@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 import type {
-  CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary,
+  CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary, FocusTitleUpdate,
   LocalTask, UpdateTaskInput,
 } from "../../shared/local-model";
 
@@ -147,6 +147,7 @@ declare global {
       focus: {
         list: () => Promise<FocusSession[]>;
         finish: (input: FocusCompletionInput) => Promise<FocusSession>;
+        rename: (input: FocusTitleUpdate) => Promise<FocusSession>;
         summary: () => Promise<FocusSummary>;
       };
     };
