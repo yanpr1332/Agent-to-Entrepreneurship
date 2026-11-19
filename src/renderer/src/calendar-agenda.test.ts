@@ -48,9 +48,9 @@ describe("calendar navigation uses device civil dates",()=>{
   });
 });
 describe("retrospective focus spans in local calendar",()=>{
-  const sample = (start:Date,end:Date):FocusSession=>({
+  const sample = (start:Date,end:Date,elapsedSeconds=1800):FocusSession=>({
     id:"2d30f7a3-4598-43b9-a1ba-53ff5d92dbb4",title:"学习数学",
-    plannedMinutes:90,elapsedSeconds:3600,completed:false,points:0,
+    plannedMinutes:90,elapsedSeconds,completed:false,points:0,
     startedAt:start.toISOString(),endedAt:end.toISOString(),timeSource:"recorded",
   });
   it("splits cross-midnight spans, preserving one session and original effective time",()=>{
@@ -62,10 +62,10 @@ describe("retrospective focus spans in local calendar",()=>{
         {day:"2026-11-12",start:0,end:20},
       ]);
     expect(new Set(segments.map(s=>s.sessionId)).size).toBe(1);
-    expect(segments.every(s=>s.elapsedSeconds===3600)).toBe(true);
+    expect(segments.every(s=>s.elapsedSeconds===1800)).toBe(true);
   });
   it("omits old estimated sessions and ignores real focus as planned-time conflicts",()=>{
-    const session=sample(new Date(2026,10,11,9,30),new Date(2026,10,11,11,0));
+    const session=sample(new Date(2026,10,11,9,30),new Date(2026,10,11,11,0),3600);
     expect(focusCalendarSegments([{...session,timeSource:"estimated"}])).toHaveLength(0);
     const days=buildCalendarAgenda(["2026-11-11"],[],[study],[fixed],[session]);
     expect(days[0].timed.filter(e=>e.kind==="focus")).toHaveLength(1);

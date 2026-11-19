@@ -100,6 +100,22 @@ describe("local-first SQLite store", () => {
     }
   });
 
+  it("rejects future and unrealistic session windows rather than creating calendar data", () => {
+    const db = memory();
+    const now = Date.now();
+    const base = {
+      sessionId: "dc2926b3-9fae-4c7a-93fb-6f51dd21b3ad",
+      plannedMinutes: 2, elapsedSeconds: 120, title: "有效学习",
+      startedAt: new Date(now - 60_000).toISOString(),
+      endedAt: new Date(now + 5*60_000).toISOString(),
+    };
+    expect(() => db.recordFocusSession(base)).toThrow();
+    expect(() => db.recordFocusSession({...base,
+      startedAt:new Date(now-3*60_000).toISOString(),
+      endedAt:new Date(now-2*60_000).toISOString()})).toThrow();
+    expect(db.listFocusSessions()).toHaveLength(0);
+  });
+
   it("does not award points for incomplete focus", () => {
     const db = memory();
     const record = db.recordFocusSession({

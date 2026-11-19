@@ -394,3 +394,22 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
   font-size:12px;color:var(--muted);margin:-5px auto 18px}
 .focus-duration-field input{width:135px;max-width:100%;text-align:center;padding:9px;
   border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
+
+/* ALPHA-TIME-002: keep active timer mounted and clearly distinguish actual time. */
+.focus-layout[hidden]{display:none!important}
+.focus-title-field{display:grid;gap:7px;text-align:left;color:var(--muted);font-size:12px;
+  width:min(100%,380px);margin:18px auto 0}
+.focus-title-field input,.focus-rename-form input{width:100%;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);border-radius:8px;padding:10px 11px}
+.history-copy{flex:1;min-width:0;display:grid;gap:5px}
+.history-copy strong{overflow-wrap:anywhere}
+.history-copy>small{line-height:1.5;overflow-wrap:anywhere}
+.history-copy>.small-button{justify-self:start}
+.history-list li{gap:12px;align-items:flex-start}
+.focus-rename-form{display:grid;gap:8px}
+.focus-rename-form label{display:grid;gap:5px;color:var(--muted);font-size:11px}
+.actual-focus-list{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+.actual-focus-list h3{margin:0 0 10px;font-size:13px}
+.actual-focus-list .planned-day-list small{color:var(--muted);font-size:11px}
+.agenda-key.agenda-focus{background:#45ad9f}
+.agenda-entry.agenda-focus{border-inline-start-color:#45ad9f}
