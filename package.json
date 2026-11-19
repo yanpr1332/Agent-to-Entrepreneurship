@@ -4,7 +4,7 @@
   "private": true,
   "description": "Local-first student workspace desktop application",
   "main": "./out/main/index.js",
-  "license": "MPL-2.0",
+  "license": "SEE LICENSE IN LICENSE",
   "engines": {
     "node": ">=24.0.0 <25",
     "npm": ">=11.0.0"
@@ -45,7 +45,8 @@
     },
     "files": [
       "out/**/*",
-      "package.json"
+      "package.json",
+      "LICENSE"
     ],
     "win": {
       "target": [
