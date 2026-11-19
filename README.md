@@ -36,6 +36,10 @@ W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全�
 
 下一轮优先完善 **同步基础设施与 Supabase 真实验收准备**，再开发个人任务/手动日历的跨设备增量同步 MVP、团队消息/任务实时恢复与多账号联机；**精确 + 容错 + 本地 Embedding** 保留在同步主线之后先做离线 PoC。原 Alpha 的 Canvas/邮箱真实接入、Windows/macOS GUI、安装包、权限与备份验收不被取消。计划与每轮退出条件见 [ALPHA-SYNC 同步优先开发计划](docs/w5/27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。目前这只是排期决定，**不是同步代码或真实云端验收已完成**。
 
+### ALPHA-SYNC-001 工程基线（当前开发 PR）
+
+本轮新增尚未接入网络的个人同步协议白名单（个人任务/手动日历、版本/幂等 ID、显式启用门槛）及**手动触发**的五账号 Supabase RLS 正反向测试脚本；默认不上传任何 SQLite 数据、不创建云资源。详见 [SYNC-001 实施及测试](docs/w5/28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)。离线脚本自测：`npm run test:sync-rls`；真实项目需要用户自己的五个账号和显式写入确认，**不会在 CI 自动连接**。
+
 ## Windows / macOS 本地 Alpha 验收指南
 
 以下命令全部在包含 package.json 的**仓库根目录**执行。本指南优先使用隔离测试数据，不需要真实 Canvas、学校邮箱、OpenAI 或 Supabase 凭据。**CI 构建成功不代表完成真实 GUI 验收。**

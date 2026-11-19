@@ -122,7 +122,7 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 
 ### ALPHA-SYNC-001/002/003 同步优先队列（2026-11-19，**规划阶段**）
 
-- **001：设计/准备**。现有 Supabase Workspace 仍是 PoC；独立测试项目部署、五账号与服务端 RLS 正反向真实验收均未完成。下一轮先做数据权威清点、部署与安全测试说明，不把 Mock 结果填成联机通过。
+- **001：已有代码，真实验收未做**。独立开发 PR 新增个人同步协议/字段来源白名单、显式授权投影、五账号 RLS 手动验收脚本及离线 mock；**尚未连接到 Electron 同步功能**，不触碰 SQLite 或 Supabase。独立测试项目部署、五账号与服务端 RLS 正反向真实验收均未完成，不把 Mock 结果填成联机通过。详细见 [28](28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)。
 - **002：未开发**。个人 SQLite 任务与手动日历跨设备同步、Outbox/幂等/持久游标/冲突恢复均尚未交付；Canvas/邮件现有的来源自动同步不是它的替代。
 - **003：未开发**。团队消息仍使用轮询，Realtime + 断线补拉 + 撤权后拒绝 + 五账号联机尚无真实证据。
 - **Embedding：未开发**。ALPHA-KB-005 继续保留，待同步核心门槛后先做离线 PoC；不将 PR #32 的 AI 单段解释误算为本地 embedding。

@@ -82,3 +82,7 @@ CI 可以证明：
 - 实测 Windows 和 macOS 各自独立账号跨互联网共享工作空间。
 
 本 PR 无 RDC、无本机软件安装、无新增 npm 依赖、无真实凭据，也未修改或部署任何外部云资源。
+
+## SYNC-001：升级版五账号 RLS 验收（仅仓库工具）
+
+原 `scripts/rls-smoke-test.mjs` 仍可用于较早的三账号基本检查。后续应优先用 [SYNC-001 验收说明](28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md) 中的 `scripts/sync-rls-acceptance.mjs`：需要五个**不同身份**、显式 `ATE_POC_CONFIRM_WRITES` 授权，先让 C 充当非成员验证读取/写入均被拒绝，再作为第五位成员加入；同时检查成员身份冒充、非成员任务分配及所有者权限。脚本仅在自己授权的隔离测试项目中手动运行，**不会在 CI 或 npm test 中访问 Supabase**。目前仍无真实 Supabase 服务端验收记录，不能据此宣称五人联机功能通过。
