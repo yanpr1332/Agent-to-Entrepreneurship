@@ -13,6 +13,61 @@ function memory(): LocalStore {
 }
 afterEach(() => {
   while (stores.length) stores.pop()!.close();
+
+  it("enrolls only one explicitly selected personal task and persists its outbox intent", () => {
+    const db = memory();
+    const task = db.createTask({title:"跨设备任务", description:"用户主动选择"});
+    expect(db.listPersonalSyncOutbox()).toEqual([]);
+    db.setTaskSyncEnabled(task.id, true);
+    const queued = db.listPersonalSyncOutbox();
+    expect(queued).toHaveLength(1);
+    expect(queued[0]).toMatchObject({entityType:"personal-task",entityId:task.id,action:"upsert",baseVersion:null});
+    expect(JSON.parse(queued[0].payload!)).toEqual({title:"跨设备任务",description:"用户主动选择",dueDate:null,priority:"normal",completed:false});
+  });
+
+  it("coalesces repeated edits into the same pending intent and preserves server version after acknowledgement", () => {
+    const db = memory();
+    const task = db.createTask({title:"初始标题"});
+    db.setTaskSyncEnabled(task.id, true);
+    const first = db.listPersonalSyncOutbox()[0];
+    db.updateTask({id:task.id,title:"更新标题"});
+    db.updateTask({id:task.id,completed:true});
+    const latest = db.listPersonalSyncOutbox()[0];
+    expect(latest.operationId).toBe(first.operationId);
+    expect(JSON.parse(latest.payload!)).toMatchObject({title:"更新标题",completed:true});
+    db.acknowledgePersonalSyncOperation(latest.operationId, 4);
+    expect(db.listPersonalSyncOutbox()).toEqual([]);
+    db.updateTask({id:task.id,title:"版本四之后"});
+    expect(db.listPersonalSyncOutbox()[0].baseVersion).toBe(4);
+  });
+
+  it("creates a versioned delete tombstone only after a server acknowledgement", () => {
+    const db = memory();
+    const task = db.createTask({title:"远端任务"});
+    db.setTaskSyncEnabled(task.id,true);
+    const create = db.listPersonalSyncOutbox()[0];
+    db.acknowledgePersonalSyncOperation(create.operationId,2);
+    expect(db.removeTask(task.id)).toBe(true);
+    expect(db.listPersonalSyncOutbox()).toMatchObject([{entityType:"personal-task",entityId:task.id,action:"delete",baseVersion:2,payload:null}]);
+  });
+
+  it("cancels an unacknowledged local create when the enrolled task is deleted", () => {
+    const db = memory();
+    const task = db.createTask({title:"还未上传"});
+    db.setTaskSyncEnabled(task.id,true);
+    expect(db.removeTask(task.id)).toBe(true);
+    expect(db.listPersonalSyncOutbox()).toEqual([]);
+  });
+
+  it("disabling sync clears pending intents without deleting the local task", () => {
+    const db = memory();
+    const task = db.createTask({title:"保留在本机"});
+    db.setTaskSyncEnabled(task.id,true);
+    db.setTaskSyncEnabled(task.id,false);
+    expect(db.listTasks()).toHaveLength(1);
+    expect(db.listPersonalSyncOutbox()).toEqual([]);
+  });
+
 });
 
 describe("local-first SQLite store", () => {
