@@ -17,7 +17,7 @@
 | `ate-mail.sqlite` / 读取缓存及草稿 | 邮箱服务器来源、私人草稿 | **不纳入** | SMTP 发信与普通自动同步完全隔离 |
 | Supabase `ate_workspace_*` 表 | 经认证的云端团队空间 | 属于 SYNC-003，**与个人同步分离** | 目前仅 PoC + 约 10 秒轮询；五账号 RLS 尚需真实验收 |
 
-严格约束：**数据本地优先**。SYNC-001 的 `projectPersonalTask(task, explicitlyEnabled)` 和 `projectManualCalendarEvent(event, explicitlyEnabled)` 必须由未来的明确启用/选择流传入 `true` 才返回字段快照；不会执行网络请求或上传。尤其注意：目前没有持久化的“任务是否来自邮件候选”同步来源标识，**SYNC-002 不能仅凭 `source === null` 就自动批量上传所有任务**；必须先补齐来源证明或让用户逐条选择/审阅。关闭云同步、停止外部来源抓取与删除本机原件是不同操作。
+严格约束：**数据本地优先**。SYNC-001 的 `projectPersonalTask(task, explicitlyEnabled)` 和 `projectManualCalendarEvent(event, explicitlyEnabled)` 只生成白名单快照，不执行网络请求。SYNC-002A 已在 local v6 增加 `task_origin`：历史 accepted 邮件任务被分类为 `mail_candidate`，Canvas 任务分类为 `canvas`，其余旧任务为 `legacy`；只有用户显式选择的 manual/legacy 个人任务和手动日历事件才可进入本机 Outbox。没有任何历史任务会因迁移自动上传。暂停同步、删除远端副本、停止外部来源抓取与删除本机原件是不同操作。
 
 ## 2. 新增的个人同步协议边界（未接入网络）
 
