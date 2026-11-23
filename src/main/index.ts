@@ -713,9 +713,9 @@ app.whenReady().then(async () => {
   if(sandboxDisabled)report("SANDBOX_DISABLED","app");
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
-    await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",5);
+    await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",6);
     await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",3);
-    await backupBeforeMigration(app.getPath("userData"),"ate-fixed-calendar.sqlite",3);
+    await backupBeforeMigration(app.getPath("userData"),"ate-fixed-calendar.sqlite",4);
     await backupBeforeMigration(app.getPath("userData"),"ate-plans.sqlite",2);
     store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
     knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "ate-knowledge.sqlite"));
@@ -723,6 +723,7 @@ app.whenReady().then(async () => {
       join(app.getPath("userData"),"ate-fixed-calendar.sqlite"),
       ()=>planningStore?.listCommitted()??[],
       ()=>canvasSync?.scope()??null,
+      localStore().getDeviceId(),
     );
     planningStore = new PlanningStore(join(app.getPath("userData"), "ate-plans.sqlite"),
       ()=>fixedCalendar().busySlots());
