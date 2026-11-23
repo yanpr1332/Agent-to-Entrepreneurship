@@ -69,6 +69,12 @@ npm run build
 
 `npm test` 已包括 `vitest run` 和 **完全离线的 Node mock**；不会调用 Supabase。该测试不依赖真实账号或秘密，不覆盖任何本地 SQLite 数据。
 
+### CI 稳定性修正（PR #34 后续提交）
+
+PR 检查日志中，Windows runner 的 Vitest 同时启动了 52 个 worker；两个**既有** SQLite 迁移备份测试各自超过默认 5 秒超时（约 5.2–5.6 秒），随后在超时清理时出现临时目录 `EPERM`。同一提交的另一次 Windows Push 检查中，这两个测试分别在约 0.8–0.9 秒完成并通过，支持这是并发/runner 负载下的非确定性超时，而不是稳定复现的数据迁移失败。
+
+因此 PR 内增加 `vitest.config.ts` 将并发 worker 限制为 4，并只将这两个包含 SQLite 在线备份的迁移用例超时提高到 15 秒；其他测试仍保留默认超时。CI 的独立 Type-check 和 Test 步骤已经完成验证，构建步骤改为直接调用 `electron-vite build`，避免原有 `npm run build` 再重复执行整套测试。最终仍以这次修正后的 Windows/macOS Checks 为准。
+
 ## 5. 下一轮 SYNC-002 的必须先解决事项
 
 - 在既有 `tasks` 与 `fixed_events` 本机事务里追加 **同事务 Outbox**，仅对明确启用的个人范围创建操作；确定同步生命周期、设备 ID 与账号绑定/切换处理；迁移前做 SQLite 安全快照并可回滚。
