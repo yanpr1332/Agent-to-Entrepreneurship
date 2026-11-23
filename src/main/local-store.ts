@@ -192,12 +192,25 @@ export class LocalStore {
             "CHECK (time_source IN ('recorded','estimated'))");
       }
       if (version <= 5) {
-        this.db.exec("ALTER TABLE tasks ADD COLUMN task_origin TEXT NOT NULL DEFAULT 'legacy' " +
-          "CHECK(task_origin IN('manual','mail_candidate','canvas','legacy'))");
-        this.db.exec("UPDATE tasks SET task_origin='mail_candidate' WHERE id IN " +
-          "(SELECT task_id FROM mail_candidate_reviews WHERE decision='accepted' AND task_id IS NOT NULL)");
-        this.db.exec("UPDATE tasks SET task_origin='canvas' WHERE id IN " +
-          "(SELECT task_id FROM canvas_assignment_links)");
+        const tables = new Set((this.db.prepare(
+          "SELECT name FROM sqlite_master WHERE type='table'"
+        ).all() as {name:string}[]).map(row => row.name));
+        if (tables.has("tasks")) {
+          const columns = new Set((this.db.prepare("PRAGMA table_info(tasks)").all() as {name:string}[])
+            .map(row => row.name));
+          if (!columns.has("task_origin")) {
+            this.db.exec("ALTER TABLE tasks ADD COLUMN task_origin TEXT NOT NULL DEFAULT 'legacy' " +
+              "CHECK(task_origin IN('manual','mail_candidate','canvas','legacy'))");
+          }
+          if (tables.has("mail_candidate_reviews")) {
+            this.db.exec("UPDATE tasks SET task_origin='mail_candidate' WHERE id IN " +
+              "(SELECT task_id FROM mail_candidate_reviews WHERE decision='accepted' AND task_id IS NOT NULL)");
+          }
+          if (tables.has("canvas_assignment_links")) {
+            this.db.exec("UPDATE tasks SET task_origin='canvas' WHERE id IN " +
+              "(SELECT task_id FROM canvas_assignment_links)");
+          }
+        }
       }
       this.db.exec("PRAGMA user_version = 6");
       this.db.exec("COMMIT");
