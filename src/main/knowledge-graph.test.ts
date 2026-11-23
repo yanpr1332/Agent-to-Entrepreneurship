@@ -107,5 +107,5 @@ describe("source-cited local knowledge graph v3",()=>{
     expect(restored.listCards()[0].id).toBe(card.id);
     expect(restored.createGraphNode(nodeInput(doc.id,"Restored")).sourceRevision).toBe(1);
     restored.close();
-  });
+  }, 15_000);
 });

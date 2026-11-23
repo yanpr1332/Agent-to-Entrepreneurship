@@ -174,3 +174,7 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## ALPHA-SYNC 同步优先开发（决策，2026-11-19）
 
 [27 下一阶段同步优先实施与验收计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md) 将开发队列明确为：SYNC-001 数据权威/真实 Supabase 权限验收准备 → SYNC-002 个人任务与手动日历跨设备增量同步 MVP → SYNC-003 团队 Realtime/可靠补拉及五账号联机；之后再实施 KB-005 本地 Embedding PoC/索引/融合。**当前只更新计划文档，不代表云端真实部署、多设备同步或本地向量模型已经实现。** 其他 Alpha 真机、安装包、Canvas 与邮箱真实接入验收仍须继续推进。
+
+## ALPHA-SYNC-001 同步协议和 RLS 验收工具（开发中）
+
+[28 个人数据权威、同步契约与五账号 RLS 验收](28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md) 新增明确授权的本地数据白名单、操作协议与静态/离线 mock 测试，以及**必须在隔离 Supabase 项目中手动确认后运行**的 RLS 正反向验收脚本。尚无真实联机结果、Outbox、云端个人数据表或跨设备同步，SYNC-002/003 不得标已完成。离线检查：`npm run test:sync-rls`（包含在 `npm test` 中）。
