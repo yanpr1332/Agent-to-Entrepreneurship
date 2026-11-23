@@ -72,3 +72,8 @@
 ## 6. 进度更新：ALPHA-SYNC-001 工程验证工具（2026-11-19）
 
 已开始 SYNC-001 独立开发 PR：补充个人任务/手动日历来源白名单、显式启用参数、同步操作与回执解析、五账号 Supabase 权限正反向验收脚本及离线 mock 测试。**此更新不表示真实五账号联机、Outbox、双向同步、Realtime 或后续 SYNC-002/003 已完成。** 详见 [28 实施与验收](28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)。一个在途 PR 关闭/合并后方进入下一轮。
+
+
+## 7. 进度更新：ALPHA-SYNC-002 本地 Outbox 第一阶段（2026-11-24）
+
+已在独立开发分支开始 SYNC-002：两个本机 SQLite 库分别新增逐条授权 enrollment 与持久 Outbox；任务/手动日历编辑在各自事务内同步写入待发送意图；重复编辑合并 pending operation；已获服务器版本的删除生成墓碑，未上传创建被删除时撤销本地意图。Canvas、ICS、邮件候选任务排除，默认不开启。当前无远端传输、个人云端表、设备/账号身份绑定、cursor pull、冲突 UI。详见 [29](29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)。
