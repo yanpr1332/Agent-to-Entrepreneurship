@@ -247,4 +247,48 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     expect(classes.list()).toHaveLength(0);
     expect(p.listCommitted()).toHaveLength(1);
   });
+
+  it("enrolls only a selected manual calendar event and queues a strict snapshot",()=>{
+    const db=calendar();
+    const event=db.create({title:"手动课程",day:"2026-11-12",startMinute:540,durationMinutes:60,weeks:1},now)[0];
+    expect(db.listManualCalendarSyncOutbox()).toEqual([]);
+    db.setManualEventSyncEnabled(event.id,true,now);
+    const queued=db.listManualCalendarSyncOutbox();
+    expect(queued).toHaveLength(1);
+    expect(queued[0]).toMatchObject({entityId:event.id,action:"upsert",baseVersion:null});
+    expect(JSON.parse(queued[0].payload!)).toMatchObject({title:"手动课程",day:"2026-11-12",startMinute:540,durationMinutes:60,seriesId:null});
+  });
+  it("coalesces opted-in manual event edits and carries the acknowledged version",()=>{
+    const db=calendar();
+    const event=db.create({title:"旧标题",day:"2026-11-12",startMinute:540,durationMinutes:60,weeks:1},now)[0];
+    db.setManualEventSyncEnabled(event.id,true,now);
+    const first=db.listManualCalendarSyncOutbox()[0];
+    db.edit({id:event.id,title:"新标题",day:"2026-11-12",startMinute:600,durationMinutes:60});
+    const latest=db.listManualCalendarSyncOutbox()[0];
+    expect(latest.operationId).toBe(first.operationId);
+    expect(JSON.parse(latest.payload!).title).toBe("新标题");
+    db.acknowledgeManualCalendarSyncOperation(latest.operationId,3);
+    db.edit({id:event.id,title:"再次编辑",day:"2026-11-12",startMinute:660,durationMinutes:60});
+    expect(db.listManualCalendarSyncOutbox()[0].baseVersion).toBe(3);
+  });
+  it("does not enroll imported ICS records and retains remote delete tombstones",()=>{
+    const db=calendar();
+    db.import([{title:"ICS",day:"2026-11-12",startMinute:540,durationMinutes:60,sourceUid:"ics-uid"}],now);
+    const imported=db.list()[0];
+    expect(()=>db.setManualEventSyncEnabled(imported.id,true)).toThrow();
+    const manual=db.create({title:"手动",day:"2026-11-13",startMinute:540,durationMinutes:60,weeks:1},now)[0];
+    db.setManualEventSyncEnabled(manual.id,true,now);
+    const create=db.listManualCalendarSyncOutbox()[0];
+    db.acknowledgeManualCalendarSyncOperation(create.operationId,8);
+    expect(db.delete(manual.id)).toBe(true);
+    expect(db.listManualCalendarSyncOutbox()).toMatchObject([{entityId:manual.id,action:"delete",baseVersion:8,payload:null}]);
+  });
+  it("cancels a never-acknowledged manual event create when it is deleted",()=>{
+    const db=calendar();
+    const event=db.create({title:"未同步",day:"2026-11-12",startMinute:540,durationMinutes:60,weeks:1},now)[0];
+    db.setManualEventSyncEnabled(event.id,true,now);
+    expect(db.delete(event.id)).toBe(true);
+    expect(db.listManualCalendarSyncOutbox()).toEqual([]);
+  });
+
 });
