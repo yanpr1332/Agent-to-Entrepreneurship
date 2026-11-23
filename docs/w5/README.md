@@ -178,3 +178,8 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## ALPHA-SYNC-001 同步协议和 RLS 验收工具（开发中）
 
 [28 个人数据权威、同步契约与五账号 RLS 验收](28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md) 新增明确授权的本地数据白名单、操作协议与静态/离线 mock 测试，以及**必须在隔离 Supabase 项目中手动确认后运行**的 RLS 正反向验收脚本。尚无真实联机结果、Outbox、云端个人数据表或跨设备同步，SYNC-002/003 不得标已完成。离线检查：`npm run test:sync-rls`（包含在 `npm test` 中）。
+
+
+## ALPHA-SYNC-002 本地 Outbox 第一阶段
+
+[29 本地 Outbox 实施说明](29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)：个人任务与手动日历的逐条授权、持久待发送意图、版本基线与删除墓碑。此阶段仍完全本地，不含网络同步；真实跨设备能力须等待服务端/RLS、可信设备身份、增量拉取与冲突处理。
