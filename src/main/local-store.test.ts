@@ -141,6 +141,104 @@ describe("local-first SQLite store", () => {
     }
   });
 
+  it("queues only explicitly selected personal tasks and keeps retries versioned", () => {
+    const db = memory();
+    const owner = "c4a6dcb4-26c2-4a36-85c9-42e40f6d72b1";
+    const task = db.createTask({title:"Personal task",description:"private notes"});
+    expect(db.listPersonalSyncOutbox(owner)).toEqual([]);
+    db.setTaskSyncEnabled(owner, task.id, true);
+    const first = db.listPersonalSyncOutbox(owner);
+    expect(first).toHaveLength(1);
+    expect(first[0]).toMatchObject({
+      entityType:"personal-task",entityId:task.id,action:"upsert",
+      baseVersion:null,payload:{title:"Personal task",description:"private notes"},
+      status:"pending",attempts:0,
+    });
+    const firstId = first[0].operationId;
+    db.updateTask({id:task.id,title:"Edited before send"});
+    expect(db.listPersonalSyncOutbox(owner)).toHaveLength(1);
+    expect(db.listPersonalSyncOutbox(owner)[0]).toMatchObject({
+      operationId:firstId,payload:{title:"Edited before send"},
+    });
+
+    db.markPersonalSyncAttempted(owner,firstId);
+    db.updateTask({id:task.id,completed:true});
+    const second = db.listPersonalSyncOutbox(owner);
+    expect(second).toHaveLength(1);
+    expect(second[0].operationId).not.toBe(firstId);
+    expect(second[0].baseVersion).toBeNull();
+    db.acknowledgePersonalSyncOperation(owner,firstId,7);
+    expect(db.listPersonalSyncOutbox(owner)[0].baseVersion).toBe(7);
+
+    const secondId = db.listPersonalSyncOutbox(owner)[0].operationId;
+    db.markPersonalSyncAttempted(owner,secondId);
+    db.acknowledgePersonalSyncOperation(owner,secondId,8);
+    expect(db.removeTask(task.id)).toBe(true);
+    const deletion = db.listPersonalSyncOutbox(owner);
+    expect(deletion).toHaveLength(1);
+    expect(deletion[0]).toMatchObject({action:"delete",baseVersion:8,payload:null});
+    db.markPersonalSyncAttempted(owner,deletion[0].operationId);
+    db.acknowledgePersonalSyncOperation(owner,deletion[0].operationId,9);
+    expect(db.listTaskSyncSelections(owner)).toEqual([]);
+  });
+
+  it("pauses per-account queueing and never opts mail or Canvas tasks into personal sync", () => {
+    const db = memory();
+    const owner = "c4a6dcb4-26c2-4a36-85c9-42e40f6d72b1";
+    const task = db.createTask({title:"Pause me"});
+    db.setTaskSyncEnabled(owner,task.id,true);
+    db.setTaskSyncEnabled(owner,task.id,false);
+    expect(db.listTaskSyncSelections(owner)[0].enabled).toBe(false);
+    expect(db.listPersonalSyncOutbox(owner)).toEqual([]);
+    db.updateTask({id:task.id,title:"Changed while paused"});
+    expect(db.listPersonalSyncOutbox(owner)).toEqual([]);
+    db.setTaskSyncEnabled(owner,task.id,true);
+    expect(db.listPersonalSyncOutbox(owner)).toHaveLength(1);
+
+    const mail = db.reviewMailCandidate({
+      account:"student@sjtu.edu.cn",uid:10,uidValidity:3,
+      from:"teacher@sjtu.edu.cn",subject:"Assignment",date:null,
+      messageId:"<mail-10>",receivedAt:"2026-11-19T00:00:00.000Z",
+    },"accept");
+    expect(mail.taskId).toBeTruthy();
+    expect(() => db.setTaskSyncEnabled(owner,mail.taskId!,true)).toThrow("Mail-derived");
+
+    const canvas = db.importCanvasAssignment("https://canvas.example.edu",1,{
+      id:42,courseId:1,name:"Canvas assignment",dueAt:null,htmlUrl:null,pointsPossible:null,
+    });
+    expect(() => db.setTaskSyncEnabled(owner,canvas.taskId,true)).toThrow("Canvas");
+  });
+
+  it("preserves the device identity and classifies legacy mail tasks before allowing opt-in", () => {
+    const directory = mkdtempSync(join(tmpdir(),"ate-sync-origin-"));
+    const file = join(directory,"local.sqlite");
+    const owner = "c4a6dcb4-26c2-4a36-85c9-42e40f6d72b1";
+    try {
+      const first = new LocalStore(file);
+      const deviceId = first.getDeviceId();
+      const manual = first.createTask({title:"Old personal task"});
+      const mail = first.reviewMailCandidate({
+        account:"student@sjtu.edu.cn",uid:11,uidValidity:4,
+        from:"teacher@sjtu.edu.cn",subject:"Private mail task",date:null,
+        messageId:"<mail-11>",receivedAt:"2026-11-19T00:00:00.000Z",
+      },"accept");
+      first.close();
+
+      const legacy = new DatabaseSync(file);
+      legacy.exec("ALTER TABLE tasks DROP COLUMN task_origin; PRAGMA user_version=5;");
+      legacy.close();
+
+      const migrated = new LocalStore(file);
+      expect(migrated.getDeviceId()).toBe(deviceId);
+      migrated.setTaskSyncEnabled(owner,manual.id,true);
+      expect(() => migrated.setTaskSyncEnabled(owner,mail.taskId!,true)).toThrow("Mail-derived");
+      expect(migrated.listPersonalSyncOutbox(owner)).toHaveLength(1);
+      migrated.close();
+    } finally {
+      rmSync(directory,{recursive:true,force:true});
+    }
+  });
+
   it("refuses to open a database from an unknown future schema", () => {
     const db = memory();
     expect(db.listTasks()).toEqual([]);
