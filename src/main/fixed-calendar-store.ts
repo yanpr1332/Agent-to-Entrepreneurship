@@ -282,7 +282,11 @@ export class FixedCalendarStore {
       throw Error("Invalid calendar event identifier");
     this.db.exec("BEGIN IMMEDIATE");
     try{
-      enqueuePersonalSyncDelete(this.db,"manual-calendar-event",input);
+      const existing=this.db.prepare("SELECT source FROM fixed_events WHERE id=?")
+        .get(input) as {source:"manual"|"ics"}|undefined;
+      if(!existing){this.db.exec("COMMIT");return false;}
+      if(existing.source==="manual")
+        enqueuePersonalSyncDelete(this.db,"manual-calendar-event",input);
       const deleted=Number(this.db.prepare("DELETE FROM fixed_events WHERE id=?").run(input).changes)===1;
       this.db.exec("COMMIT");
       return deleted;
