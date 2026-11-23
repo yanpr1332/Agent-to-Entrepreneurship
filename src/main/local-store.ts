@@ -1,4 +1,10 @@
 import { randomUUID } from "node:crypto";
+import {
+  acknowledgePersonalSyncOperation, enqueuePersonalSyncDelete, enqueuePersonalSyncUpsert,
+  initializePersonalSyncSchema, listPersonalSyncOutbox, listPersonalSyncSelections,
+  markPersonalSyncAttempted, markPersonalSyncConflict, requireSyncUuid, setPersonalSyncEnabled,
+} from "./personal-sync-outbox";
+import { projectPersonalTask } from "../shared/personal-sync-contract";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, backup } from "node:sqlite";
@@ -78,6 +84,7 @@ function focusFromRow(row: FocusRow): FocusSession {
  */
 export class LocalStore {
   private readonly db: DatabaseSync;
+  private readonly deviceId: string;
 
   constructor(path: string) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
@@ -86,12 +93,13 @@ export class LocalStore {
     this.db.exec("PRAGMA busy_timeout = 3000");
     if (path !== ":memory:") this.db.exec("PRAGMA journal_mode = WAL");
     this.migrate();
+    this.deviceId = initializePersonalSyncSchema(this.db);
   }
 
   private migrate(): void {
     const version = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (version > 5) throw new Error("Database created by a newer application; refusing to downgrade");
-    if (version === 5) return;
+    if (version > 6) throw new Error("Database created by a newer application; refusing to downgrade");
+    if (version === 6) return;
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -183,13 +191,23 @@ export class LocalStore {
           this.db.exec("ALTER TABLE focus_sessions ADD COLUMN time_source TEXT NOT NULL DEFAULT 'estimated' " +
             "CHECK (time_source IN ('recorded','estimated'))");
       }
-      this.db.exec("PRAGMA user_version = 5");
+      if (version <= 5) {
+        this.db.exec("ALTER TABLE tasks ADD COLUMN task_origin TEXT NOT NULL DEFAULT 'legacy' " +
+          "CHECK(task_origin IN('manual','mail_candidate','canvas','legacy'))");
+        this.db.exec("UPDATE tasks SET task_origin='mail_candidate' WHERE id IN " +
+          "(SELECT task_id FROM mail_candidate_reviews WHERE decision='accepted' AND task_id IS NOT NULL)");
+        this.db.exec("UPDATE tasks SET task_origin='canvas' WHERE id IN " +
+          "(SELECT task_id FROM canvas_assignment_links)");
+      }
+      this.db.exec("PRAGMA user_version = 6");
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
       throw error;
     }
   }
+
+  getDeviceId(): string { return this.deviceId; }
 
   close(): void {
     this.db.close();
