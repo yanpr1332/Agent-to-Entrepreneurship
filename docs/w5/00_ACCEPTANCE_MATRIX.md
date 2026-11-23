@@ -120,13 +120,14 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - **当前未安装 embedding 模型、未建立向量索引、未运行 CPU/内存性能测试**。后续分 PoC、增量向量索引、三路结果合并，均须独立 CI 与真实 Windows/macOS GUI 验收。
 - 不把 PR #32 的可选 OpenAI 单段解释误称为全库本地语义检索。
 
-### ALPHA-SYNC-001/002/003 同步优先队列（2026-11-19，**规划阶段**）
+### ALPHA-SYNC-001/002/003 同步优先队列（更新至 2026-11-23）
 
-- **001：已有代码，真实验收未做**。独立开发 PR 新增个人同步协议/字段来源白名单、显式授权投影、五账号 RLS 手动验收脚本及离线 mock；**尚未连接到 Electron 同步功能**，不触碰 SQLite 或 Supabase。独立测试项目部署、五账号与服务端 RLS 正反向真实验收均未完成，不把 Mock 结果填成联机通过。详细见 [28](28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)。
-- **002：未开发**。个人 SQLite 任务与手动日历跨设备同步、Outbox/幂等/持久游标/冲突恢复均尚未交付；Canvas/邮件现有的来源自动同步不是它的替代。
-- **003：未开发**。团队消息仍使用轮询，Realtime + 断线补拉 + 撤权后拒绝 + 五账号联机尚无真实证据。
+- **001：代码已合并，真实验收未做**。个人同步协议白名单、字段来源投影、五账号 RLS 手动脚本和离线 mock 已合并；真实 Supabase 测试项目和五账号服务端 RLS 正反向证据仍待用户授权。
+- **002A：当前开发 PR 中**。本机任务来源分类、逐实体授权 API、共享 device ID、任务与手动日历本地事务 Outbox 已实现于分支；不上传数据、不连接 Supabase、没有 Renderer 开关 UI。Windows/macOS CI 尚待本 PR 最新结果。详见 [29](29_ALPHA_SYNC_002A_LOCAL_OUTBOX.md)。
+- **002B/002C：尚未开发**。个人云端表/RLS、服务端幂等/版本/游标、Main push/pull、断网恢复和冲突 UI 均未实现；不能称为跨设备同步 MVP。
+- **003：尚未开发**。团队消息仍使用轮询，Realtime + 断线补拉 + 撤权后拒绝 + 五账号联机尚无真实证据。
 - **Embedding：未开发**。ALPHA-KB-005 继续保留，待同步核心门槛后先做离线 PoC；不将 PR #32 的 AI 单段解释误算为本地 embedding。
-- 2026-11-25 内部 Alpha 以真实授权测试账号、RLS 反向测试、最小跨设备增量场景及已知风险记录为条件性目标；未验证项应明确阻塞，不能冒充完成。详见 [27 同步优先实施计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。
+- 2026-11-25 内部 Alpha 目标仍是条件性目标；未验证项应明确阻塞，不能冒充完成。详见 [27 同步优先实施计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。
 
 ## 4. 未验证项清单（按风险排序）
 
