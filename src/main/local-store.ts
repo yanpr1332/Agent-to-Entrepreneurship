@@ -247,29 +247,35 @@ export class LocalStore {
 
   updateTask(input: unknown): LocalTask {
     const patch = parseUpdateTask(input);
-    const current = this.findTask(patch.id);
-    if (!current) throw new Error("Task no longer exists");
-    this.db.prepare(`
-      UPDATE tasks SET title = ?, description = ?, due_date = ?, priority = ?,
-      completed = ?, updated_at = ? WHERE id = ?
-    `).run(
-      patch.title ?? current.title,
-      patch.description ?? current.description,
-      patch.dueDate === undefined ? current.dueDate : patch.dueDate,
-      patch.priority ?? current.priority,
-      (patch.completed ?? current.completed) ? 1 : 0,
-      new Date().toISOString(), patch.id,
-    );
-    // Explicit field-ownership flags survive a user editing a field back to
-    // its previous Canvas value; equality with a remote snapshot is insufficient.
-    if (current.source && (patch.title !== undefined || patch.dueDate !== undefined)) {
-      this.db.prepare(`UPDATE canvas_assignment_links
-        SET override_title = CASE WHEN ? THEN 1 ELSE override_title END,
-            override_due = CASE WHEN ? THEN 1 ELSE override_due END
-        WHERE task_id = ?`).run(patch.title !== undefined ? 1 : 0,
-          patch.dueDate !== undefined ? 1 : 0, patch.id);
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const current = this.findTask(patch.id);
+      if (!current) throw new Error("Task no longer exists");
+      this.db.prepare(
+        "UPDATE tasks SET title=?,description=?,due_date=?,priority=?,completed=?,updated_at=? WHERE id=?"
+      ).run(
+        patch.title ?? current.title,
+        patch.description ?? current.description,
+        patch.dueDate === undefined ? current.dueDate : patch.dueDate,
+        patch.priority ?? current.priority,
+        (patch.completed ?? current.completed) ? 1 : 0,
+        new Date().toISOString(), patch.id,
+      );
+      if (current.source && (patch.title !== undefined || patch.dueDate !== undefined)) {
+        this.db.prepare("UPDATE canvas_assignment_links SET " +
+          "override_title=CASE WHEN ? THEN 1 ELSE override_title END," +
+          "override_due=CASE WHEN ? THEN 1 ELSE override_due END WHERE task_id=?")
+          .run(patch.title !== undefined ? 1 : 0, patch.dueDate !== undefined ? 1 : 0, patch.id);
+      }
+      const updated = this.findTask(patch.id)!;
+      const snapshot = projectPersonalTask(updated, true);
+      if (snapshot) enqueuePersonalSyncUpsert(this.db, "personal-task", patch.id, snapshot);
+      this.db.exec("COMMIT");
+      return updated;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
     }
-    return this.findTask(patch.id)!;
   }
 
   /** Delete personal tasks; a linked Canvas task is hidden for six months instead. */
@@ -277,7 +283,57 @@ export class LocalStore {
     const id = parseTaskId(idInput);
     const linked = this.db.prepare("SELECT task_id FROM canvas_assignment_links WHERE task_id=?").get(id);
     if (linked) return this.setCanvasTaskVisibility(id, false);
-    return this.db.prepare("DELETE FROM tasks WHERE id = ?").run(id).changes === 1;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      enqueuePersonalSyncDelete(this.db, "personal-task", id);
+      const deleted = this.db.prepare("DELETE FROM tasks WHERE id=?").run(id).changes === 1;
+      this.db.exec("COMMIT");
+      return deleted;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  setTaskSyncEnabled(ownerInput: unknown, idInput: unknown, enabled: boolean): void {
+    const ownerId = requireSyncUuid(ownerInput, "sync account id");
+    const id = parseTaskId(idInput);
+    const row = this.db.prepare(
+      "SELECT t.task_origin,l.task_id AS canvas_task_id FROM tasks t " +
+      "LEFT JOIN canvas_assignment_links l ON l.task_id=t.id WHERE t.id=?"
+    ).get(id) as {task_origin:string;canvas_task_id:string|null}|undefined;
+    if (!row) throw Error("Task no longer exists");
+    if (row.task_origin === "mail_candidate" || row.task_origin === "canvas" || row.canvas_task_id)
+      throw Error("Mail-derived and Canvas tasks cannot be included in personal sync");
+    const task = this.findTask(id);
+    const snapshot = task ? projectPersonalTask(task, true) : null;
+    if (!snapshot) throw Error("Task is not eligible for personal sync");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      setPersonalSyncEnabled(this.db, ownerId, "personal-task", id, enabled, snapshot);
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  listTaskSyncSelections(ownerId: unknown) {
+    return listPersonalSyncSelections(this.db, ownerId)
+      .filter(item => item.entityType === "personal-task");
+  }
+  listPersonalSyncOutbox(ownerId: unknown, limit = 100) {
+    return listPersonalSyncOutbox(this.db, ownerId, limit)
+      .filter(item => item.entityType === "personal-task");
+  }
+  markPersonalSyncAttempted(ownerId: unknown, operationId: unknown): void {
+    markPersonalSyncAttempted(this.db, ownerId, operationId);
+  }
+  acknowledgePersonalSyncOperation(ownerId: unknown, operationId: unknown, serverVersion: unknown): void {
+    acknowledgePersonalSyncOperation(this.db, ownerId, operationId, serverVersion);
+  }
+  markPersonalSyncConflict(ownerId: unknown, operationId: unknown, message: string): void {
+    markPersonalSyncConflict(this.db, ownerId, operationId, message);
   }
 
   /** Six calendar months, clamped to the last day of the destination month. */
