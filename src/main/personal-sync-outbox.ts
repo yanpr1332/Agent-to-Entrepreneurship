@@ -232,36 +232,48 @@ export function acknowledgePersonalSyncOperation(
   const operationId = requireSyncUuid(operationInput, "sync operation id");
   if (!Number.isSafeInteger(serverVersionInput) || (serverVersionInput as number) < 0)
     throw Error("Invalid acknowledged sync version");
-  const operation = db.prepare("SELECT entity_type,entity_id,action FROM personal_sync_outbox " +
-    "WHERE operation_id=? AND owner_id=? AND status='in_flight'")
-    .get(operationId, ownerId) as {entity_type:PersonalSyncEntityType;entity_id:string;action:PersonalSyncAction}|undefined;
-  if (!operation) throw Error("Personal sync operation is not in flight");
-  db.prepare("DELETE FROM personal_sync_outbox WHERE operation_id=?").run(operationId);
-  if (operation.action === "delete") {
-    db.prepare("DELETE FROM personal_sync_entities WHERE owner_id=? AND entity_type=? AND entity_id=?")
-      .run(ownerId, operation.entity_type, operation.entity_id);
-    db.prepare("DELETE FROM personal_sync_outbox WHERE owner_id=? AND entity_type=? AND entity_id=?")
-      .run(ownerId, operation.entity_type, operation.entity_id);
-    return;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const operation = db.prepare("SELECT entity_type,entity_id,action FROM personal_sync_outbox " +
+      "WHERE operation_id=? AND owner_id=? AND status='in_flight'")
+      .get(operationId, ownerId) as {entity_type:PersonalSyncEntityType;entity_id:string;action:PersonalSyncAction}|undefined;
+    if (!operation) throw Error("Personal sync operation is not in flight");
+    db.prepare("DELETE FROM personal_sync_outbox WHERE operation_id=?").run(operationId);
+    if (operation.action === "delete") {
+      db.prepare("DELETE FROM personal_sync_entities WHERE owner_id=? AND entity_type=? AND entity_id=?")
+        .run(ownerId, operation.entity_type, operation.entity_id);
+      db.prepare("DELETE FROM personal_sync_outbox WHERE owner_id=? AND entity_type=? AND entity_id=?")
+        .run(ownerId, operation.entity_type, operation.entity_id);
+      db.exec("COMMIT");
+      return;
+    }
+    db.prepare("UPDATE personal_sync_entities SET server_version=?,last_synced_at=?,last_error=NULL " +
+      "WHERE owner_id=? AND entity_type=? AND entity_id=?")
+      .run(serverVersionInput, now.toISOString(), ownerId, operation.entity_type, operation.entity_id);
+    const next = db.prepare("SELECT operation_id FROM personal_sync_outbox WHERE owner_id=? AND entity_type=? " +
+      "AND entity_id=? AND status='pending' ORDER BY created_at,operation_id LIMIT 1")
+      .get(ownerId, operation.entity_type, operation.entity_id) as {operation_id:string}|undefined;
+    if (next) db.prepare("UPDATE personal_sync_outbox SET base_version=? WHERE operation_id=? AND status='pending'")
+      .run(serverVersionInput, next.operation_id);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
   }
-  db.prepare("UPDATE personal_sync_entities SET server_version=?,last_synced_at=?,last_error=NULL " +
-    "WHERE owner_id=? AND entity_type=? AND entity_id=?")
-    .run(serverVersionInput, now.toISOString(), ownerId, operation.entity_type, operation.entity_id);
-  const next = db.prepare("SELECT operation_id FROM personal_sync_outbox WHERE owner_id=? AND entity_type=? " +
-    "AND entity_id=? AND status='pending' ORDER BY created_at,operation_id LIMIT 1")
-    .get(ownerId, operation.entity_type, operation.entity_id) as {operation_id:string}|undefined;
-  if (next) db.prepare("UPDATE personal_sync_outbox SET base_version=? WHERE operation_id=? AND status='pending'")
-    .run(serverVersionInput, next.operation_id);
 }
-
 export function markPersonalSyncConflict(
   db: DatabaseSync, ownerInput: unknown, operationInput: unknown, message: string,
 ): void {
   const ownerId = requireSyncUuid(ownerInput, "sync account id");
   const operationId = requireSyncUuid(operationInput, "sync operation id");
   if (typeof message !== "string" || !message.trim()) throw Error("Invalid sync conflict message");
-  const changed = db.prepare("UPDATE personal_sync_outbox SET status='conflict',last_error=? " +
+  const operation = db.prepare("SELECT entity_type,entity_id FROM personal_sync_outbox " +
     "WHERE operation_id=? AND owner_id=? AND status='in_flight'")
-    .run(message.slice(0,160), operationId, ownerId).changes;
-  if (changed !== 1) throw Error("Personal sync operation is not in flight");
+    .get(operationId,ownerId) as {entity_type:PersonalSyncEntityType;entity_id:string}|undefined;
+  if (!operation) throw Error("Personal sync operation is not in flight");
+  const safeMessage=message.trim().slice(0,160);
+  db.prepare("UPDATE personal_sync_outbox SET status='conflict',last_error=? WHERE operation_id=?")
+    .run(safeMessage,operationId);
+  db.prepare("UPDATE personal_sync_entities SET last_error=? WHERE owner_id=? AND entity_type=? AND entity_id=?")
+    .run(safeMessage,ownerId,operation.entity_type,operation.entity_id);
 }
