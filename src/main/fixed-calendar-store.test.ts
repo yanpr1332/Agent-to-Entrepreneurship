@@ -207,7 +207,7 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     old.exec("DROP TABLE canvas_calendar_events; DROP INDEX fixed_events_series; "+
       "ALTER TABLE fixed_events DROP COLUMN series_id; PRAGMA user_version=1;");
     old.close();
-    const copied=await backupBeforeMigration(dir,"ate-fixed-calendar.sqlite",2);
+    const copied=await backupBeforeMigration(dir,"ate-fixed-calendar.sqlite",4);
     expect(copied).toBeTruthy();
     const pre=new DatabaseSync(join(copied!,"ate-fixed-calendar.sqlite"),{readOnly:true});
     expect((pre.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(1);
@@ -219,6 +219,79 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     restored.close();
     expect(await backupBeforeMigration(dir,"ate-fixed-calendar.sqlite",2)).toBeNull();
   });
+  it("queues only explicitly selected manual calendar events and rebases edits after acknowledgement",()=>{
+    const db=calendar();
+    const owner="c4a6dcb4-26c2-4a36-85c9-42e40f6d72b1";
+    const group=db.create({title:"Manual course",day:"2026-11-11",
+      startMinute:540,durationMinutes:60,weeks:2},now);
+    db.setManualEventSyncEnabled(owner,group[0].id,true);
+    const first=db.listPersonalSyncOutbox(owner);
+    expect(first).toHaveLength(1);
+    expect(first[0]).toMatchObject({
+      entityType:"manual-calendar-event",entityId:group[0].id,
+      action:"upsert",baseVersion:null,
+      payload:{title:"Manual course",day:"2026-11-11",seriesId:group[0].seriesId},
+    });
+    const firstId=first[0].operationId;
+    db.edit({id:group[0].id,title:"Edited before send",day:"2026-11-11",
+      startMinute:570,durationMinutes:60});
+    expect(db.listPersonalSyncOutbox(owner)).toHaveLength(1);
+    expect(db.listPersonalSyncOutbox(owner)[0]).toMatchObject({
+      operationId:firstId,payload:{title:"Edited before send",startMinute:570},
+    });
+
+    db.markPersonalSyncAttempted(owner,firstId);
+    db.edit({id:group[0].id,title:"Edited after send",day:"2026-11-11",
+      startMinute:600,durationMinutes:60});
+    const next=db.listPersonalSyncOutbox(owner);
+    expect(next).toHaveLength(1);
+    expect(next[0].operationId).not.toBe(firstId);
+    db.acknowledgePersonalSyncOperation(owner,firstId,4);
+    expect(db.listPersonalSyncOutbox(owner)[0].baseVersion).toBe(4);
+    const nextId=db.listPersonalSyncOutbox(owner)[0].operationId;
+    db.markPersonalSyncAttempted(owner,nextId);
+    db.acknowledgePersonalSyncOperation(owner,nextId,5);
+    expect(db.delete(group[0].id)).toBe(true);
+    expect(db.listPersonalSyncOutbox(owner)).toMatchObject([
+      {action:"delete",entityId:group[0].id,baseVersion:5,payload:null},
+    ]);
+  });
+
+  it("keeps ICS imports local and queues only selected members of a manual series edit",()=>{
+    const db=calendar();
+    const owner="c4a6dcb4-26c2-4a36-85c9-42e40f6d72b1";
+    const imported=db.import([{
+      title:"ICS only",day:"2026-11-12",startMinute:600,
+      durationMinutes:60,sourceUid:"ics-sync-exclusion",
+    }],now);
+    expect(imported.added).toBe(1);
+    const ics=db.list().find(item=>item.source==="ics")!;
+    expect(()=>db.setManualEventSyncEnabled(owner,ics.id,true)).toThrow("Only manually created");
+
+    const series=db.create({title:"Statistics",day:"2026-11-13",
+      startMinute:480,durationMinutes:60,weeks:4},now);
+    db.setManualEventSyncEnabled(owner,series[1].id,true);
+    db.setManualEventSyncEnabled(owner,series[2].id,true);
+    const changed=db.editSeries({id:series[0].id,scope:"range",
+      rangeStartId:series[1].id,rangeEndId:series[2].id,
+      title:"Statistics lab",day:"2026-11-20",startMinute:600,durationMinutes:75});
+    expect(changed.map(item=>item.id)).toEqual([series[1].id,series[2].id]);
+    const queue=db.listPersonalSyncOutbox(owner);
+    expect(queue).toHaveLength(2);
+    expect(queue.map(item=>item.entityId).sort()).toEqual([series[1].id,series[2].id].sort());
+    expect(queue.every(item=>(item.payload as {title:string}).title==="Statistics lab")).toBe(true);
+    expect(queue.some(item=>item.entityId===series[0].id)).toBe(false);
+  });
+
+  it("uses the same persistent device identity across the task and calendar databases",()=>{
+    const deviceId="3b55a0c7-5f2d-46d0-9bd1-3ddaa6a52a11";
+    const first=new FixedCalendarStore(":memory:",undefined,undefined,deviceId);
+    opened.push(first);
+    expect(first.getDeviceId()).toBe(deviceId);
+    expect(()=>new FixedCalendarStore(":memory:",undefined,undefined,
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")).not.toThrow();
+  });
+
   it("offline proposals skip fixed time, AI proposals reject fixed time, apply rechecks edits",()=>{
     const classes=calendar(),p=planner(()=>classes.busySlots());
     classes.create({title:"Calculus",day:busy.day,startMinute:busy.startMinute,
