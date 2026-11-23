@@ -272,7 +272,7 @@ export function markPersonalSyncConflict(
   const ownerId = requireSyncUuid(ownerInput, "sync account id");
   const operationId = requireSyncUuid(operationInput, "sync operation id");
   if (typeof message !== "string" || !message.trim()) throw Error("Invalid sync conflict message");
-  const safeMessage=message.trim().replace(/[\\r\\n\\x00-\\x1f]/g," ").slice(0,160);
+  const safeMessage=message.trim().replace(/[\r\n\x00-\x1f]/g," ").slice(0,160);
   db.exec("BEGIN IMMEDIATE");
   try {
     const operation = db.prepare("SELECT entity_type,entity_id FROM personal_sync_outbox " +
