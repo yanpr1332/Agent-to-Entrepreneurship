@@ -42,4 +42,4 @@ jobs:
         run: npm test
 
       - name: Build desktop bundles
-        run: npm run build
+        run: npx electron-vite build
