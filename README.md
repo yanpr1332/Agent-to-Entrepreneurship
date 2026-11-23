@@ -40,6 +40,10 @@ W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全�
 
 本轮新增尚未接入网络的个人同步协议白名单（个人任务/手动日历、版本/幂等 ID、显式启用门槛）及**手动触发**的五账号 Supabase RLS 正反向测试脚本；默认不上传任何 SQLite 数据、不创建云资源。详见 [SYNC-001 实施及测试](docs/w5/28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)。离线脚本自测：`npm run test:sync-rls`；真实项目需要用户自己的五个账号和显式写入确认，**不会在 CI 自动连接**。
 
+### ALPHA-SYNC-002 本地 Outbox 第一阶段（开发中）
+
+个人任务与手动日历现已加入逐条显式授权及本机持久 Outbox；默认不入队，Canvas/ICS/邮件衍生任务不自动上传。编辑意图在各自 SQLite 事务内持久化，服务端确认版本后保留后续变更基线。当前尚无网络传输、个人云端表、登录设备绑定或冲突 UI。详见 [SYNC-002 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)。
+
 ## Windows / macOS 本地 Alpha 验收指南
 
 以下命令全部在包含 package.json 的**仓库根目录**执行。本指南优先使用隔离测试数据，不需要真实 Canvas、学校邮箱、OpenAI 或 Supabase 凭据。**CI 构建成功不代表完成真实 GUI 验收。**
