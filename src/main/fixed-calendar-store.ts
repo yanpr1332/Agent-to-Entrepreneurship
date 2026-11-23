@@ -328,10 +328,15 @@ export class FixedCalendarStore {
   edit(raw:unknown):FixedEvent{
     const input=parseEditFixedEvent(raw);
     this.guardStudyConflicts([input]);
-    const updated=this.db.prepare(
-      "UPDATE fixed_events SET title=?,day=?,start_minute=?,duration_minutes=? WHERE id=?"
-    ).run(input.title,input.day,input.startMinute,input.durationMinutes,input.id);
-    if(Number(updated.changes)!==1)throw Error("Calendar event no longer exists");
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const updated=this.db.prepare(
+        "UPDATE fixed_events SET title=?,day=?,start_minute=?,duration_minutes=? WHERE id=? AND source='manual'"
+      ).run(input.title,input.day,input.startMinute,input.durationMinutes,input.id);
+      if(Number(updated.changes)!==1)throw Error("Calendar event no longer exists");
+      this.enqueueManualEvent(input.id);
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
     const found=this.list().find(item=>item.id===input.id);
     if(!found)throw Error("Calendar event no longer exists");
     return found;
@@ -384,6 +389,7 @@ export class FixedCalendarStore {
         if(Number(apply.run(row.title,row.day,row.startMinute,
           row.durationMinutes,row.id,anchor.series_id).changes)!==1)
           throw Error("Recurring course changed during editing");
+        this.enqueueManualEvent(row.id);
       }
       this.db.exec("COMMIT");
       const selectedIds=new Set(changed.map(row=>row.id));
