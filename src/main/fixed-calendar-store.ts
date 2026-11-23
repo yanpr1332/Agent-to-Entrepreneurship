@@ -322,7 +322,24 @@ export class FixedCalendarStore {
   delete(input:unknown):boolean{
     if(typeof input!=="string"||!/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(input))
       throw Error("Invalid calendar event identifier");
-    return Number(this.db.prepare("DELETE FROM fixed_events WHERE id=?").run(input).changes)===1;
+    const enrolled=this.db.prepare("SELECT server_version FROM manual_calendar_sync_enrollment WHERE event_id=?")
+      .get(input) as {server_version:number|null}|undefined;
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      if(enrolled?.server_version!==null&&enrolled?.server_version!==undefined){
+        this.db.prepare(`
+          INSERT INTO manual_calendar_sync_outbox(operation_id,entity_id,action,base_version,payload,created_at)
+          VALUES(?,?,'delete',?,NULL,?)
+          ON CONFLICT(entity_id) DO UPDATE SET operation_id=excluded.operation_id,
+            action='delete',base_version=excluded.base_version,payload=NULL,created_at=excluded.created_at
+        `).run(randomUUID(),input,enrolled.server_version,new Date().toISOString());
+      }else{
+        this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE entity_id=?").run(input);
+      }
+      const removed=Number(this.db.prepare("DELETE FROM fixed_events WHERE id=? AND source='manual'").run(input).changes)===1;
+      this.db.exec("COMMIT");
+      return removed;
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
   /** A single occurrence may be edited, without mutating its parent series. */
   edit(raw:unknown):FixedEvent{
