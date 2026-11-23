@@ -281,7 +281,10 @@ export class LocalStore {
           .run(patch.title !== undefined ? 1 : 0, patch.dueDate !== undefined ? 1 : 0, patch.id);
       }
       const updated = this.findTask(patch.id)!;
-      const snapshot = projectPersonalTask(updated, true);
+      const origin = this.db.prepare("SELECT task_origin FROM tasks WHERE id=?")
+        .get(patch.id) as {task_origin:string}|undefined;
+      const snapshot = origin && origin.task_origin !== "mail_candidate" && origin.task_origin !== "canvas"
+        ? projectPersonalTask(updated, true) : null;
       if (snapshot) enqueuePersonalSyncUpsert(this.db, "personal-task", patch.id, snapshot);
       this.db.exec("COMMIT");
       return updated;
@@ -298,7 +301,10 @@ export class LocalStore {
     if (linked) return this.setCanvasTaskVisibility(id, false);
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      enqueuePersonalSyncDelete(this.db, "personal-task", id);
+      const origin = this.db.prepare("SELECT task_origin FROM tasks WHERE id=?")
+        .get(id) as {task_origin:string}|undefined;
+      if (origin && origin.task_origin !== "mail_candidate" && origin.task_origin !== "canvas")
+        enqueuePersonalSyncDelete(this.db, "personal-task", id);
       const deleted = this.db.prepare("DELETE FROM tasks WHERE id=?").run(id).changes === 1;
       this.db.exec("COMMIT");
       return deleted;
