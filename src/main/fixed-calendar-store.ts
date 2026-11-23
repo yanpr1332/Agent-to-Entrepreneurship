@@ -1,4 +1,10 @@
 import { randomUUID } from "node:crypto";
+import {
+  acknowledgePersonalSyncOperation, enqueuePersonalSyncDelete, enqueuePersonalSyncUpsert,
+  initializePersonalSyncSchema, listPersonalSyncOutbox, listPersonalSyncSelections,
+  markPersonalSyncAttempted, markPersonalSyncConflict, requireSyncUuid, setPersonalSyncEnabled,
+} from "./personal-sync-outbox";
+import { projectManualCalendarEvent } from "../shared/personal-sync-contract";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync,backup } from "node:sqlite";
@@ -27,14 +33,16 @@ const MAX_EVENTS=2000;
 /** Independent, local-only authority for fixed classes and imported calendar events. */
 export class FixedCalendarStore {
   private readonly db:DatabaseSync;
+  private readonly deviceId:string;
   constructor(path:string,private readonly studyBlocks:()=>BusySlot[]=()=>[],
-    private readonly activeCanvasScope:()=>{origin:string;accountId:number}|null=()=>null){
+    private readonly activeCanvasScope:()=>{origin:string;accountId:number}|null=()=>null,
+    requestedDeviceId?:string){
     if(path!==":memory:")mkdirSync(dirname(path),{recursive:true});
     this.db=new DatabaseSync(path);
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=3000");
     if(path!==":memory:")this.db.exec("PRAGMA journal_mode=WAL");
     const version=(this.db.prepare("PRAGMA user_version").get() as {user_version:number}).user_version;
-    if(version>3)throw Error("Calendar database is from a newer version");
+    if(version>4)throw Error("Calendar database is from a newer version");
     if(version===0)this.db.exec(
       "BEGIN IMMEDIATE;"+
       "CREATE TABLE fixed_events("+
@@ -70,7 +78,10 @@ export class FixedCalendarStore {
         this.db.exec("COMMIT");
       }catch(error){this.db.exec("ROLLBACK");throw error;}
     }
+    if(version<=3)this.db.exec("PRAGMA user_version=4");
+    this.deviceId=initializePersonalSyncSchema(this.db,requestedDeviceId);
   }
+  getDeviceId():string{return this.deviceId;}
   close():void{this.db.close();}
   async backupTo(path:string):Promise<number>{return backup(this.db,path);}
   list():FixedEvent[]{
