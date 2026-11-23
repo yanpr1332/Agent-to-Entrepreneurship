@@ -272,13 +272,20 @@ export function markPersonalSyncConflict(
   const ownerId = requireSyncUuid(ownerInput, "sync account id");
   const operationId = requireSyncUuid(operationInput, "sync operation id");
   if (typeof message !== "string" || !message.trim()) throw Error("Invalid sync conflict message");
-  const operation = db.prepare("SELECT entity_type,entity_id FROM personal_sync_outbox " +
-    "WHERE operation_id=? AND owner_id=? AND status='in_flight'")
-    .get(operationId,ownerId) as {entity_type:PersonalSyncEntityType;entity_id:string}|undefined;
-  if (!operation) throw Error("Personal sync operation is not in flight");
-  const safeMessage=message.trim().slice(0,160);
-  db.prepare("UPDATE personal_sync_outbox SET status='conflict',last_error=? WHERE operation_id=?")
-    .run(safeMessage,operationId);
-  db.prepare("UPDATE personal_sync_entities SET last_error=? WHERE owner_id=? AND entity_type=? AND entity_id=?")
-    .run(safeMessage,ownerId,operation.entity_type,operation.entity_id);
+  const safeMessage=message.trim().replace(/[\\r\\n\\x00-\\x1f]/g," ").slice(0,160);
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const operation = db.prepare("SELECT entity_type,entity_id FROM personal_sync_outbox " +
+      "WHERE operation_id=? AND owner_id=? AND status='in_flight'")
+      .get(operationId,ownerId) as {entity_type:PersonalSyncEntityType;entity_id:string}|undefined;
+    if (!operation) throw Error("Personal sync operation is not in flight");
+    db.prepare("UPDATE personal_sync_outbox SET status='conflict',last_error=? WHERE operation_id=?")
+      .run(safeMessage,operationId);
+    db.prepare("UPDATE personal_sync_entities SET last_error=? WHERE owner_id=? AND entity_type=? AND entity_id=?")
+      .run(safeMessage,ownerId,operation.entity_type,operation.entity_id);
+    db.exec("COMMIT");
+  } catch(error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
