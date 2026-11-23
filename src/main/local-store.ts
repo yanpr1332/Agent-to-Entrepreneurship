@@ -239,8 +239,8 @@ export class LocalStore {
     const id = randomUUID();
     const now = new Date().toISOString();
     this.db.prepare(`
-      INSERT INTO tasks (id, title, description, due_date, priority, completed, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+      INSERT INTO tasks (id, title, description, due_date, priority, completed, created_at, updated_at, task_origin)
+      VALUES (?, ?, ?, ?, ?, 0, ?, ?, 'manual')
     `).run(id, draft.title, draft.description, draft.dueDate, draft.priority, now, now);
     return this.findTask(id)!;
   }
@@ -390,8 +390,8 @@ export class LocalStore {
           const id = randomUUID();
           const now = new Date().toISOString();
           this.db.prepare("INSERT INTO tasks(" +
-            "id,title,description,due_date,priority,completed,created_at,updated_at) " +
-            "VALUES(?,?,?,NULL,'normal',0,?,?)")
+            "id,title,description,due_date,priority,completed,created_at,updated_at,task_origin) " +
+            "VALUES(?,?,?,NULL,'normal',0,?,?,'mail_candidate')")
             .run(id,suggestedTaskTitle(record.subject),"",now,now);
           this.db.prepare("INSERT INTO mail_candidate_reviews(" +
             "account,uid_validity,uid,decision,task_id,decided_at) " +
@@ -474,8 +474,8 @@ export class LocalStore {
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.db.prepare(`
-        INSERT INTO tasks(id,title,description,due_date,priority,completed,created_at,updated_at)
-        VALUES(?,?,?,?,'normal',0,?,?)
+        INSERT INTO tasks(id,title,description,due_date,priority,completed,created_at,updated_at,task_origin)
+        VALUES(?,?,?,?,'normal',0,?,?,'canvas')
       `).run(id, name, "", dueDate, now, now);
       this.db.prepare(`
         INSERT INTO canvas_assignment_links(
