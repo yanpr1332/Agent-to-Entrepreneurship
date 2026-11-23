@@ -90,8 +90,8 @@ export class LocalStore {
 
   private migrate(): void {
     const version = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (version > 5) throw new Error("Database created by a newer application; refusing to downgrade");
-    if (version === 5) return;
+    if (version > 6) throw new Error("Database created by a newer application; refusing to downgrade");
+    if (version === 6) return;
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -183,7 +183,28 @@ export class LocalStore {
           this.db.exec("ALTER TABLE focus_sessions ADD COLUMN time_source TEXT NOT NULL DEFAULT 'estimated' " +
             "CHECK (time_source IN ('recorded','estimated'))");
       }
-      this.db.exec("PRAGMA user_version = 5");
+      if (version <= 5) {
+        this.db.exec(`
+          CREATE TABLE personal_task_sync_enrollment (
+            task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+            server_version INTEGER,
+            enabled_at TEXT NOT NULL
+          );
+          CREATE TABLE personal_sync_outbox (
+            operation_id TEXT PRIMARY KEY,
+            entity_type TEXT NOT NULL CHECK(entity_type IN ('personal-task','manual-calendar-event')),
+            entity_id TEXT NOT NULL,
+            action TEXT NOT NULL CHECK(action IN ('upsert','delete')),
+            base_version INTEGER,
+            payload TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(entity_type, entity_id),
+            CHECK((action='upsert' AND payload IS NOT NULL) OR (action='delete' AND payload IS NULL))
+          );
+          CREATE INDEX personal_sync_outbox_created ON personal_sync_outbox(created_at);
+        `);
+      }
+      this.db.exec("PRAGMA user_version = 6");
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -216,6 +237,83 @@ export class LocalStore {
     return row ? taskFromRow(row) : null;
   }
 
+  /** Explicitly enroll one eligible personal task; no bulk opt-in is provided. */
+  setTaskSyncEnabled(idInput: unknown, enabled: boolean, now = new Date()): void {
+    const id = parseTaskId(idInput);
+    if (typeof enabled !== "boolean") throw new Error("Sync preference must be boolean");
+    const task = this.findTask(id);
+    if (!task || task.source !== null) throw new Error("Only personal tasks can be enrolled");
+    const mail = this.db.prepare("SELECT 1 AS found FROM mail_candidate_reviews WHERE task_id=? AND decision='accepted'")
+      .get(id);
+    if (mail) throw new Error("Mail-derived tasks require separate review and cannot be enrolled in this release");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      if (!enabled) {
+        this.db.prepare("DELETE FROM personal_sync_outbox WHERE entity_type='personal-task' AND entity_id=?").run(id);
+        this.db.prepare("DELETE FROM personal_task_sync_enrollment WHERE task_id=?").run(id);
+      } else {
+        this.db.prepare("INSERT INTO personal_task_sync_enrollment(task_id,server_version,enabled_at) VALUES(?,NULL,?) ON CONFLICT(task_id) DO NOTHING")
+          .run(id, now.toISOString());
+        this.enqueuePersonalTask(id, now);
+      }
+      this.db.exec("COMMIT");
+    } catch (error) { this.db.exec("ROLLBACK"); throw error; }
+  }
+
+  private enqueuePersonalTask(id: string, now = new Date()): void {
+    const task = this.findTask(id);
+    if (!task || task.source !== null) throw new Error("Only personal tasks can be queued");
+    const enrolled = this.db.prepare("SELECT server_version FROM personal_task_sync_enrollment WHERE task_id=?")
+      .get(id) as {server_version:number|null}|undefined;
+    if (!enrolled) return;
+    const mail = this.db.prepare("SELECT 1 AS found FROM mail_candidate_reviews WHERE task_id=? AND decision='accepted'")
+      .get(id);
+    if (mail) throw new Error("Mail-derived tasks cannot be queued");
+    const payload = JSON.stringify({
+      title: task.title, description: task.description, dueDate: task.dueDate,
+      priority: task.priority, completed: task.completed,
+    });
+    this.db.prepare(`
+      INSERT INTO personal_sync_outbox(operation_id,entity_type,entity_id,action,base_version,payload,created_at)
+      VALUES(?, 'personal-task', ?, 'upsert', ?, ?, ?)
+      ON CONFLICT(entity_type,entity_id) DO UPDATE SET
+        action='upsert', base_version=excluded.base_version,
+        payload=excluded.payload, created_at=excluded.created_at
+    `).run(randomUUID(), id, enrolled.server_version, payload, now.toISOString());
+  }
+
+  /** Returns pending local intents only; no network request is made by this store. */
+  listPersonalSyncOutbox(limit = 100): {
+    operationId:string; entityType:"personal-task"|"manual-calendar-event"; entityId:string;
+    action:"upsert"|"delete"; baseVersion:number|null; payload:string|null; createdAt:string;
+  }[] {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error("Invalid outbox limit");
+    return (this.db.prepare("SELECT operation_id,entity_type,entity_id,action,base_version,payload,created_at FROM personal_sync_outbox ORDER BY created_at,operation_id LIMIT ?")
+      .all(limit) as unknown as {operation_id:string;entity_type:"personal-task"|"manual-calendar-event";entity_id:string;
+        action:"upsert"|"delete";base_version:number|null;payload:string|null;created_at:string}[])
+      .map(row=>({operationId:row.operation_id,entityType:row.entity_type,entityId:row.entity_id,
+        action:row.action,baseVersion:row.base_version,payload:row.payload,createdAt:row.created_at}));
+  }
+
+  /** Acknowledge only the exact operation ID; future transport must call this after server confirmation. */
+  acknowledgePersonalSyncOperation(operationId: string, serverVersion: number): void {
+    if (typeof operationId !== "string" || !/^[a-f0-9-]{36}$/i.test(operationId) ||
+        !Number.isSafeInteger(serverVersion) || serverVersion < 1) throw new Error("Invalid sync acknowledgement");
+    const row = this.db.prepare("SELECT entity_id,entity_type,action FROM personal_sync_outbox WHERE operation_id=?")
+      .get(operationId) as {entity_id:string;entity_type:string;action:string}|undefined;
+    if (!row) throw new Error("Sync operation is no longer pending");
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare("DELETE FROM personal_sync_outbox WHERE operation_id=?").run(operationId);
+      if (row.entity_type === "personal-task" && row.action === "upsert")
+        this.db.prepare("UPDATE personal_task_sync_enrollment SET server_version=? WHERE task_id=?")
+          .run(serverVersion,row.entity_id);
+      if (row.entity_type === "personal-task" && row.action === "delete")
+        this.db.prepare("DELETE FROM personal_task_sync_enrollment WHERE task_id=?").run(row.entity_id);
+      this.db.exec("COMMIT");
+    } catch(error) { this.db.exec("ROLLBACK"); throw error; }
+  }
+
   createTask(input: unknown): LocalTask {
     const draft = parseCreateTask(input);
     const id = randomUUID();
@@ -231,17 +329,23 @@ export class LocalStore {
     const patch = parseUpdateTask(input);
     const current = this.findTask(patch.id);
     if (!current) throw new Error("Task no longer exists");
-    this.db.prepare(`
-      UPDATE tasks SET title = ?, description = ?, due_date = ?, priority = ?,
-      completed = ?, updated_at = ? WHERE id = ?
-    `).run(
-      patch.title ?? current.title,
-      patch.description ?? current.description,
-      patch.dueDate === undefined ? current.dueDate : patch.dueDate,
-      patch.priority ?? current.priority,
-      (patch.completed ?? current.completed) ? 1 : 0,
-      new Date().toISOString(), patch.id,
-    );
+    const now = new Date();
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare(`
+        UPDATE tasks SET title = ?, description = ?, due_date = ?, priority = ?,
+        completed = ?, updated_at = ? WHERE id = ?
+      `).run(
+        patch.title ?? current.title,
+        patch.description ?? current.description,
+        patch.dueDate === undefined ? current.dueDate : patch.dueDate,
+        patch.priority ?? current.priority,
+        (patch.completed ?? current.completed) ? 1 : 0,
+        now.toISOString(), patch.id,
+      );
+      this.enqueuePersonalTask(patch.id, now);
+      this.db.exec("COMMIT");
+    } catch(error) { this.db.exec("ROLLBACK"); throw error; }
     // Explicit field-ownership flags survive a user editing a field back to
     // its previous Canvas value; equality with a remote snapshot is insufficient.
     if (current.source && (patch.title !== undefined || patch.dueDate !== undefined)) {
