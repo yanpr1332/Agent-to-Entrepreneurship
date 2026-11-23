@@ -82,6 +82,38 @@ export class FixedCalendarStore {
     this.deviceId=initializePersonalSyncSchema(this.db,requestedDeviceId);
   }
   getDeviceId():string{return this.deviceId;}
+  setManualEventSyncEnabled(ownerInput:unknown,idInput:unknown,enabled:boolean):void{
+    const ownerId=requireSyncUuid(ownerInput,"sync account id");
+    if(typeof idInput!=="string"||!/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(idInput))
+      throw Error("Invalid calendar event identifier");
+    const event=this.list().find(item=>item.id===idInput);
+    if(!event||event.source!=="manual"||event.sourceUid!==null)
+      throw Error("Only manually created calendar events can be synced");
+    const snapshot=projectManualCalendarEvent(event,true);
+    if(!snapshot)throw Error("Calendar event is not eligible for personal sync");
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      setPersonalSyncEnabled(this.db,ownerId,"manual-calendar-event",event.id,enabled,snapshot);
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+  listCalendarSyncSelections(ownerId:unknown){
+    return listPersonalSyncSelections(this.db,ownerId)
+      .filter(item=>item.entityType==="manual-calendar-event");
+  }
+  listPersonalSyncOutbox(ownerId:unknown,limit=100){
+    return listPersonalSyncOutbox(this.db,ownerId,limit)
+      .filter(item=>item.entityType==="manual-calendar-event");
+  }
+  markPersonalSyncAttempted(ownerId:unknown,operationId:unknown):void{
+    markPersonalSyncAttempted(this.db,ownerId,operationId);
+  }
+  acknowledgePersonalSyncOperation(ownerId:unknown,operationId:unknown,serverVersion:unknown):void{
+    acknowledgePersonalSyncOperation(this.db,ownerId,operationId,serverVersion);
+  }
+  markPersonalSyncConflict(ownerId:unknown,operationId:unknown,message:string):void{
+    markPersonalSyncConflict(this.db,ownerId,operationId,message);
+  }
   close():void{this.db.close();}
   async backupTo(path:string):Promise<number>{return backup(this.db,path);}
   list():FixedEvent[]{
@@ -248,19 +280,31 @@ export class FixedCalendarStore {
   delete(input:unknown):boolean{
     if(typeof input!=="string"||!/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(input))
       throw Error("Invalid calendar event identifier");
-    return Number(this.db.prepare("DELETE FROM fixed_events WHERE id=?").run(input).changes)===1;
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      enqueuePersonalSyncDelete(this.db,"manual-calendar-event",input);
+      const deleted=Number(this.db.prepare("DELETE FROM fixed_events WHERE id=?").run(input).changes)===1;
+      this.db.exec("COMMIT");
+      return deleted;
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
   /** A single occurrence may be edited, without mutating its parent series. */
   edit(raw:unknown):FixedEvent{
     const input=parseEditFixedEvent(raw);
     this.guardStudyConflicts([input]);
-    const updated=this.db.prepare(
-      "UPDATE fixed_events SET title=?,day=?,start_minute=?,duration_minutes=? WHERE id=?"
-    ).run(input.title,input.day,input.startMinute,input.durationMinutes,input.id);
-    if(Number(updated.changes)!==1)throw Error("Calendar event no longer exists");
-    const found=this.list().find(item=>item.id===input.id);
-    if(!found)throw Error("Calendar event no longer exists");
-    return found;
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const updated=this.db.prepare(
+        "UPDATE fixed_events SET title=?,day=?,start_minute=?,duration_minutes=? WHERE id=?"
+      ).run(input.title,input.day,input.startMinute,input.durationMinutes,input.id);
+      if(Number(updated.changes)!==1)throw Error("Calendar event no longer exists");
+      const found=this.list().find(item=>item.id===input.id);
+      if(!found)throw Error("Calendar event no longer exists");
+      const snapshot=projectManualCalendarEvent(found,true);
+      if(snapshot)enqueuePersonalSyncUpsert(this.db,"manual-calendar-event",found.id,snapshot);
+      this.db.exec("COMMIT");
+      return found;
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
   /** Transactionally update a manually created recurring course.
    * The chosen occurrence is the anchor except in custom-range mode, where
@@ -311,20 +355,34 @@ export class FixedCalendarStore {
           row.durationMinutes,row.id,anchor.series_id).changes)!==1)
           throw Error("Recurring course changed during editing");
       }
-      this.db.exec("COMMIT");
       const selectedIds=new Set(changed.map(row=>row.id));
-      return this.list().filter(item=>selectedIds.has(item.id));
+      const selectedEvents=this.list().filter(item=>selectedIds.has(item.id));
+      for(const event of selectedEvents){
+        const snapshot=projectManualCalendarEvent(event,true);
+        if(snapshot)enqueuePersonalSyncUpsert(this.db,"manual-calendar-event",event.id,snapshot);
+      }
+      this.db.exec("COMMIT");
+      return selectedEvents;
     }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
   /** Delete only entries explicitly belonging to this occurrence's stored series. */
   deleteSeries(id:unknown):number{
     if(typeof id!=="string"||!/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(id))
       throw Error("Invalid calendar event identifier");
-    const row=this.db.prepare("SELECT series_id FROM fixed_events WHERE id=?")
-      .get(id) as {series_id:string|null}|undefined;
-    if(!row?.series_id)throw Error("This event is not part of an editable series");
-    return Number(this.db.prepare("DELETE FROM fixed_events WHERE series_id=?")
-      .run(row.series_id).changes);
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const row=this.db.prepare("SELECT series_id FROM fixed_events WHERE id=?")
+        .get(id) as {series_id:string|null}|undefined;
+      if(!row?.series_id)throw Error("This event is not part of an editable series");
+      const members=this.db.prepare("SELECT id FROM fixed_events WHERE series_id=?")
+        .all(row.series_id) as unknown as {id:string}[];
+      for(const member of members)
+        enqueuePersonalSyncDelete(this.db,"manual-calendar-event",member.id);
+      const deleted=Number(this.db.prepare("DELETE FROM fixed_events WHERE series_id=?")
+        .run(row.series_id).changes);
+      this.db.exec("COMMIT");
+      return deleted;
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
   /** Import exactly the previewed snapshot; dedup by UID, never overwrite local edits. */
   import(events:ReadonlyArray<FixedEventDraft>,now=new Date()):ICSImportResult{
