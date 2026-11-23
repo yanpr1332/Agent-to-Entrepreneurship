@@ -26,7 +26,7 @@
 - 只准 `personal-task` 与 `manual-calendar-event`；只准 `upsert` 与 `delete`。完整快照采用字段白名单，未知来源、文件路径、Token、Canvas 原始内容、邮件正文、知识资料等不得混入。
 - 操作头强制 `operationId`、`deviceId`、`actorId`、`ownerId`、`entityId`、`baseVersion`、`clientTimestamp`。本机输入解析会检查 UUID、owner/actor 一致、UTC 时间、非负整数版本，但**服务端仍必须独立从用户 JWT 验证 actor/owner；客户端字段不构成权限依据**。
 - 删除操作要求明确已知版本和空 payload；新建可用 null 版本。时间戳仅作诊断，不能用于覆盖服务端版本冲突。服务器需返回 `accepted / duplicate / conflict / rejected / retryable_failure`、版本及游标；成功/幂等确认必须有版本和游标。
-- 本轮**没有** `outbox` 实体、`serverCursor` 持久化、墓碑、增量服务端表、双端冲突 UI 或迁移；以上都属于 SYNC-002。下一轮须明确多实体事务、重复操作响应丢失、冲突保留、断网队列、删除后的恢复与数据库备份/回滚。
+- **PR #34 的 SYNC-001 代码**本身没有本机 Outbox、服务端表或双端冲突 UI；后续 SYNC-002A 已单独建立本机 Outbox 与 tombstone 队列。服务端 cursor、远端幂等账本、push/pull 和双端冲突 UI 仍未实现。
 
 ## 3. Supabase 隔离测试项目准备步骤
 
