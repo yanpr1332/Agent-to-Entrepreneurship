@@ -75,12 +75,11 @@ PR 检查日志中，Windows runner 的 Vitest 同时启动了 52 个 worker；�
 
 因此 PR 内增加 `vitest.config.ts` 将并发 worker 限制为 4，并只将这两个包含 SQLite 在线备份的迁移用例超时提高到 15 秒；其他测试仍保留默认超时。CI 的独立 Type-check 和 Test 步骤已经完成验证，构建步骤改为直接调用 `electron-vite build`，避免原有 `npm run build` 再重复执行整套测试。最终仍以这次修正后的 Windows/macOS Checks 为准。
 
-## 5. 下一轮 SYNC-002 的必须先解决事项
+## 5. SYNC-002 后续批次
 
-- 在既有 `tasks` 与 `fixed_events` 本机事务里追加 **同事务 Outbox**，仅对明确启用的个人范围创建操作；确定同步生命周期、设备 ID 与账号绑定/切换处理；迁移前做 SQLite 安全快照并可回滚。
-- 确定个人任务的**邮件候选来源**和外部来源排除规则，防止初次启用同步时无意上传私人邮件衍生内容。
-- 设计个人远端表的 RLS/版本游标/操作幂等、防重复与用户可见冲突副本，并通过隔离测试项目与断网回放验证。当前团队表不得挪用做私人数据存储。
-- 对手动重复课程的批量修改（全系列/未来/指定区间）保持一个用户操作的原子语义；同步其他设备时不能无确认地破坏已确认学习规划时间块。
-- 先完成此轮 PR 的 CI 和审阅；**一次只维护一个开发 PR**。SYNC-001 不等于 SYNC-002 已交付。
+- **002A 已在当前开发 PR 中实现**：任务来源分类、逐实体授权 API、共享 device ID、local v6/calendar v4 迁移与本机事务 Outbox。实现范围和暂停/删除语义见 [29](29_ALPHA_SYNC_002A_LOCAL_OUTBOX.md)。
+- **002B 待开发**：独立个人云端表/RLS、owner 从 JWT 派生、服务端 operation_id 幂等账本、baseVersion 乐观并发、服务端版本与持久变更游标；不得复用团队 Workspace 表。
+- **002C 待开发**：Main push/pull、重启/断网恢复、账号切换/撤权、冲突双方比较和用户选择 UI；真实双设备验收。
+- 继续保持**一次只维护一个开发 PR**。在 002B/C 合并和真实测试前，002A 的 Outbox 仅在本机累积，不能称为跨设备同步。
 
 相关规划：[27 同步优先实施顺序](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)、[W3 同步与协作](../architecture/09_SYNC_AND_COLLABORATION.md)、[06 Supabase PoC](06_CLOUD_WORKSPACE_POC.md)。
