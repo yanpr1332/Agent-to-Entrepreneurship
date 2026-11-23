@@ -89,7 +89,7 @@ export function setPersonalSyncEnabled(
     "INSERT INTO personal_sync_entities(owner_id,entity_type,entity_id,enabled) VALUES(?,?,?,1) " +
     "ON CONFLICT(owner_id,entity_type,entity_id) DO UPDATE SET enabled=1"
   ).run(ownerId, entityType, entityId);
-  enqueuePersonalSyncUpsert(db, ownerId, entityType, entityId, payload, now);
+  enqueuePersonalSyncUpsert(db, entityType, entityId, payload, now);
 }
 
 function enqueueOneUpsert(
@@ -115,7 +115,7 @@ function enqueueOneUpsert(
 }
 
 export function enqueuePersonalSyncUpsert(
-  db: DatabaseSync, ownerId: string, entityType: PersonalSyncEntityType,
+  db: DatabaseSync, entityType: PersonalSyncEntityType,
   entityId: string, payload: unknown, now = new Date(),
 ): string[] {
   const owners = db.prepare(
@@ -184,8 +184,11 @@ export function listPersonalSyncOutbox(
   const ownerId = requireSyncUuid(ownerInput, "sync account id");
   if (!Number.isSafeInteger(limitInput) || limitInput < 1 || limitInput > 500)
     throw Error("Invalid personal sync queue limit");
-  const rows = db.prepare("SELECT * FROM personal_sync_outbox WHERE owner_id=? AND status='pending' " +
-    "ORDER BY created_at,operation_id LIMIT ?").all(ownerId, limitInput) as unknown as Array<{
+  const rows = db.prepare("SELECT o.* FROM personal_sync_outbox o " +
+    "JOIN personal_sync_entities e ON e.owner_id=o.owner_id AND e.entity_type=o.entity_type " +
+    "AND e.entity_id=o.entity_id AND e.enabled=1 " +
+    "WHERE o.owner_id=? AND o.status='pending' " +
+    "ORDER BY o.created_at,o.operation_id LIMIT ?").all(ownerId, limitInput) as unknown as Array<{
       operation_id:string;owner_id:string;entity_type:PersonalSyncEntityType;entity_id:string;
       action:PersonalSyncAction;base_version:number|null;payload_json:string|null;created_at:string;
       status:PersonalSyncQueueStatus;attempts:number;last_error:string|null;
@@ -208,7 +211,10 @@ export function markPersonalSyncAttempted(db: DatabaseSync, ownerInput: unknown,
   const ownerId = requireSyncUuid(ownerInput, "sync account id");
   const operationId = requireSyncUuid(operationInput, "sync operation id");
   const changed = db.prepare("UPDATE personal_sync_outbox SET status='in_flight',attempts=attempts+1,last_error=NULL " +
-    "WHERE operation_id=? AND owner_id=? AND status='pending'").run(operationId, ownerId).changes;
+    "WHERE operation_id=? AND owner_id=? AND status='pending' AND EXISTS (" +
+    "SELECT 1 FROM personal_sync_entities e WHERE e.owner_id=personal_sync_outbox.owner_id " +
+    "AND e.entity_type=personal_sync_outbox.entity_type AND e.entity_id=personal_sync_outbox.entity_id AND e.enabled=1)")
+    .run(operationId, ownerId).changes;
   if (changed !== 1) throw Error("Personal sync operation is not pending");
 }
 
