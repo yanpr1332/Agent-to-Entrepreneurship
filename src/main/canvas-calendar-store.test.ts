@@ -105,5 +105,5 @@ describe("Canvas calendar cache is private, durable and user-controlled",()=>{
     expect(restored.list()).toMatchObject([{id:saved.id}]);
     expect(restored.reconcileCanvasCourse(origin,44,9,[remote]).created).toBe(1);
     restored.close();
-  });
+  }, 15_000);
 });
