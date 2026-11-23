@@ -61,7 +61,12 @@ export function initializePersonalSyncSchema(db: DatabaseSync, requestedDeviceId
   const requested = requestedDeviceId === undefined ? undefined : requireSyncUuid(requestedDeviceId, "device id");
   if (existing) {
     const stored = requireSyncUuid(existing.value, "stored device id");
-    if (requested && requested !== stored) throw Error("Personal sync device identity mismatch");
+    // ate-local.sqlite is the canonical device identity; the separate calendar
+    // database adopts it when restored independently or migrated from an older copy.
+    if (requested && requested !== stored) {
+      db.prepare("UPDATE personal_sync_meta SET value=? WHERE key='device_id'").run(requested);
+      return requested;
+    }
     return stored;
   }
   const deviceId = requested ?? randomUUID();
