@@ -36,15 +36,17 @@ describe("verified online SQLite snapshots",()=>{
     tasks.close();kb.close();
   });
 
-  it("snapshots v3 before opening/upgrading v4 local database",async()=>{
+  it("snapshots v3 before opening/upgrading v6 local database",async()=>{
     const dir=fixture(),path=join(dir,"ate-local.sqlite");
     const db=new LocalStore(path);
     db.createTask({title:"Original before schema upgrade"});
     db.close();
     const older=new DatabaseSync(path);
-    older.exec("DROP TABLE mail_candidate_reviews; PRAGMA user_version=3");
+    older.exec("DROP TABLE personal_sync_outbox; DROP TABLE personal_sync_entities; " +
+      "DROP TABLE personal_sync_meta; DROP TABLE mail_candidate_reviews; " +
+      "ALTER TABLE tasks DROP COLUMN task_origin; PRAGMA user_version=3");
     older.close();
-    const snapshot=await backupBeforeMigration(dir,"ate-local.sqlite",4);
+    const snapshot=await backupBeforeMigration(dir,"ate-local.sqlite",6);
     expect(snapshot).toBeTruthy();
     const pre=new DatabaseSync(join(snapshot!,"ate-local.sqlite"),{readOnly:true});
     expect((pre.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(3);
