@@ -134,10 +134,11 @@ export function enqueuePersonalSyncDelete(
   ).all(entityType, entityId) as unknown as {owner_id:string;server_version:number|null}[];
   const output: string[] = [];
   for (const row of owners) {
-    const inFlight = db.prepare(
-      "SELECT operation_id FROM personal_sync_outbox WHERE owner_id=? AND entity_type=? AND entity_id=? AND status='in_flight'"
+    const uncertain = db.prepare(
+      "SELECT operation_id FROM personal_sync_outbox WHERE owner_id=? AND entity_type=? AND entity_id=? " +
+      "AND (status IN('in_flight','conflict','failed') OR attempts>0)"
     ).get(row.owner_id, entityType, entityId);
-    if (row.server_version === null && !inFlight) {
+    if (row.server_version === null && !uncertain) {
       db.prepare("DELETE FROM personal_sync_outbox WHERE owner_id=? AND entity_type=? AND entity_id=? AND status='pending'")
         .run(row.owner_id, entityType, entityId);
       db.prepare("DELETE FROM personal_sync_entities WHERE owner_id=? AND entity_type=? AND entity_id=?")
@@ -187,7 +188,12 @@ export function listPersonalSyncOutbox(
   const rows = db.prepare("SELECT o.* FROM personal_sync_outbox o " +
     "JOIN personal_sync_entities e ON e.owner_id=o.owner_id AND e.entity_type=o.entity_type " +
     "AND e.entity_id=o.entity_id AND e.enabled=1 " +
-    "WHERE o.owner_id=? AND o.status='pending' " +
+    "WHERE o.owner_id=? AND o.status='pending' AND NOT EXISTS (" +
+    "SELECT 1 FROM personal_sync_outbox prior WHERE prior.owner_id=o.owner_id " +
+    "AND prior.entity_type=o.entity_type AND prior.entity_id=o.entity_id " +
+    "AND (prior.status IN('in_flight','conflict','failed') OR " +
+    "(prior.status='pending' AND (prior.created_at<o.created_at OR " +
+    "(prior.created_at=o.created_at AND prior.operation_id<o.operation_id))))) " +
     "ORDER BY o.created_at,o.operation_id LIMIT ?").all(ownerId, limitInput) as unknown as Array<{
       operation_id:string;owner_id:string;entity_type:PersonalSyncEntityType;entity_id:string;
       action:PersonalSyncAction;base_version:number|null;payload_json:string|null;created_at:string;
