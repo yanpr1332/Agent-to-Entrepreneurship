@@ -34,7 +34,7 @@ export class FixedCalendarStore {
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=3000");
     if(path!==":memory:")this.db.exec("PRAGMA journal_mode=WAL");
     const version=(this.db.prepare("PRAGMA user_version").get() as {user_version:number}).user_version;
-    if(version>3)throw Error("Calendar database is from a newer version");
+    if(version>4)throw Error("Calendar database is from a newer version");
     if(version===0)this.db.exec(
       "BEGIN IMMEDIATE;"+
       "CREATE TABLE fixed_events("+
@@ -70,9 +70,94 @@ export class FixedCalendarStore {
         this.db.exec("COMMIT");
       }catch(error){this.db.exec("ROLLBACK");throw error;}
     }
+    if(version<=3){
+      this.db.exec("BEGIN IMMEDIATE");
+      try{
+        this.db.exec(`
+          CREATE TABLE manual_calendar_sync_enrollment(
+            event_id TEXT PRIMARY KEY REFERENCES fixed_events(id) ON DELETE CASCADE,
+            server_version INTEGER,
+            enabled_at TEXT NOT NULL
+          );
+          CREATE TABLE manual_calendar_sync_outbox(
+            operation_id TEXT PRIMARY KEY,
+            entity_id TEXT NOT NULL UNIQUE,
+            action TEXT NOT NULL CHECK(action IN('upsert','delete')),
+            base_version INTEGER,
+            payload TEXT,
+            created_at TEXT NOT NULL,
+            CHECK((action='upsert' AND payload IS NOT NULL) OR (action='delete' AND payload IS NULL))
+          );
+          CREATE INDEX manual_calendar_sync_outbox_created ON manual_calendar_sync_outbox(created_at);
+          PRAGMA user_version=4;
+        `);
+        this.db.exec("COMMIT");
+      }catch(error){this.db.exec("ROLLBACK");throw error;}
+    }
   }
   close():void{this.db.close();}
   async backupTo(path:string):Promise<number>{return backup(this.db,path);}
+  /** Enroll exactly one manually created event; ICS and Canvas events are excluded. */
+  setManualEventSyncEnabled(id:string,enabled:boolean,now=new Date()):void{
+    if(typeof id!=="string"||!/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(id)||typeof enabled!=="boolean")
+      throw Error("Invalid calendar sync preference");
+    const event=this.list().find(item=>item.id===id);
+    if(!event||event.source!=="manual"||event.sourceUid!==null)
+      throw Error("Only manually created calendar events can be enrolled");
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      if(!enabled){
+        this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE entity_id=?").run(id);
+        this.db.prepare("DELETE FROM manual_calendar_sync_enrollment WHERE event_id=?").run(id);
+      }else{
+        this.db.prepare("INSERT INTO manual_calendar_sync_enrollment(event_id,server_version,enabled_at) VALUES(?,NULL,?) ON CONFLICT(event_id) DO NOTHING")
+          .run(id,now.toISOString());
+        this.enqueueManualEvent(id,now);
+      }
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+  private enqueueManualEvent(id:string,now=new Date()):void{
+    const event=this.list().find(item=>item.id===id);
+    if(!event||event.source!=="manual"||event.sourceUid!==null) throw Error("Only manual events can be queued");
+    const enrollment=this.db.prepare("SELECT server_version FROM manual_calendar_sync_enrollment WHERE event_id=?")
+      .get(id) as {server_version:number|null}|undefined;
+    if(!enrollment)return;
+    const payload=JSON.stringify({title:event.title,day:event.day,startMinute:event.startMinute,
+      durationMinutes:event.durationMinutes,seriesId:event.seriesId});
+    this.db.prepare(`
+      INSERT INTO manual_calendar_sync_outbox(operation_id,entity_id,action,base_version,payload,created_at)
+      VALUES(?,?,'upsert',?,?,?)
+      ON CONFLICT(entity_id) DO UPDATE SET action='upsert',base_version=excluded.base_version,
+        payload=excluded.payload,created_at=excluded.created_at
+    `).run(randomUUID(),id,enrollment.server_version,payload,now.toISOString());
+  }
+  listManualCalendarSyncOutbox(limit=100):{
+    operationId:string;entityId:string;action:"upsert"|"delete";baseVersion:number|null;
+    payload:string|null;createdAt:string;
+  }[]{
+    if(!Number.isSafeInteger(limit)||limit<1||limit>500)throw Error("Invalid outbox limit");
+    return (this.db.prepare("SELECT operation_id,entity_id,action,base_version,payload,created_at FROM manual_calendar_sync_outbox ORDER BY created_at,operation_id LIMIT ?")
+      .all(limit) as unknown as {operation_id:string;entity_id:string;action:"upsert"|"delete";
+        base_version:number|null;payload:string|null;created_at:string}[])
+      .map(row=>({operationId:row.operation_id,entityId:row.entity_id,action:row.action,
+        baseVersion:row.base_version,payload:row.payload,createdAt:row.created_at}));
+  }
+  acknowledgeManualCalendarSyncOperation(operationId:string,serverVersion:number):void{
+    if(typeof operationId!=="string"||!/^[a-f0-9-]{36}$/i.test(operationId)||
+      !Number.isSafeInteger(serverVersion)||serverVersion<1)throw Error("Invalid sync acknowledgement");
+    const row=this.db.prepare("SELECT entity_id,action FROM manual_calendar_sync_outbox WHERE operation_id=?")
+      .get(operationId) as {entity_id:string;action:string}|undefined;
+    if(!row)throw Error("Sync operation is no longer pending");
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE operation_id=?").run(operationId);
+      if(row.action==="upsert")this.db.prepare("UPDATE manual_calendar_sync_enrollment SET server_version=? WHERE event_id=?")
+        .run(serverVersion,row.entity_id);
+      if(row.action==="delete")this.db.prepare("DELETE FROM manual_calendar_sync_enrollment WHERE event_id=?").run(row.entity_id);
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
   list():FixedEvent[]{
     return (this.db.prepare("SELECT * FROM fixed_events ORDER BY day,start_minute,id")
       .all() as unknown as EventRow[]).map(fromRow);
