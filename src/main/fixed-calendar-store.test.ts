@@ -286,10 +286,10 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
   it("uses the same persistent device identity across the task and calendar databases",()=>{
     const deviceId="3b55a0c7-5f2d-46d0-9bd1-3ddaa6a52a11";
     const first=new FixedCalendarStore(":memory:",undefined,undefined,deviceId);
-    opened.push(first);
+    const second=new FixedCalendarStore(":memory:",undefined,undefined,deviceId);
+    opened.push(first,second);
     expect(first.getDeviceId()).toBe(deviceId);
-    expect(()=>new FixedCalendarStore(":memory:",undefined,undefined,
-      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")).not.toThrow();
+    expect(second.getDeviceId()).toBe(deviceId);
   });
 
   it("offline proposals skip fixed time, AI proposals reject fixed time, apply rechecks edits",()=>{
