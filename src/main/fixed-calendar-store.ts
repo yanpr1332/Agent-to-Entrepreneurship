@@ -420,8 +420,29 @@ export class FixedCalendarStore {
     const row=this.db.prepare("SELECT series_id FROM fixed_events WHERE id=?")
       .get(id) as {series_id:string|null}|undefined;
     if(!row?.series_id)throw Error("This event is not part of an editable series");
-    return Number(this.db.prepare("DELETE FROM fixed_events WHERE series_id=?")
-      .run(row.series_id).changes);
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const enrolled=this.db.prepare(`
+        SELECT e.event_id,e.server_version FROM manual_calendar_sync_enrollment e
+        JOIN fixed_events f ON f.id=e.event_id WHERE f.series_id=?
+      `).all(row.series_id) as unknown as {event_id:string;server_version:number|null}[];
+      for(const item of enrolled){
+        if(item.server_version!==null){
+          this.db.prepare(`
+            INSERT INTO manual_calendar_sync_outbox(operation_id,entity_id,action,base_version,payload,created_at)
+            VALUES(?,?,'delete',?,NULL,?)
+            ON CONFLICT(entity_id) DO UPDATE SET operation_id=excluded.operation_id,
+              action='delete',base_version=excluded.base_version,payload=NULL,created_at=excluded.created_at
+          `).run(randomUUID(),item.event_id,item.server_version,new Date().toISOString());
+        }else{
+          this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE entity_id=?").run(item.event_id);
+        }
+      }
+      const removed=Number(this.db.prepare("DELETE FROM fixed_events WHERE series_id=? AND source='manual'")
+        .run(row.series_id).changes);
+      this.db.exec("COMMIT");
+      return removed;
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
   /** Import exactly the previewed snapshot; dedup by UID, never overwrite local edits. */
   import(events:ReadonlyArray<FixedEventDraft>,now=new Date()):ICSImportResult{
