@@ -363,7 +363,25 @@ export class LocalStore {
     const id = parseTaskId(idInput);
     const linked = this.db.prepare("SELECT task_id FROM canvas_assignment_links WHERE task_id=?").get(id);
     if (linked) return this.setCanvasTaskVisibility(id, false);
-    return this.db.prepare("DELETE FROM tasks WHERE id = ?").run(id).changes === 1;
+    const enrolled = this.db.prepare("SELECT server_version FROM personal_task_sync_enrollment WHERE task_id=?")
+      .get(id) as {server_version:number|null}|undefined;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      if (enrolled?.server_version !== null && enrolled?.server_version !== undefined) {
+        this.db.prepare(`
+          INSERT INTO personal_sync_outbox(operation_id,entity_type,entity_id,action,base_version,payload,created_at)
+          VALUES(?, 'personal-task', ?, 'delete', ?, NULL, ?)
+          ON CONFLICT(entity_type,entity_id) DO UPDATE SET
+            operation_id=excluded.operation_id, action='delete',
+            base_version=excluded.base_version, payload=NULL, created_at=excluded.created_at
+        `).run(randomUUID(),id,enrolled.server_version,new Date().toISOString());
+      } else {
+        this.db.prepare("DELETE FROM personal_sync_outbox WHERE entity_type='personal-task' AND entity_id=?").run(id);
+      }
+      const removed = this.db.prepare("DELETE FROM tasks WHERE id = ?").run(id).changes === 1;
+      this.db.exec("COMMIT");
+      return removed;
+    } catch(error) { this.db.exec("ROLLBACK"); throw error; }
   }
 
   /** Six calendar months, clamped to the last day of the destination month. */
