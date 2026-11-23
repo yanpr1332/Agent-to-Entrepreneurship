@@ -105,7 +105,7 @@ Canvas 真实读取与交大邮箱真实收发是用户明确要求的 Alpha 必
 2. **ALPHA-SYNC-002A（开发中）**：本机逐实体授权、来源分类、共享 device ID 和本地事务 Outbox；不上传数据，尚无 Renderer 选择 UI。
 3. **ALPHA-SYNC-002B**：个人云端表/RLS、幂等操作账本、服务端版本与变更游标；隔离 Supabase 项目先行验证。
 4. **ALPHA-SYNC-002C**：Main push/pull、断网/重启续传、冲突 UI、账号切换/撤权和双设备验收。Canvas/邮件原始数据、ICS、知识库及其他 SQLite 库仍不默认上云。
-3. **ALPHA-SYNC-003**：团队任务/消息的 Realtime 通知与持久补拉、多账号/撤权/断网联机验收；不再把 10 秒轮询当作实时同步已完成。
-4. **ALPHA-KB-005A → 005B → 005C**：待同步核心门槛稳定后，再做可选本地 embedding 的离线 PoC、增量向量索引和三路搜索融合；已有 FTS5 精确/容错搜索与用户确认的单段 AI 解释保持不变。
+5. **ALPHA-SYNC-003**：团队任务/消息的 Realtime 通知与持久补拉、多账号/撤权/断网联机验收；不再把 10 秒轮询当作实时同步已完成。
+6. **ALPHA-KB-005A → 005B → 005C**：待同步核心门槛稳定后，再做可选本地 embedding 的离线 PoC、增量向量索引和三路搜索融合；已有 FTS5 精确/容错搜索与用户确认的单段 AI 解释保持不变。
 
 **原 Alpha 门槛和正式 PRD P0 优先级不变**：2026-11-25 是五人内部原型目标，并非承诺上述所有批次、双平台安装包或真实 OAuth 审批届时全部完成。真实 Supabase RLS、五账号联机、Canvas/交大邮箱真实账号、Windows/macOS GUI 与恢复演练均以证据为准；外部条件不满足应标注 Blocked。开发一轮只保留一个 PR，上一轮合并/关闭后再开始下一轮。执行拆分、退出条件与隐私边界见 [ALPHA-SYNC 实施计划](w5/27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。
