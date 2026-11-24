@@ -132,7 +132,8 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - **002E 续篇：PR #40 已合并，真实云端验收未做**。旧同步数据隔离区支持只读审查和明确授权，不会复用旧 payload / serverVersion / operationId；旧删除墓碑仍隔离。详见 [34](34_ALPHA_SYNC_002E_LEGACY_REVIEW.md)。
 - **002F 第一部分：PR #41 已合并，真实云端验收未做**。本地保存的 deviceId/cursor 必须先通过格式/边界检查；当非零 cursor 有 pending 时，先用同一 owner/device/cursor 只读 pull 预检；异常即禁止本轮上传，发现未读远端变化则先拉取并延后上传。**不能据此宣称修复设备撤销、损坏 Cursor 自动重建或跨库崩溃一致性**。详见 [35](35_ALPHA_SYNC_002F_CURSOR_PREFLIGHT.md)。
 - **002F 续篇：PR #42 已合并，真实云端验收未做**。当前登录账号无任务/日历 pending 和未解决冲突时，二次确认后使用当前 JWT 撤销旧设备，Main 一次性令牌 + owner/device/cursor CAS 更换本机设备 ID，保留 Cursor/本地数据，不自动上传；零 Cursor 且有 pending 时也先只读预检。损坏 Cursor 重建、待发送操作跨设备迁移、跨库崩溃恢复及真实 RLS/双设备仍是阻塞。详见 [36](36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md)。
-- **002G：开发中，未做真实云端/跨设备验收**。任务库 v10 持久拉取页检查点，在两库/冲突记录处理中断时下次手动同步先重放并原子推进 Cursor；数据损坏或账号/设备不符时失败关闭，恢复当轮先不上传本地 Outbox。仍无跨库全局事务或损坏 Cursor 自动重建。详见 [37](37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md)。
+- **002G：PR #43 已合并，真实云端/跨设备验收未做**。任务库 v10 持久拉取页检查点，在两库/冲突记录处理中断时下次手动同步先重放并原子推进 Cursor；数据损坏或账号/设备不符时失败关闭，恢复当轮先不上传本地 Outbox。仍无跨库全局事务或损坏 Cursor 自动重建。详见 [37](37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md)。
+- **002H：开发中，隔离项目 RPC 未部署，真实验收未做**。当前账号只读设备状态/Cursor 查询，损坏本地状态/待恢复 Pull 检查点先阻断；精确 operationId + 完整请求匹配的云端回执查验，仅已接受项目本地 ACK，未知/冲突/不匹配不清空；额外后端 SQL 需明确授权人工部署。无自动 Cursor 重建/数据回写。详见 [38](38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
 - **003：未开发**。团队消息仍使用轮询，Realtime + 断线补拉 + 撤权后拒绝 + 五账号联机尚无真实证据。
 - **Embedding：未开发**。ALPHA-KB-005 继续保留，待同步核心门槛后先做离线 PoC；不将 PR #32 的 AI 单段解释误算为本地 embedding。
 - 2026-11-25 内部 Alpha 以真实授权测试账号、RLS 反向测试、最小跨设备增量场景及已知风险记录为条件性目标；未验证项应明确阻塞，不能冒充完成。详见 [27 同步优先实施计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。
