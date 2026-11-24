@@ -106,8 +106,8 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.cloudWorkspaceSnapshot,workspaceId) as Promise<SharedWorkspaceSnapshot>,
     watchWorkspace: (workspaceId:string) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudWatchWorkspace,workspaceId) as Promise<WorkspaceLiveUpdate>,
-    stopWorkspaceWatch: () =>
-      ipcRenderer.invoke(IPC_CHANNELS.cloudStopWorkspaceWatch) as Promise<{stopped:true}>,
+    stopWorkspaceWatch: (workspaceId:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudStopWorkspaceWatch,workspaceId) as Promise<{stopped:true}>,
     onWorkspaceLiveUpdated:(listener:(state:WorkspaceLiveUpdate)=>void)=>{
       const handler=(_event:Electron.IpcRendererEvent,payload:WorkspaceLiveUpdate)=>listener(payload);
       ipcRenderer.on(IPC_CHANNELS.cloudWorkspaceLiveUpdated,handler);
