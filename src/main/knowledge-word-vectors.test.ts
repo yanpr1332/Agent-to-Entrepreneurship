@@ -43,12 +43,12 @@ describe("ALPHA-KB-005B actual offline static word-vector encoder",()=>{
   ])("rejects corrupted, ambiguous or executable-looking word-vector format",(text)=>{
     expect(()=>loadStaticWordVectors(Buffer.from(text))).toThrow();
   });
-  it("refuses oversized files, illegal dimensions, non-UTF8 and huge vectors",()=>{
+  it("refuses oversized files, illegal dimensions, non-UTF8 and huge vectors",async()=>{
     expect(()=>loadStaticWordVectors(Buffer.alloc(MAX_LOCAL_VECTOR_FILE+1))).toThrow();
     expect(()=>loadStaticWordVectors(Buffer.from([0xff,0xfe]))).toThrow();
     expect(()=>loadStaticWordVectors(Buffer.from("1 500\na 0 0\n"))).toThrow();
     expect(()=>staticWordVector("a".repeat(2201),data())).toThrow();
-    expect(()=>staticWordVectorProvider(data()).embed(
+    await expect(staticWordVectorProvider(data()).embed(
       Array.from({length:17},()=> "energy"),"query")).rejects.toThrow("batch");
   });
 });
