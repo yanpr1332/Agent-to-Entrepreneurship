@@ -690,9 +690,13 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return personalSyncService().inspectRecovery();
   });
-  handle(IPC_CHANNELS.cloudReconcilePersonalSyncReceipts, async (event) => {
+  handle(IPC_CHANNELS.cloudReviewPersonalSyncReceipts, async (event) => {
     requireTrustedSender(event);
-    return personalSyncService().reconcileReceipts();
+    return personalSyncService().reviewReceipts();
+  });
+  handle(IPC_CHANNELS.cloudReconcilePersonalSyncReceipts, async (event,input:unknown) => {
+    requireTrustedSender(event);
+    return personalSyncService().reconcileReceipts(input);
   });
   handle(IPC_CHANNELS.cloudPersonalSyncCandidates, (event) => {
     requireTrustedSender(event);
