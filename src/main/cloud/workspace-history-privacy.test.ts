@@ -160,8 +160,8 @@ describe("ALPHA-SYNC-003D protected and revocable local team history",()=>{
     const recovered=new WorkspaceHistoryStore(path,testHistoryCipher);
     opened.push(recovered);
     expect(recovered.getCheckpoint(A,W)?.nextOrdinal).toBe("1");
-    expect(recovered.list(A,W,"message").items[0].body)
-      .toBe("Confidential study group report");
+    expect(recovered.list(A,W,"message").items[0])
+      .toMatchObject({body:"Confidential study group report"});
   });
 
   it("purges only the target account, including staged snapshots, without cloud deletion",()=>{
