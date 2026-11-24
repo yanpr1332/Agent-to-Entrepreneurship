@@ -10,8 +10,9 @@ const stores:Array<{close:()=>void}>=[];
 function setup(){
   const tasks=new LocalStore(":memory:"),calendar=new FixedCalendarStore(":memory:");
   stores.push(tasks,calendar);
-  const device=tasks.getOrCreatePersonalSyncDevice(OWNER);
+  tasks.getOrCreatePersonalSyncDevice(OWNER);
   tasks.advancePersonalSyncCursor(OWNER,"12");
+  const device=tasks.getOrCreatePersonalSyncDevice(OWNER);
   return {tasks,calendar,device};
 }
 function cloud(){
