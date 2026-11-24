@@ -17,7 +17,7 @@ type PendingOutbox=TaskOutbox|CalendarOutbox;
 type ReceiptEvidence={item:PendingOutbox;result:PersonalSyncReceiptLookup};
 type ReceiptReviewState={
   token:string;ownerId:string;deviceId:string;cursor:string;expiresAt:number;
-  taskCount:number;calendarCount:number;conflicts:number;
+  taskCount:number;calendarCount:number;conflictsFingerprint:string;
   items:PendingOutbox[];receipts:ReceiptEvidence[];
 };
 const RECEIPT_REVIEW_TTL_MS=5*60_000;
@@ -202,7 +202,7 @@ export class PersonalSyncService{
       throw Error("Interrupted pull checkpoint must be recovered before acknowledgement");
     const current=this.receiptOutbox(state.ownerId);
     if(current.taskCount!==state.taskCount||current.calendarCount!==state.calendarCount||
-       this.tasks.countPersonalSyncConflicts(state.ownerId)!==state.conflicts||
+       JSON.stringify(this.tasks.listPersonalSyncConflicts(state.ownerId))!==state.conflictsFingerprint||
        JSON.stringify(current.items)!==JSON.stringify(state.items))
       throw Error("Local pending queue changed since receipt review; inspect again");
   }
@@ -218,7 +218,7 @@ export class PersonalSyncService{
       ownerId,deviceId:device.deviceId,cursor:device.cursor,
       token:randomUUID(),expiresAt:Date.now()+RECEIPT_REVIEW_TTL_MS,
       items,taskCount,calendarCount,
-      conflicts:this.tasks.countPersonalSyncConflicts(ownerId),receipts:[],
+      conflictsFingerprint:JSON.stringify(this.tasks.listPersonalSyncConflicts(ownerId)),receipts:[],
     };
     let eligibleToAcknowledge=0,notFound=0,unresolved=0;
     for(const item of items){
@@ -236,9 +236,11 @@ export class PersonalSyncService{
       if(result.status==="mismatch")
         throw Error("Cloud receipt request differs from saved operation; manual review required");
       if(result.status==="not-found")notFound++;
-      else if(result.response.status==="accepted"||result.response.status==="duplicate")
-        eligibleToAcknowledge++;
-      else unresolved++;
+      else if(result.status==="matched"){
+        if(result.response.status==="accepted"||result.response.status==="duplicate")
+          eligibleToAcknowledge++;
+        else unresolved++;
+      }else throw Error("Unrecognized receipt review status");
       state.receipts.push({item,result});
     }
     this.assertReviewedReceiptQueue(state); // changes during network lookup require fresh review
