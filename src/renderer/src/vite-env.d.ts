@@ -93,6 +93,7 @@ declare global {
         personalSyncConflicts: () => Promise<PersonalSyncConflictRecord[]>;
         inspectPersonalSyncRecovery: () => Promise<PersonalSyncRecoveryHealth>;
         reviewPersonalSyncReceipts: () => Promise<PersonalSyncReceiptReview>;
+        discardPersonalSyncReceiptReview: () => Promise<{cancelled:true}>;
         reconcilePersonalSyncReceipts: (input:PersonalSyncReceiptConfirmation) => Promise<PersonalSyncReceiptReconcileResult>;
         reviewPersonalSyncDeviceReplacement: () => Promise<PersonalSyncDeviceReplacementReview>;
         confirmPersonalSyncDeviceReplacement: (input:PersonalSyncDeviceReplacementRequest) => Promise<{replaced:true}>;
