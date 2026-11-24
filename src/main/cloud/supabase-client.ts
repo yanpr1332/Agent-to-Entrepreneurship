@@ -260,7 +260,7 @@ export class SharedCloudClient {
     await this.requireSession();
     const session=this.session!;
     const host=new URL(this.project.projectUrl);
-    if(host.protocol!=="https:"||!/^[a-z0-9-]+\\.supabase\\.co$/i.test(host.hostname))
+    if(host.protocol!=="https:"||!/^[a-z0-9-]+\.supabase\.co$/i.test(host.hostname))
       throw Error("Realtime project host is not allowlisted");
     return {url:"wss://"+host.hostname+"/realtime/v1/websocket?apikey="+
       encodeURIComponent(this.project.publishableKey)+"&vsn=1.0.0",
