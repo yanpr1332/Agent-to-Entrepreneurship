@@ -57,7 +57,10 @@ describe("REPO-RENAME-001: first-run userData and SQLite migration",()=>{
       .toContain("APP_START");
     expect(readFileSync(join(target,"Local Storage","profile.settings"),"utf8"))
       .toBe("keep theme");
-    expect(readdirSync(target).some(x=>x.endsWith(".sqlite-wal"))).toBe(false);
+    // SQLite may create a NEW WAL file in its destination when opened.
+    // The unsafe case is copying OLD legacy sidecars rather than using backup().
+    expect(readdirSync(target).some(x=>x.startsWith("ate-")&&x.endsWith(".sqlite-wal")))
+      .toBe(false);
     expect(JSON.parse(readFileSync(join(target,PROFILE_MARKER),"utf8")).sourceRetained)
       .toBe(true);
     // The ORIGINAL profile stays intact, including its encrypted credentials.
