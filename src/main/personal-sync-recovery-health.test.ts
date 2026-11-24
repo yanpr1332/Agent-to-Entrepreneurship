@@ -7,7 +7,7 @@ import {LocalStore} from "./local-store";
 import {FixedCalendarStore} from "./fixed-calendar-store";
 import {PersonalSyncService} from "./personal-sync";
 import type {SharedCloudClient} from "./cloud/supabase-client";
-import type {PersonalSyncPullPage} from "../shared/personal-sync-contract";
+import type {PersonalSyncPullPage,PersonalSyncDeviceInspection,PersonalSyncReceiptLookup} from "../shared/personal-sync-contract";
 
 const OWNER="aae9ac05-b37d-4898-aee4-5848fa28e01b";
 const OTHER="9db8a5cb-1d6c-4e93-807e-e18be4b482a1";
@@ -25,8 +25,8 @@ function cloud(){
   return {
     currentUserId:vi.fn(()=>owner),
     changeOwner:(next:string)=>{owner=next;},
-    inspectPersonalSyncDevice:vi.fn(async()=>({deviceStatus:"active" as const,serverCursor:"5"})),
-    lookupPersonalSyncReceipt:vi.fn(async()=>({status:"not-found" as const,response:null})),
+    inspectPersonalSyncDevice:vi.fn(async():Promise<PersonalSyncDeviceInspection>=>({deviceStatus:"active",serverCursor:"5"})),
+    lookupPersonalSyncReceipt:vi.fn(async():Promise<PersonalSyncReceiptLookup>=>({status:"not-found",response:null})),
     registerPersonalSyncDevice:vi.fn(),
     applyPersonalSyncOperation:vi.fn(),
     pullPersonalSyncChanges:vi.fn(),
