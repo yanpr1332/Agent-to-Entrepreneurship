@@ -637,3 +637,29 @@ input,textarea,select{border-radius:8px}
   .topbar{padding:0 16px}
   .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+
+/* UI FOUNDATION · shared form rhythm, readable states and restrained motion */
+:root{font-size:14px}
+::selection{background:var(--tint);color:var(--ink)}
+a{color:var(--accent);text-underline-offset:3px}
+button{font-weight:550}
+button:active:not(:disabled){transform:translateY(0)}
+input,textarea,select{color:var(--ink);background:var(--surface);border-color:var(--line)}
+input::placeholder,textarea::placeholder{color:var(--muted);opacity:.72}
+input:hover:not(:disabled),textarea:hover:not(:disabled),select:hover:not(:disabled){border-color:color-mix(in srgb,var(--accent) 40%,var(--line))}
+.panel-heading h2,.section-heading h2{letter-spacing:-.15px}
+.panel-heading{min-height:30px}
+.panel-heading>*{min-width:0}
+.nav-item:focus-visible,.icon-button:focus-visible,.text-button:focus-visible{
+  outline:0;box-shadow:0 0 0 3px var(--focus-ring)
+}
+.nav-item.active{position:relative}
+.nav-item.active::before{content:"";position:absolute;left:4px;top:9px;bottom:9px;width:2px;border-radius:2px;background:var(--accent)}
+.sidebar-bottom .avatar{flex-shrink:0}
+.content>*{min-width:0}
+.page-heading>*,.welcome-row>*{min-width:0}
+.task-copy,.history-copy,.mail-preview,.ai-preview{overflow-wrap:anywhere}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none!important;scroll-behavior:auto!important}
+}
