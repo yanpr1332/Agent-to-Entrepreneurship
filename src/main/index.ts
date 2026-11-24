@@ -711,6 +711,12 @@ function registerIpcHandlers(): void {
       ? workspaceHistoryService.snapshot(workspaceId)
       : sharedCloud.workspaceSnapshot(workspaceId);
   });
+  handle(IPC_CHANNELS.cloudClearTeamHistory, (event,confirmation:unknown)=>{
+    requireTrustedSender(event);
+    if(confirmation!=="ERASE_CURRENT_TEAM_CACHE")
+      throw Error("Explicit team cache deletion confirmation required");
+    return teamHistory().purgeCurrentAccountCache();
+  });
   handle(IPC_CHANNELS.cloudWorkspaceHistoryOlder, (event,workspaceId:unknown,
     kind:"message"|"task",before:unknown) => {
     requireTrustedSender(event);
