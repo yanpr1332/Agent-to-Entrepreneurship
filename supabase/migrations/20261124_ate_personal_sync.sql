@@ -197,6 +197,9 @@ begin
   elsif jsonb_typeof(p_operation->'baseVersion')='null' then
     v_base_version := null;
   else
+    if (p_operation->>'baseVersion')::numeric <> trunc((p_operation->>'baseVersion')::numeric) then
+      raise exception 'Invalid personal sync base version';
+    end if;
     v_base_version := (p_operation->>'baseVersion')::bigint;
     if v_base_version < 0 then raise exception 'Invalid personal sync base version'; end if;
   end if;
@@ -264,7 +267,7 @@ begin
         raise exception 'Manual calendar payload is outside allowed bounds';
       end if;
       perform v_day::date;
-      if v_series_id is not null and v_series_id !~ '^manual:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12} then
+      if v_series_id is not null and v_series_id !~ '^manual:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' then
         raise exception 'Only manual calendar series may sync';
       end if;
     end if;
@@ -354,7 +357,7 @@ declare
 begin
   if v_owner is null then raise exception 'Authentication required'; end if;
   if p_device_id is null or p_cursor is null
-     or p_cursor !~ '^(0|[1-9][0-9]{0,18})
+     or p_cursor !~ '^(0|[1-9][0-9]{0,18})$'
      or p_limit is null or p_limit not between 1 and 500 then
     raise exception 'Invalid personal sync pull request';
   end if;

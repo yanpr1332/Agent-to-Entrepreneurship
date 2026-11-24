@@ -66,8 +66,8 @@ describe("five-user workspace migration security baselines (static)",()=>{
   it("uses per-owner serialized cursors, strict entity whitelists and durable idempotency receipts",()=>{
     expect(personalSql).toContain("for update");
     expect(personalSql).toContain("next_cursor=next_cursor+1");
-    expect(personalSql).toContain("primary key(owner_id,operation_id)");
-    expect(personalSql).toContain("primary key(owner_id,cursor)");
+    expect(personalSql).toContain("primary key (owner_id,operation_id)");
+    expect(personalSql).toContain("primary key (owner_id,cursor)");
     expect(personalSql).toContain("'personal-task'");
     expect(personalSql).toContain("'manual-calendar-event'");
     expect(personalSql).not.toMatch(/service_role\s*[:=]/i);
