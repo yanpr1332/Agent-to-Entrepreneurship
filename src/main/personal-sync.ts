@@ -174,6 +174,12 @@ export class PersonalSyncService{
     return job;
   }
 
+  /** Explicit cancellation clears the in-memory capability; it never writes data. */
+  discardReceiptReview():{cancelled:true}{
+    this.receiptReview=null;
+    return {cancelled:true};
+  }
+
   /** Both queues must be unchanged; counts alone do not detect edits. */
   private receiptOutbox(ownerId:string):{items:PendingOutbox[];taskCount:number;calendarCount:number}{
     const taskCount=this.tasks.countPersonalSyncOutbox(ownerId);
