@@ -292,4 +292,21 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     expect(db.listManualCalendarSyncOutbox()).toEqual([]);
   });
 
+
+  it("writes per-occurrence tombstones when deleting an enrolled manual series",()=>{
+    const db=calendar();
+    const group=db.create({title:"手动系列",day:"2026-11-12",startMinute:540,durationMinutes:60,weeks:2},now);
+    for(let index=0;index<group.length;index++){
+      db.setManualEventSyncEnabled(group[index].id,true,now);
+      const operation=db.listManualCalendarSyncOutbox().find(x=>x.entityId===group[index].id)!;
+      db.acknowledgeManualCalendarSyncOperation(operation.operationId,10+index);
+    }
+    expect(db.deleteSeries(group[0].id)).toBe(2);
+    expect(db.list()).toHaveLength(0);
+    expect(db.listManualCalendarSyncOutbox()).toMatchObject([
+      {entityId:group[0].id,action:"delete",baseVersion:10,payload:null},
+      {entityId:group[1].id,action:"delete",baseVersion:11,payload:null},
+    ]);
+  });
+
 });
