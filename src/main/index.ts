@@ -703,7 +703,7 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.cloudPersonalSyncConflicts, (event) => {
     requireTrustedSender(event);
-    return localStore().listPersonalSyncConflicts(sharedCloud.currentUserId());
+    return personalSyncService().listConflicts();
   });
   handle(IPC_CHANNELS.cloudResolvePersonalSyncConflict, async (event,input:unknown) => {
     requireTrustedSender(event);

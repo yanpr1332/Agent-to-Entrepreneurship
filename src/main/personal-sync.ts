@@ -1,6 +1,7 @@
 import {
   parsePersonalSyncOperation, parsePersonalSyncResolutionRequest,
-  type PersonalSyncChange, type PersonalSyncConflict, type PersonalSyncRunResult,
+  type PersonalSyncChange, type PersonalSyncConflict, type PersonalSyncConflictRecord,
+  type PersonalSyncRunResult,
 } from "../shared/personal-sync-contract";
 import type { SharedCloudClient } from "./cloud/supabase-client";
 import type { LocalStore } from "./local-store";
@@ -44,6 +45,37 @@ export class PersonalSyncService{
     return job;
   }
 
+
+  /** The UI shows only current local intents; an edit after a prior conflict
+   * rotates its operation ID. Reading the conflict list reconciles this metadata
+   * without sending any data or changing the remote snapshot. */
+  listConflicts():PersonalSyncConflictRecord[]{
+    const ownerId=this.cloud.currentUserId();
+    const records=this.tasks.listPersonalSyncConflicts(ownerId);
+    if(!this.running){
+      for(const conflict of records){
+        if(conflict.reason!=="remote-change-while-local-pending"&&
+          conflict.reason!=="remote-delete-while-local-pending")continue;
+        const pending=conflict.entityType==="personal-task"
+          ?this.tasks.getPersonalSyncPendingIntent(ownerId,conflict.entityId)
+          :this.calendar.getManualCalendarPendingIntent(ownerId,conflict.entityId);
+        if(pending)this.tasks.refreshPersonalSyncConflictLocal(
+          ownerId,conflict.entityType,conflict.entityId,pending);
+      }
+    }
+    return this.tasks.listPersonalSyncConflicts(ownerId).map(conflict=>{
+      const pending=conflict.entityType==="personal-task"
+        ?this.tasks.getPersonalSyncPendingIntent(ownerId,conflict.entityId)
+        :this.calendar.getManualCalendarPendingIntent(ownerId,conflict.entityId);
+      return {...conflict,canResolve:(
+        conflict.reason==="remote-change-while-local-pending"||
+        conflict.reason==="remote-delete-while-local-pending")&&
+        Boolean(pending&&pending.operationId===conflict.localOperationId&&
+          pending.action===conflict.localAction&&
+          JSON.stringify(pending.payload?JSON.parse(pending.payload):null)===
+            JSON.stringify(conflict.localPayload))};
+    });
+  }
 
   /**
    * Conflict decisions are explicit and guarded by the reviewed local operation

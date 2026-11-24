@@ -184,6 +184,8 @@ export interface PersonalSyncConflict {
 export interface PersonalSyncConflictRecord extends PersonalSyncConflict {
   createdAt:string;
   updatedAt:string;
+  /** Main-derived UI eligibility; never supplied to a resolution request. */
+  canResolve?:boolean;
 }
 
 /** Owner identity is never accepted from Renderer. The version and operation

@@ -357,9 +357,7 @@ export default function CloudWorkspace() {
             “采用云端”可能覆盖或删除本地记录；操作前会再次读取云端增量并校验版本，冲突版本变化时必须重新审阅。
             {personalSyncResult && personalSyncResult.conflicts>personalConflicts.length ? " 当前仅展示最新 100 条。" : ""}</p>
           {personalConflicts.map(item=>{
-            const canResolve=Boolean(item.localOperationId)&&
-              (item.reason==="remote-change-while-local-pending"||
-               item.reason==="remote-delete-while-local-pending");
+            const canResolve=item.canResolve===true&&Boolean(item.localOperationId);
             const reviewed=resolutionReview?.entityType===item.entityType&&
               resolutionReview.entityId===item.entityId&&
               resolutionReview.remoteVersion===item.remoteVersion&&

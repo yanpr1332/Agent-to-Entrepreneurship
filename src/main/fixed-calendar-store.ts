@@ -223,6 +223,19 @@ export class FixedCalendarStore {
         baseVersion:row.base_version,payload:row.payload,createdAt:row.created_at}));
   }
 
+  getManualCalendarPendingIntent(ownerInput:unknown,entityInput:unknown):{
+    operationId:string;action:"upsert"|"delete";payload:string|null;
+  }|null{
+    const ownerId=syncOwnerId(ownerInput),entityId=requireUuid(entityInput);
+    const row=this.db.prepare(
+      "SELECT operation_id,action,payload FROM manual_calendar_sync_outbox "+
+      "WHERE owner_id=? AND entity_id=?"
+    ).get(ownerId,entityId) as {
+      operation_id:string;action:"upsert"|"delete";payload:string|null;
+    }|undefined;
+    return row?{operationId:row.operation_id,action:row.action,payload:row.payload}:null;
+  }
+
   hasPendingManualCalendarSyncOperation(ownerInput:unknown,operationIdInput:unknown):boolean{
     const ownerId=syncOwnerId(ownerInput),operationId=requireUuid(operationIdInput);
     return Boolean(this.db.prepare(

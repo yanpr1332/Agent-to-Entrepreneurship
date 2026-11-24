@@ -805,6 +805,9 @@ export class LocalStore {
         "WHERE owner_id=? AND entity_type='personal-task' AND entity_id=?"
       ).get(ownerId,entityId) as {operation_id:string;action:"upsert"|"delete";payload:string|null}|undefined;
       const task=this.findTask(entityId);
+      const mailDerived=Boolean(this.db.prepare(
+        "SELECT 1 FROM mail_candidate_reviews WHERE task_id=? AND decision='accepted'"
+      ).get(entityId));
       const snapshot=task?JSON.stringify({
         title:task.title,description:task.description,dueDate:task.dueDate,
         priority:task.priority,completed:task.completed,
@@ -813,7 +816,7 @@ export class LocalStore {
         pending.action!==conflict.localAction||
         JSON.stringify(pending.payload?JSON.parse(pending.payload):null)!==
           JSON.stringify(conflict.localPayload)||
-        (pending.action==="upsert"&&(!task||task.source!==null||snapshot!==pending.payload))||
+        (pending.action==="upsert"&&(!task||task.source!==null||mailDerived||snapshot!==pending.payload))||
         (pending.action==="delete"&&task))
         throw Error("Local task changed; refresh and review before resolving");
       if(input.choice==="use-remote"){
