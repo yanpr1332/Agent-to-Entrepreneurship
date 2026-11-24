@@ -5,8 +5,8 @@ import {
   type LocalEmbeddingProvider,
 } from "./knowledge-embeddings";
 
-type Request={id:number;type:"init";path:string;revision:string}|
-  {id:number;type:"embed";kind:"query"|"passage";texts:readonly string[]};
+type RequestPayload={type:"init";path:string;revision:string}|
+  {type:"embed";kind:"query"|"passage";texts:readonly string[]};
 type Reply={id:number;ok:boolean;model?:unknown;values?:unknown;error?:string};
 const INIT_TIMEOUT=20_000;
 const EMBED_TIMEOUT=15_000;
@@ -60,7 +60,7 @@ export class OfflineWordVectorWorker implements LocalEmbeddingProvider {
     this.pending.clear();
     void this.worker.terminate();
   }
-  private request(req:Omit<Request,"id">,timeoutMs:number):Promise<Reply>{
+  private request(req:RequestPayload,timeoutMs:number):Promise<Reply>{
     if(this.closed)return Promise.reject(Error("Offline embedding worker is closed"));
     const id=++this.sequence;
     if(this.pending.size>2)
