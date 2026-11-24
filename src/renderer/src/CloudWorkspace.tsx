@@ -174,10 +174,7 @@ export default function CloudWorkspace() {
       if(update.hint)pull(); // Re-fetch under REST RLS; ignore websocket row content.
     });
     pull(); // Always catch up immediately, regardless of socket availability.
-    void window.desktop.cloud.watchWorkspace(selected).then(update=>{
-      if(!active||selectedRef.current!==selected)return;
-      phase=update.phase;setWorkspaceLivePhase(phase);
-    }).catch(error=>{
+    void window.desktop.cloud.watchWorkspace(selected).catch(error=>{
       if(!active)return;
       if(isWorkspaceAccessDenied(error))clearSelectedWorkspace();
       else{phase="fallback";setWorkspaceLivePhase("fallback");}
