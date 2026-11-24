@@ -498,3 +498,13 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
   border-radius:8px;min-width:0}
 .cloud-sync-conflict strong{font-size:12px;overflow-wrap:anywhere}
 .cloud-sync-conflict small,.cloud-sync-conflict p{font-size:11px;color:var(--muted);margin:0;overflow-wrap:anywhere}
+
+/* ALPHA-SYNC-002E: clear, two-step conflict decisions. */
+.cloud-sync-version{display:grid;gap:5px;border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0}
+.cloud-sync-version strong{font-size:11px}
+.cloud-sync-version p{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}
+.cloud-sync-resolution{display:grid;gap:8px;margin-top:5px}
+.cloud-sync-confirm{display:grid;gap:9px;border:1px solid var(--line);border-radius:8px;
+  padding:12px;min-width:0}
+.cloud-sync-confirm p{font-size:12px;line-height:1.65}
+.cloud-sync-resolution .button-row{flex-wrap:wrap}

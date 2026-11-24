@@ -45,11 +45,12 @@ W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全�
 - PR #35 已合并：逐条授权、本地 Outbox、待发送操作合并和版本化删除墓碑。
 - PR #36 已合并：个人云端表/RLS、设备注册/撤销、版本检查、幂等回执、增量 Cursor RPC。
 - PR #37 已合并：owner-scoped 本地 enrollment/Outbox、旧 ownerless 数据隔离和明确重新授权；任务库 schema v8、日历库 v5。
-- 当前开发轮 ALPHA-SYNC-002D：Main 进程手动 push/ack + pull/SQLite 应用、逐条授权 UI、冲突保留与状态展示；任务库 schema v9 增加冲突记录表。
+- PR #38 已合并：Main 进程手动 push/ack + pull/SQLite 应用、逐条授权 UI、冲突保留与状态展示；任务库 schema v9 增加冲突记录表。
+- 当前开发轮 ALPHA-SYNC-002E：对有本地 pending 的任务/手动日历冲突进行版本校验后的“保留本机/采用云端”二次确认；未解决冲突阻止继续上传/覆写。设备撤销、Cursor 恢复、旧数据 quarantine 审查仍待后续。
 
-详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 与 [32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md)。
+详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 、[32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md) 与 [33 冲突解决](docs/w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md)。
 
-**重要边界：目前只提供用户手动触发的同步，不会后台自动上传；冲突可持久保留并展示，但尚无保留本机/采用云端的解决 UI。Supabase 迁移未部署，真实 RLS/双设备验收尚未完成。** Canvas、ICS、邮件、知识库、专注记录、学习计划和 legacy ownerless 队列均不会自动上传。
+**重要边界：目前只提供用户手动触发的同步，不会后台自动上传；002E 只允许对本地待发送操作与云端变更冲突选择一方，来源冲突、学习计划占用、容量问题仍需人工处理。Supabase 迁移未部署，真实 RLS/双设备验收尚未完成。** Canvas、ICS、邮件、知识库、专注记录、学习计划和 legacy ownerless 队列均不会自动上传。
 
 ## Windows / macOS 本地 Alpha 验收指南
 
@@ -179,7 +180,7 @@ npm run build
 - npm test：Vitest 单元及集成测试。
 - npm run build：再次进行类型检查和测试，再编译 Electron-Vite；**不会生成最终安装包**。
 
-#### ALPHA-SYNC-002D 定向验收命令
+#### ALPHA-SYNC-002D/002E 定向验收命令
 
 如果只想先验证个人任务/手动日历同步相关改动，在仓库根目录执行：
 

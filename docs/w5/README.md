@@ -202,3 +202,8 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 [32 Push/Pull 实施说明](32_ALPHA_SYNC_002D_PUSH_PULL.md) 增加 Main process 当前会话身份、手动设备注册、owner-scoped Outbox 上传/回执、Cursor 分页拉取、任务/手动课程本地应用、owner-scoped 冲突持久化与逐条授权 UI。任务库 schema v9 新增冲突表；日历库仍为 v5。
 
 此轮不会自动后台同步，不会部署 Supabase；冲突仅保留/展示，尚不能在 UI 中选择本机或云端版本。真实 RLS、网络联机与双设备验收仍未完成。
+
+
+## ALPHA-SYNC-002E 冲突的安全裁决（开发中，2026-11-24）
+
+[33 冲突解决实施与验收](33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md) 说明按 owner 校验、最新远端 pull、操作 ID + 远端版本 CAS、显式二次确认、本机保留的重基上传与采用云端的原子更新。**来源冲突/学习计划占用/容量问题仍阻塞**，不能强制覆盖。设备撤销、Cursor 异常恢复、旧队列审查 UI 和真实多设备验收留在后续阶段。

@@ -1,4 +1,7 @@
-import { parsePersonalSyncOperation, type PersonalSyncConflict, type PersonalSyncRunResult } from "../shared/personal-sync-contract";
+import {
+  parsePersonalSyncOperation, parsePersonalSyncResolutionRequest,
+  type PersonalSyncChange, type PersonalSyncConflict, type PersonalSyncRunResult,
+} from "../shared/personal-sync-contract";
 import type { SharedCloudClient } from "./cloud/supabase-client";
 import type { LocalStore } from "./local-store";
 import type { FixedCalendarStore } from "./fixed-calendar-store";
@@ -41,6 +44,29 @@ export class PersonalSyncService{
     return job;
   }
 
+
+  /**
+   * Conflict decisions are explicit and guarded by the reviewed local operation
+   * and remote version. No cloud account identity comes from the IPC payload.
+   * Caller refreshes the remote cursor before invoking this synchronous method.
+   */
+  resolveConflict(raw:unknown):{resolved:true;choice:"keep-local"|"use-remote"}{
+    if(this.stopping||this.running)throw Error("Wait until personal sync is idle before resolving");
+    const ownerId=this.cloud.currentUserId();
+    const input=parsePersonalSyncResolutionRequest(raw);
+    const conflict=this.tasks.getPersonalSyncConflict(ownerId,input.entityType,input.entityId);
+    if(!conflict||conflict.remoteVersion!==input.remoteVersion||
+      conflict.localOperationId!==input.localOperationId)
+      throw Error("Conflict changed; refresh and review the latest versions");
+    if(input.entityType==="personal-task")
+      this.tasks.resolvePersonalTaskConflict(ownerId,input);
+    else{
+      this.calendar.resolveManualCalendarConflict(ownerId,conflict,input);
+      this.tasks.clearPersonalSyncConflict(ownerId,input);
+    }
+    return {resolved:true,choice:input.choice};
+  }
+
   hasInFlightRun():boolean{return this.running!==null;}
 
   cancel():void{this.stopping=true;}
@@ -77,6 +103,9 @@ export class PersonalSyncService{
         ? this.tasks.hasPendingPersonalSyncOperation(ownerId,item.operationId)
         : this.calendar.hasPendingManualCalendarSyncOperation(ownerId,item.operationId);
       if(!stillPending)continue;
+      // Never send an unresolved conflict just because its pending operation
+      // still exists; only an explicit user resolution can rebase that intent.
+      if(this.tasks.getPersonalSyncConflict(ownerId,item.entityType,item.entityId))continue;
       const createdAt=new Date(item.createdAt);
       if(!Number.isFinite(createdAt.getTime()))throw Error("Local sync queue contains an invalid timestamp");
       const payload=item.payload===null?null:JSON.parse(item.payload) as unknown;
@@ -128,9 +157,29 @@ export class PersonalSyncService{
         BigInt(page.nextCursor)<=BigInt(cursor))
         throw Error("Cloud returned changes at or behind the saved cursor");
 
-      const taskChanges=page.changes.filter(change=>change.entityType==="personal-task");
-      const calendarChanges=page.changes.filter(change=>change.entityType==="manual-calendar-event");
+      // A conflict remains an explicit user decision even after its local
+      // outbox entry is revoked. Later remote pages may update the reviewed
+      // server version, but must never silently apply over the held local copy.
+      const ready:PersonalSyncChange[]=[];
+      const held:PersonalSyncConflict[]=[];
+      for(const change of page.changes){
+        const conflict=this.tasks.getPersonalSyncConflict(ownerId,change.entityType,change.entityId);
+        if(!conflict){ready.push(change);continue;}
+        if(change.version>conflict.remoteVersion){
+          held.push({
+            ...conflict,remoteVersion:change.version,remotePayload:change.payload,
+            remoteDeleted:change.deleted,remoteUpdatedAt:change.updatedAt,
+            reason:conflict.reason==="remote-change-while-local-pending"||
+              conflict.reason==="remote-delete-while-local-pending"
+              ? change.deleted?"remote-delete-while-local-pending":"remote-change-while-local-pending"
+              : conflict.reason,
+          });
+        }
+      }
+      const taskChanges=ready.filter(change=>change.entityType==="personal-task");
+      const calendarChanges=ready.filter(change=>change.entityType==="manual-calendar-event");
       const conflicts:PersonalSyncConflict[]=[
+        ...held,
         ...this.tasks.applyRemotePersonalTaskChanges(ownerId,taskChanges),
         ...this.calendar.applyRemoteManualCalendarChanges(ownerId,calendarChanges),
       ];

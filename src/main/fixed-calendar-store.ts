@@ -6,6 +6,7 @@ import { LocalStore } from "./local-store";
 import { requireUuid } from "../shared/cloud-model";
 import type {
   PersonalSyncChange, PersonalSyncConflict, PersonalSyncCandidate, ManualCalendarSnapshot,
+  PersonalSyncConflictRecord, PersonalSyncResolutionRequest,
 } from "../shared/personal-sync-contract";
 import { dayOffset } from "../shared/planning-model";
 import { toLocalCanvasSlot,type CanvasCalendarEvent,type CanvasCalendarFixedEvent,
@@ -387,6 +388,106 @@ export class FixedCalendarStore {
       }
       this.db.exec("COMMIT");
       return "stale";
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+
+
+  /** Apply one explicitly reviewed calendar conflict in a single calendar SQLite
+   * transaction. Main must delete the separate task-DB conflict AFTER this commits. */
+  resolveManualCalendarConflict(ownerInput:unknown,conflict:PersonalSyncConflictRecord,
+    input:PersonalSyncResolutionRequest,now=new Date()):void{
+    const ownerId=syncOwnerId(ownerInput),entityId=requireUuid(input.entityId);
+    if(input.entityType!=="manual-calendar-event"||conflict.entityId!==entityId||
+      conflict.entityType!=="manual-calendar-event"||
+      conflict.remoteVersion!==input.remoteVersion||
+      conflict.localOperationId!==input.localOperationId||
+      (conflict.reason!=="remote-change-while-local-pending"&&
+        conflict.reason!=="remote-delete-while-local-pending"))
+      throw Error("Conflict changed; refresh and review the latest versions");
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const pending=this.db.prepare(
+        "SELECT operation_id,action,payload FROM manual_calendar_sync_outbox "+
+        "WHERE owner_id=? AND entity_id=?"
+      ).get(ownerId,entityId) as {
+        operation_id:string;action:"upsert"|"delete";payload:string|null;
+      }|undefined;
+      const event=this.list().find(item=>item.id===entityId);
+      const snapshot=event?JSON.stringify({
+        title:event.title,day:event.day,startMinute:event.startMinute,
+        durationMinutes:event.durationMinutes,seriesId:event.seriesId,
+      }):null;
+      if(!pending||pending.operation_id!==input.localOperationId||
+        pending.action!==conflict.localAction||
+        JSON.stringify(pending.payload?JSON.parse(pending.payload):null)!==
+          JSON.stringify(conflict.localPayload)||
+        (pending.action==="upsert"&&
+          (!event||event.source!=="manual"||event.sourceUid!==null||snapshot!==pending.payload))||
+        (pending.action==="delete"&&event))
+        throw Error("Local calendar event changed; refresh and review before resolving");
+      if(input.choice==="use-remote"){
+        const otherEnrollment=this.db.prepare(
+          "SELECT 1 FROM manual_calendar_sync_enrollment WHERE event_id=? AND owner_id<>? LIMIT 1"
+        ).get(entityId,ownerId);
+        const otherPending=this.db.prepare(
+          "SELECT 1 FROM manual_calendar_sync_outbox WHERE entity_id=? AND owner_id<>? LIMIT 1"
+        ).get(entityId,ownerId);
+        if(otherEnrollment||otherPending)
+          throw Error("This event is also linked to another account; remote overwrite is blocked");
+        if(conflict.remoteDeleted){
+          this.db.prepare(
+            "DELETE FROM fixed_events WHERE id=? AND source='manual' AND source_uid IS NULL"
+          ).run(entityId);
+          this.db.prepare(
+            "DELETE FROM manual_calendar_sync_enrollment WHERE owner_id=? AND event_id=?"
+          ).run(ownerId,entityId);
+        }else{
+          const remote=conflict.remotePayload as ManualCalendarSnapshot|null;
+          if(!remote)throw Error("Invalid remote calendar snapshot");
+          const title=validateFixedTitle(remote.title);
+          const slot=validateFixedSlot(remote.day,remote.startMinute,remote.durationMinutes);
+          const seriesId=remote.seriesId;
+          if(seriesId!==null){
+            if(typeof seriesId!=="string"||!seriesId.startsWith("manual:"))
+              throw Error("Only manual calendar series may sync");
+            requireUuid(seriesId.slice("manual:".length));
+          }
+          this.guardStudyConflicts([slot]);
+          if(event){
+            this.db.prepare(`UPDATE fixed_events
+              SET series_id=?,title=?,day=?,start_minute=?,duration_minutes=?
+              WHERE id=? AND source='manual' AND source_uid IS NULL`)
+              .run(seriesId,title,slot.day,slot.startMinute,slot.durationMinutes,entityId);
+          }else{
+            this.guardCount(1);
+            this.db.prepare(`INSERT INTO fixed_events
+              (id,source_uid,series_id,title,day,start_minute,duration_minutes,source,created_at)
+              VALUES(?,NULL,?,?,?,?,?,'manual',?)`)
+              .run(entityId,seriesId,title,slot.day,slot.startMinute,slot.durationMinutes,
+                conflict.remoteUpdatedAt);
+          }
+          this.db.prepare(`INSERT INTO manual_calendar_sync_enrollment
+            (owner_id,event_id,server_version,enabled_at) VALUES(?,?,?,?)
+            ON CONFLICT(owner_id,event_id) DO UPDATE SET server_version=excluded.server_version`)
+            .run(ownerId,entityId,conflict.remoteVersion,now.toISOString());
+        }
+        this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE owner_id=? AND entity_id=?")
+          .run(ownerId,entityId);
+      }else if(input.choice==="keep-local"){
+        if(pending.action==="delete"&&conflict.remoteDeleted){
+          this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE owner_id=? AND entity_id=?")
+            .run(ownerId,entityId);
+        }else{
+          this.db.prepare(`UPDATE manual_calendar_sync_outbox
+            SET operation_id=?,base_version=?,created_at=?
+            WHERE owner_id=? AND entity_id=?`)
+            .run(randomUUID(),conflict.remoteVersion,now.toISOString(),ownerId,entityId);
+          if(event)this.db.prepare(`UPDATE manual_calendar_sync_enrollment
+            SET server_version=? WHERE owner_id=? AND event_id=?`)
+            .run(conflict.remoteVersion,ownerId,entityId);
+        }
+      }else throw Error("Invalid conflict resolution choice");
+      this.db.exec("COMMIT");
     }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
 

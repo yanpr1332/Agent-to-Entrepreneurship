@@ -18,6 +18,7 @@ import type {
 } from "../../shared/cloud-model";
 import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncRunResult,
+  PersonalSyncResolutionRequest,
 } from "../../shared/personal-sync-contract";
 
 import type {
@@ -87,6 +88,8 @@ declare global {
         setPersonalTaskSync: (id:string,enabled:boolean) => Promise<{saved:true}>;
         setManualEventSync: (id:string,enabled:boolean) => Promise<{saved:true}>;
         personalSyncConflicts: () => Promise<PersonalSyncConflictRecord[]>;
+        resolvePersonalSyncConflict:(input:PersonalSyncResolutionRequest) =>
+          Promise<{resolved:true;choice:"keep-local"|"use-remote"}>;
       };
       canvas: {
         status: () => Promise<CanvasConnectionStatus>;

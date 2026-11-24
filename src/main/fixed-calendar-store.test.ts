@@ -460,6 +460,82 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     ]);
   });
 
+  it("keeps local manual calendar edits only after conflict CAS and rebase",()=>{
+    const db=calendar();
+    const event=db.create({title:"Before sync",day:"2026-11-12",startMinute:540,
+      durationMinutes:60,weeks:1},now)[0];
+    db.setManualEventSyncEnabled(event.id,true,OWNER_A,now);
+    const sent=db.listManualCalendarSyncOutbox(OWNER_A)[0];
+    db.acknowledgeManualCalendarSyncOperation(OWNER_A,sent.operationId,event.id,"upsert",1,null);
+    db.edit({id:event.id,title:"Local choice",day:event.day,startMinute:600,durationMinutes:60});
+    const pending=db.listManualCalendarSyncOutbox(OWNER_A)[0];
+    const remote:PersonalSyncChange={cursor:"2",entityType:"manual-calendar-event",
+      entityId:event.id,version:2,payload:{title:"Elsewhere",day:"2026-11-13",
+        startMinute:720,durationMinutes:75,seriesId:null},
+      deleted:false,updatedAt:"2026-11-24T11:00:00.000Z"};
+    const conflict=db.applyRemoteManualCalendarChanges(OWNER_A,[remote])[0];
+    const record={...conflict,createdAt:"2026-11-24T11:00:00.000Z",
+      updatedAt:"2026-11-24T11:00:00.000Z"};
+    const request={entityType:"manual-calendar-event" as const,entityId:event.id,
+      remoteVersion:2,localOperationId:pending.operationId,choice:"keep-local" as const};
+    expect(()=>db.resolveManualCalendarConflict(OWNER_A,record,{...request,remoteVersion:3}))
+      .toThrow("changed");
+    db.resolveManualCalendarConflict(OWNER_A,record,request);
+    expect(db.list()).toMatchObject([{id:event.id,title:"Local choice",startMinute:600}]);
+    expect(db.listManualCalendarSyncOutbox(OWNER_A)).toMatchObject([
+      {action:"upsert",baseVersion:2},
+    ]);
+    expect(db.listManualCalendarSyncOutbox(OWNER_A)[0].operationId).not.toBe(pending.operationId);
+  });
+
+  it("adopts a reviewed remote manual calendar version with the local edit canceled",()=>{
+    const db=calendar();
+    const event=db.create({title:"Initial",day:"2026-11-12",startMinute:540,
+      durationMinutes:60,weeks:1},now)[0];
+    db.setManualEventSyncEnabled(event.id,true,OWNER_A,now);
+    const first=db.listManualCalendarSyncOutbox(OWNER_A)[0];
+    db.acknowledgeManualCalendarSyncOperation(OWNER_A,first.operationId,event.id,"upsert",1,null);
+    db.edit({id:event.id,title:"Local draft",day:event.day,startMinute:600,durationMinutes:60});
+    const pending=db.listManualCalendarSyncOutbox(OWNER_A)[0];
+    const remote:PersonalSyncChange={cursor:"2",entityType:"manual-calendar-event",
+      entityId:event.id,version:2,payload:{title:"Accepted remote",day:"2026-11-13",
+        startMinute:660,durationMinutes:90,seriesId:null},
+      deleted:false,updatedAt:"2026-11-24T11:00:00.000Z"};
+    const conflict=db.applyRemoteManualCalendarChanges(OWNER_A,[remote])[0];
+    db.resolveManualCalendarConflict(OWNER_A,{...conflict,
+      createdAt:"2026-11-24T11:00:00.000Z",updatedAt:"2026-11-24T11:00:00.000Z"},{
+      entityType:"manual-calendar-event",entityId:event.id,remoteVersion:2,
+      localOperationId:pending.operationId,choice:"use-remote",
+    });
+    expect(db.list()).toMatchObject([{id:event.id,title:"Accepted remote",
+      day:"2026-11-13",startMinute:660,durationMinutes:90}]);
+    expect(db.listManualCalendarSyncOutbox(OWNER_A)).toEqual([]);
+    expect(db.listManualCalendarSyncEnrollments(OWNER_A)).toMatchObject([{serverVersion:2}]);
+  });
+
+  it("blocks adopting a remote calendar slot that overlaps confirmed study time",()=>{
+    const db=calendar(()=>[busy]);
+    const event=db.create({title:"Safe local",day:"2026-11-12",startMinute:540,
+      durationMinutes:60,weeks:1},now)[0];
+    db.setManualEventSyncEnabled(event.id,true,OWNER_A,now);
+    const first=db.listManualCalendarSyncOutbox(OWNER_A)[0];
+    db.acknowledgeManualCalendarSyncOperation(OWNER_A,first.operationId,event.id,"upsert",1,null);
+    db.edit({id:event.id,title:"Local edit",day:event.day,startMinute:600,durationMinutes:60});
+    const pending=db.listManualCalendarSyncOutbox(OWNER_A)[0];
+    const remote:PersonalSyncChange={cursor:"2",entityType:"manual-calendar-event",
+      entityId:event.id,version:2,payload:{title:"Conflicting",day:busy.day,
+        startMinute:busy.startMinute,durationMinutes:busy.durationMinutes,seriesId:null},
+      deleted:false,updatedAt:"2026-11-24T11:00:00.000Z"};
+    const conflict=db.applyRemoteManualCalendarChanges(OWNER_A,[remote])[0];
+    expect(()=>db.resolveManualCalendarConflict(OWNER_A,{...conflict,
+      createdAt:"2026-11-24T11:00:00.000Z",updatedAt:"2026-11-24T11:00:00.000Z"},{
+      entityType:"manual-calendar-event",entityId:event.id,remoteVersion:2,
+      localOperationId:pending.operationId,choice:"use-remote",
+    })).toThrow("overlaps");
+    expect(db.list()).toMatchObject([{id:event.id,title:"Local edit",day:"2026-11-12"}]);
+    expect(db.listManualCalendarSyncOutbox(OWNER_A)[0].operationId).toBe(pending.operationId);
+  });
+
   it("does not enroll imported ICS records and retains remote delete tombstones",()=>{
     const db=calendar();
     db.import([{title:"ICS",day:"2026-11-12",startMinute:540,durationMinutes:60,sourceUid:"ics-uid"}],now);
