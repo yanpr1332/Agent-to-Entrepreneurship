@@ -1,7 +1,9 @@
+import { randomUUID } from "node:crypto";
 import {
   parsePersonalSyncOperation, parsePersonalSyncResolutionRequest,
+  parsePersonalSyncDeviceReplacementRequest,
   type PersonalSyncChange, type PersonalSyncConflict, type PersonalSyncConflictRecord,
-  type PersonalSyncRunResult,
+  type PersonalSyncRunResult, type PersonalSyncDeviceReplacementReview,
 } from "../shared/personal-sync-contract";
 import type { SharedCloudClient } from "./cloud/supabase-client";
 import type { LocalStore } from "./local-store";
@@ -28,17 +30,20 @@ function deviceLabel():string{
  */
 export class PersonalSyncService{
   private running:Promise<PersonalSyncRunResult>|null=null;
+  private replacementRunning:Promise<{replaced:true}>|null=null;
+  private replacementReview:{ownerId:string;deviceId:string;cursor:string;token:string}|null=null;
   private stopping=false;
 
   constructor(
     private readonly cloud:Pick<SharedCloudClient,
-      "currentUserId"|"registerPersonalSyncDevice"|"applyPersonalSyncOperation"|"pullPersonalSyncChanges">,
+      "currentUserId"|"registerPersonalSyncDevice"|"applyPersonalSyncOperation"|"pullPersonalSyncChanges"|"revokePersonalSyncDevice">,
     private readonly tasks:LocalStore,
     private readonly calendar:FixedCalendarStore,
   ){}
 
   syncNow():Promise<PersonalSyncRunResult>{
     if(this.stopping)return Promise.reject(Error("Personal synchronization is stopping"));
+    if(this.replacementRunning)return Promise.reject(Error("Device replacement is in progress"));
     if(this.running)return this.running;
     const job=this.performSync().finally(()=>{if(this.running===job)this.running=null;});
     this.running=job;
@@ -52,7 +57,7 @@ export class PersonalSyncService{
   listConflicts():PersonalSyncConflictRecord[]{
     const ownerId=this.cloud.currentUserId();
     const records=this.tasks.listPersonalSyncConflicts(ownerId);
-    if(!this.running){
+    if(!this.hasInFlightRun()){
       for(const conflict of records){
         if(conflict.reason!=="remote-change-while-local-pending"&&
           conflict.reason!=="remote-delete-while-local-pending")continue;
@@ -83,7 +88,7 @@ export class PersonalSyncService{
    * Caller refreshes the remote cursor before invoking this synchronous method.
    */
   resolveConflict(raw:unknown):{resolved:true;choice:"keep-local"|"use-remote"}{
-    if(this.stopping||this.running)throw Error("Wait until personal sync is idle before resolving");
+    if(this.stopping||this.hasInFlightRun())throw Error("Wait until personal sync is idle before resolving");
     const ownerId=this.cloud.currentUserId();
     const input=parsePersonalSyncResolutionRequest(raw);
     const conflict=this.tasks.getPersonalSyncConflict(ownerId,input.entityType,input.entityId);
@@ -99,12 +104,64 @@ export class PersonalSyncService{
     return {resolved:true,choice:input.choice};
   }
 
-  hasInFlightRun():boolean{return this.running!==null;}
+  hasInFlightRun():boolean{return this.running!==null||this.replacementRunning!==null;}
 
-  cancel():void{this.stopping=true;}
+  /** The preview is local-only and has no power to choose an owner or device. */
+  reviewDeviceReplacement():PersonalSyncDeviceReplacementReview{
+    if(this.stopping||this.hasInFlightRun())throw Error("Wait until personal sync is idle before replacing a device");
+    this.replacementReview=null;
+    const ownerId=this.cloud.currentUserId();
+    const device=this.tasks.getOrCreatePersonalSyncDevice(ownerId);
+    const pending=this.tasks.countPersonalSyncOutbox(ownerId)+
+      this.calendar.countManualCalendarSyncOutbox(ownerId);
+    const conflicts=this.tasks.countPersonalSyncConflicts(ownerId);
+    if(pending||conflicts)return {eligible:false,reviewToken:null,
+      reason:"当前账号存在待发送修改或未解决的同步冲突，不能更换设备。请先处理这些内容。"};
+    const token=randomUUID();
+    this.replacementReview={ownerId,deviceId:device.deviceId,cursor:device.cursor,token};
+    return {eligible:true,reviewToken:token,reason:null};
+  }
+
+  /** Revoke the old owner-scoped identity first; never reset cursor/queue. */
+  replaceDevice(raw:unknown):Promise<{replaced:true}>{
+    if(this.stopping||this.hasInFlightRun())return Promise.reject(Error("Personal sync is in progress"));
+    const input=parsePersonalSyncDeviceReplacementRequest(raw);
+    const review=this.replacementReview;
+    this.replacementReview=null; // one-time token even if cloud fails
+    if(!review||review.token!==input.reviewToken||this.cloud.currentUserId()!==review.ownerId)
+      return Promise.reject(Error("Device replacement review expired or account changed"));
+    const job=this.performDeviceReplacement(review).finally(()=>{
+      if(this.replacementRunning===job)this.replacementRunning=null;
+    });
+    this.replacementRunning=job;
+    return job;
+  }
+
+  private async performDeviceReplacement(review:{ownerId:string;deviceId:string;cursor:string}):
+    Promise<{replaced:true}>{
+    this.assertOwner(review.ownerId);
+    const device=this.tasks.getOrCreatePersonalSyncDevice(review.ownerId);
+    if(device.deviceId!==review.deviceId||device.cursor!==review.cursor)
+      throw Error("Personal sync device changed; review replacement again");
+    if(this.tasks.countPersonalSyncOutbox(review.ownerId)||
+      this.calendar.countManualCalendarSyncOutbox(review.ownerId)||
+      this.tasks.countPersonalSyncConflicts(review.ownerId))
+      throw Error("Resolve pending local operations and conflicts before replacement");
+    // false means the old ID is already revoked or not registered. Never
+    // rotate if the RPC fails or authentication changes while it is in flight.
+    await this.cloud.revokePersonalSyncDevice(review.deviceId);
+    this.assertOwner(review.ownerId);
+    if(this.calendar.countManualCalendarSyncOutbox(review.ownerId))
+      throw Error("A calendar edit was queued during device replacement; review again");
+    this.tasks.rotatePersonalSyncDevice(review.ownerId,review.deviceId,review.cursor);
+    return {replaced:true};
+  }
+
+  cancel():void{this.stopping=true;this.replacementReview=null;}
 
   waitForIdle():Promise<void>{
-    return this.running?.then(()=>undefined,()=>undefined)??Promise.resolve();
+    const jobs=[this.running,this.replacementRunning].filter((x):x is Promise<unknown>=>x!==null);
+    return Promise.allSettled(jobs).then(()=>undefined);
   }
 
   private assertOwner(ownerId:string):void{
@@ -132,7 +189,7 @@ export class PersonalSyncService{
     // If remote changes exist, pull them first in this run and defer every
     // outgoing operation until the user can review any new conflicts.
     let pushDeferred=false;
-    if(device.cursor!=="0"&&pending.length>0){
+    if(pending.length>0){
       const preflight=await this.cloud.pullPersonalSyncChanges(device.deviceId,device.cursor,1);
       this.assertOwner(ownerId);
       if(preflight.changes.length===0&&preflight.nextCursor!==device.cursor)
