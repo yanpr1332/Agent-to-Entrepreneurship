@@ -9,7 +9,7 @@
 ## 实施范围
 
 1. `LocalStore.getOrCreatePersonalSyncDevice(ownerId)` 对已有 deviceId 做 UUID 校验，保存的 cursor 必须是无前导零的非负十进制且不超过 Postgres signed bigint 最大值（9223372036854775807）。损坏时抛错，**不生成新 ID、不重置或回退 Cursor、不触及待发送操作**。
-2. 每次用户手动同步先注册当前 owner-scoped device。对有 pending 且 Cursor 非零的账号，上传前调用 `ate_personal_sync_pull` 做只读预检，limit=1，保留原 cursor，不修改本地实体。服务端拒绝、返回不合法的空页位置时直接阻断推送。
+2. 每次用户手动同步先注册当前 owner-scoped device。第一部分 PR #41 针对非零 Cursor；后续 [36](36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md) 将预检扩展到 **所有有 pending 的账号（包括 Cursor=0）**。对有 pending 且 Cursor 非零的账号，上传前调用 `ate_personal_sync_pull` 做只读预检，limit=1，保留原 cursor，不修改本地实体。服务端拒绝、返回不合法的空页位置时直接阻断推送。
 3. 如果预检发现远端未拉取变更，整轮跳过发送，按现有上限拉取远端变更、生成/保留冲突、在两套 SQLite 处理成功后推进 Cursor；用户确认冲突或查看状态后再手动点击同步。UI 明确显示“因远端新变更暂缓上传”，pending 仍在本地。
 4. 若非零 Cursor 的预检发现远端没有新变化，继续原有版本 CAS 的 Push/Ack/Pull 流程；新设备 Cursor=0 不可能超前于服务端，但仍需先注册并通过服务端授权/版本校验。
 5. 不暴露 deviceId、ownerId、Cursor 编辑/重置入口给 Renderer。不会自动替换已被服务端撤销的设备，不会自动重新授权源数据；Canvas/ICS/邮箱/知识库/规划和凭据继续排除。
@@ -37,3 +37,8 @@ npm run build
 - 本地 Cursor 已损坏、回滚或云端历史遭裁剪时，不能直接清零重放；先在隔离目录备份并诊断，设计可审计的全量重建/冲突流程。
 - 目前两套 SQLite 的 pull 应用与 cursor 写入并非跨数据库原子事务，进程崩溃后仍依赖幂等重放；特殊删除/计划占用冲突需继续测试。
 - 真实 RLS 正反向、五账号、双设备、断网/重连、撤权、跨平台 GUI 和安装包验收均未执行；外部 Supabase SQL 仍需独立项目与明确授权。
+
+
+## 续篇更新：零 Cursor 也执行预检
+
+[36](36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md) 改为 pending 不论 Cursor 是否为 0 都先执行只读 `pull(limit=1)`，防止从备份/新设备开始时先上传旧意图。另增加经过用户二次确认、旧设备远端撤销后保留 Cursor 的本机设备 ID 更换。并不支持损坏 Cursor 自动清零。
