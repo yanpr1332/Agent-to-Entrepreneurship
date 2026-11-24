@@ -449,6 +449,10 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return knowledge().deleteDocument(id);
   });
+  handle(IPC_CHANNELS.knowledgeEmbeddingStatus, event => {
+    requireTrustedSender(event);
+    return knowledge().embeddingStatus();
+  });
   handle(IPC_CHANNELS.knowledgeSearch, (event,query:unknown) => {
     requireTrustedSender(event);
     return knowledge().search(query);
