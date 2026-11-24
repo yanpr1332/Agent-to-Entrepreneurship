@@ -142,7 +142,7 @@ export class WorkspaceRealtimeBridge {
       ws.onopen=()=>{
         if(!this.active(epoch,ws))return;
         this.lastFrameAt=Date.now();
-        ws.send(JSON.stringify({
+        try{ws.send(JSON.stringify({
           topic,event:"phx_join",ref:joinRef,
           payload:{
             access_token:credentials.accessToken,
@@ -153,13 +153,13 @@ export class WorkspaceRealtimeBridge {
                 filter:"workspace_id=eq."+workspaceId},
             ]},
           },
-        }));
+        }));}catch{this.retry(epoch);return;}
         this.heartbeatTimer=setInterval(()=>{
           if(!this.active(epoch,ws))return;
           if(Date.now()-this.lastFrameAt>STALE_MS){this.retry(epoch);return;}
           if(ws.readyState===1){
-            ws.send(JSON.stringify({topic:"phoenix",event:"heartbeat",payload:{},
-              ref:String(++this.sequence)}));
+            try{ws.send(JSON.stringify({topic:"phoenix",event:"heartbeat",payload:{},
+              ref:String(++this.sequence)}));}catch{this.retry(epoch);}
           }
         },HEARTBEAT_MS);
         // Reconnect before JWT expiry, refresh via the normal Main auth path.
