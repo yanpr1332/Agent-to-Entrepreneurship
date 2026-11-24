@@ -3,7 +3,7 @@ import {
   requireInvite, requireUuid, requireWorkspaceName, parseCloudTask,
   validateCloudProject,
   type CloudSessionStatus, type SharedMember, type SharedMessage,
-  type SharedTask, type SharedWorkspace, type CloudProjectConfig,
+  type SharedTask, type SharedWorkspace, type CloudProjectConfig, type SharedWorkspaceSnapshot,
 } from "../../shared/cloud-model";
 import {
   parsePersonalSyncOperation, parsePersonalSyncPullPage, parseSyncOperationResult,
@@ -252,6 +252,33 @@ export class SharedCloudClient {
   async listMembers(workspaceId:unknown):Promise<SharedMember[]>{
     const id=requireUuid(workspaceId);
     return this.getArray<SharedMember>(`rest/v1/ate_workspace_members?workspace_id=eq.${id}&select=workspace_id,user_id,role,display_name,joined_at&order=joined_at.asc`);
+  }
+
+  /** Main-only credentials; no user secret ever reaches Renderer. */
+  async realtimeCredentials():Promise<{url:string;accessToken:string;userId:string;expiresAt:number}>{
+    if(!this.project)throw Error("Configure a Supabase test project first");
+    await this.requireSession();
+    const session=this.session!;
+    const host=new URL(this.project.projectUrl);
+    if(host.protocol!=="https:"||!/^[a-z0-9-]+\\.supabase\\.co$/i.test(host.hostname))
+      throw Error("Realtime project host is not allowlisted");
+    return {url:"wss://"+host.hostname+"/realtime/v1/websocket?apikey="+
+      encodeURIComponent(this.project.publishableKey)+"&vsn=1.0.0",
+      accessToken:session.accessToken,userId:session.userId,expiresAt:session.expiresAt};
+  }
+
+  /** A full RLS-checked catch-up. No cached shared row is trusted after revoke. */
+  async workspaceSnapshot(input:unknown):Promise<SharedWorkspaceSnapshot>{
+    const workspaceId=requireUuid(input),ownerId=this.currentUserId();
+    const members=await this.listMembers(workspaceId);
+    if(this.currentUserId()!==ownerId)throw Error("Cloud account changed during workspace refresh");
+    if(!members.some(m=>m.user_id===ownerId))
+      throw Error("Workspace membership revoked or access denied");
+    const [messages,tasks]=await Promise.all([
+      this.listMessages(workspaceId),this.listTasks(workspaceId),
+    ]);
+    if(this.currentUserId()!==ownerId)throw Error("Cloud account changed during workspace refresh");
+    return {workspaceId,members,messages,tasks};
   }
 
   async listMessages(workspaceId:unknown):Promise<SharedMessage[]>{
