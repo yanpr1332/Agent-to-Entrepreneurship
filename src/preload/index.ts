@@ -245,6 +245,14 @@ const desktopApi = Object.freeze({
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeDelete,id) as Promise<boolean>,
     search: (query: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeSearch,query) as Promise<KnowledgeSearchHit[]>,
     embeddingStatus: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeEmbeddingStatus) as Promise<KnowledgeEmbeddingStatus>,
+    importOfflineModel: (acknowledged:boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeImportOfflineModel,acknowledged) as
+        Promise<KnowledgeEmbeddingStatus|null>,
+    startOfflineIndex: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeStartOfflineIndex) as Promise<KnowledgeEmbeddingStatus>,
+    cancelOfflineIndex: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCancelOfflineIndex) as Promise<KnowledgeEmbeddingStatus>,
+    removeOfflineModel: (confirmation:"REMOVE_LOCAL_MODEL_AND_VECTORS") =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeRemoveOfflineModel,confirmation) as
+        Promise<KnowledgeEmbeddingStatus>,
     cards: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCards) as Promise<KnowledgeReviewCard[]>,
     createCard: (input: ReviewCardInput) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCreateCard,input) as Promise<KnowledgeReviewCard>,
     removeCard: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeRemoveCard,id) as Promise<boolean>,
