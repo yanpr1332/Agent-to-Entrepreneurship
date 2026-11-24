@@ -145,3 +145,8 @@ PR #45 已合并，当前开发 003B：新增 workspace-scoped 事务提交顺�
 ## 18. ALPHA-SYNC-003C：安全历史压缩与 Cursor 过期检查点（2026-11-24）
 
 003B PR #46 已合并，当前 003C：增加 Owner-only 手动 checkpoint RPC 与受控事件裁剪、按当前 JWT 成员资格核验的不可变全量快照页；服务器返回明确的 expired checkpoint。客户端在 `study-anchor-team-history.sqlite` v2 中按 project/account/workspace 隔离暂存完整快照并持久化 ordinal，任何失败/中断不移动原 Cursor；全部完成后重新验证成员资格，再原子替换主缓存和位点，并继续拉取检查点后的变更。UI 重建期间隐藏旧缓存，禁止把不完整的最近 100 条冒充历史。迁移未在真实 Supabase 部署，Owner 压缩不会自动执行；五账号 RLS 及硬盘明文缓存保留/擦除仍需验收。参见 [41](41_ALPHA_SYNC_003C_CHECKPOINT_RECOVERY.md)。
+
+
+## 19. ALPHA-SYNC-003D：本机团队历史加密与用户控制（2026-11-24）
+
+003C PR #49 已合并。003D 在 `feat/ALPHA-SYNC-003D-local-history-privacy` 开发（因 PR #48 的 UI 视觉设计工作仍在进行，不另开并行 PR）：严格依赖 Electron OS `safeStorage` 将本机团队消息/任务的 JSON 正文和未完成 checkpoint 加密为版本化密文；新增 SQLite schema v3 事务加密升级、加密不可用时拒绝明文缓存、登录账号/云项目切换时取消在途网络请求并尽力删除所属团队记录；增加确认清理本机团队历史的受信任 IPC/UI 入口。元数据、旧明文数据库副本/升级前备份与历史 WAL 不保证安全擦除，尚需真实 Keychain/DPAPI、五账号权限及 Supabase 测试项目验收。详见 [42](42_ALPHA_SYNC_003D_LOCAL_HISTORY_PRIVACY.md)。
