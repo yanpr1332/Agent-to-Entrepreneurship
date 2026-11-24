@@ -4,6 +4,8 @@ import type { LocalTask } from "./local-model";
 import {
   parsePersonalSyncOperation, parseSyncOperationResult, parsePersonalSyncPullPage,
   parsePersonalSyncResolutionRequest,
+  parsePersonalSyncDeviceInspection, parsePersonalSyncReceiptLookup,
+  parsePersonalSyncReceiptConfirmation,
   projectManualCalendarEvent, projectPersonalTask,
 } from "./personal-sync-contract";
 
@@ -136,6 +138,35 @@ describe("ALPHA-SYNC-001 strict wire envelope, without enabling sync", () => {
     expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[0],cursor:"../users"}]})).toThrow();
     expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[0],version:0}]})).toThrow();
     expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[0],updatedAt:"not-a-date"}]})).toThrow();
+  });
+
+  it("allows only an explicit one-time receipt confirmation request with no owner authority",()=>{
+    const reviewToken="6da6f704-5b0c-4e5a-a7dd-dc8db5b4c665";
+    expect(parsePersonalSyncReceiptConfirmation({reviewToken,confirmation:true}))
+      .toEqual({reviewToken,confirmation:true});
+    expect(()=>parsePersonalSyncReceiptConfirmation({reviewToken,confirmation:false})).toThrow();
+    expect(()=>parsePersonalSyncReceiptConfirmation({reviewToken,confirmation:true,ownerId:owner})).toThrow();
+    expect(()=>parsePersonalSyncReceiptConfirmation({reviewToken:"bad",confirmation:true})).toThrow();
+    expect(()=>parsePersonalSyncReceiptConfirmation({confirmation:true})).toThrow();
+  });
+
+  it("strictly parses owner-safe device status and exact-operation receipts",()=>{
+    expect(parsePersonalSyncDeviceInspection({deviceStatus:"revoked",serverCursor:"0"}))
+      .toEqual({deviceStatus:"revoked",serverCursor:"0"});
+    expect(()=>parsePersonalSyncDeviceInspection({deviceStatus:"active",serverCursor:"0005"})).toThrow();
+    expect(()=>parsePersonalSyncDeviceInspection({deviceStatus:"active",serverCursor:"9223372036854775808"})).toThrow();
+    expect(()=>parsePersonalSyncDeviceInspection({deviceStatus:"other-owner",serverCursor:"0"})).toThrow();
+    expect(()=>parsePersonalSyncDeviceInspection({deviceStatus:"active",serverCursor:"0",ownerId:owner})).toThrow();
+    expect(parsePersonalSyncReceiptLookup({status:"not-found",response:null}))
+      .toEqual({status:"not-found",response:null});
+    expect(parsePersonalSyncReceiptLookup({status:"matched",response:{
+      status:"accepted",serverVersion:1,cursor:"1",
+    }})).toMatchObject({status:"matched",response:{status:"accepted",serverVersion:1}});
+    expect(()=>parsePersonalSyncReceiptLookup({status:"matched",response:null})).toThrow();
+    expect(()=>parsePersonalSyncReceiptLookup({status:"mismatch",response:{status:"accepted"}})).toThrow();
+    expect(()=>parsePersonalSyncReceiptLookup({status:"matched",response:{
+      status:"accepted",serverVersion:1,cursor:"1",payload:operation.payload,
+    }})).toThrow();
   });
 
   it("only allows an exact conflict choice, reviewed operation and version from the Renderer",()=>{

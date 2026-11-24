@@ -7,7 +7,9 @@ import {
 } from "../../shared/cloud-model";
 import {
   parsePersonalSyncOperation, parsePersonalSyncPullPage, parseSyncOperationResult,
+  parsePersonalSyncDeviceInspection, parsePersonalSyncReceiptLookup,
   type PersonalSyncPullPage, type PersonalSyncOperation, type SyncOperationResult,
+  type PersonalSyncDeviceInspection, type PersonalSyncReceiptLookup,
 } from "../../shared/personal-sync-contract";
 
 type Fetcher=(input:string,init:RequestInit)=>Promise<Response>;
@@ -192,6 +194,26 @@ export class SharedCloudClient {
     const result=await this.rpc("ate_personal_sync_revoke_device",{p_device_id:deviceId});
     if(typeof result!=="boolean")throw Error("Cloud returned an invalid device revocation result");
     return result;
+  }
+
+  /** Optional ALPHA-SYNC-002H read-only endpoints. No device registration or mutations. */
+  async inspectPersonalSyncDevice(deviceIdInput:unknown):Promise<PersonalSyncDeviceInspection>{
+    const deviceId=requireUuid(deviceIdInput);
+    this.userId();
+    return parsePersonalSyncDeviceInspection(await this.rpc("ate_personal_sync_inspect_device",{
+      p_device_id:deviceId,
+    }));
+  }
+
+  /** Exact saved idempotency receipt, never a guess based on an entity ID. */
+  async lookupPersonalSyncReceipt(input:unknown):Promise<PersonalSyncReceiptLookup>{
+    const operation=parsePersonalSyncOperation(input);
+    const ownerId=this.userId();
+    if(operation.ownerId!==ownerId||operation.actorId!==ownerId)
+      throw Error("Personal sync receipt request belongs to another cloud account");
+    return parsePersonalSyncReceiptLookup(await this.rpc("ate_personal_sync_lookup_receipt",{
+      p_operation:operation,
+    }));
   }
 
   private async getArray<T>(path:string):Promise<T[]>{

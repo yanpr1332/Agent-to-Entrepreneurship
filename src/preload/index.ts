@@ -20,6 +20,8 @@ import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncRunResult,
   PersonalSyncResolutionRequest, PersonalSyncLegacyReview, PersonalSyncLegacyAdoptionRequest,
   PersonalSyncDeviceReplacementReview, PersonalSyncDeviceReplacementRequest,
+  PersonalSyncRecoveryHealth, PersonalSyncReceiptReconcileResult,
+  PersonalSyncReceiptReview, PersonalSyncReceiptConfirmation,
 } from "../shared/personal-sync-contract";
 
 import type {
@@ -119,6 +121,14 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.cloudReviewPersonalSyncDeviceReplacement) as Promise<PersonalSyncDeviceReplacementReview>,
     confirmPersonalSyncDeviceReplacement: (input:PersonalSyncDeviceReplacementRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudConfirmPersonalSyncDeviceReplacement,input) as Promise<{replaced:true}>,
+    inspectPersonalSyncRecovery: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudInspectPersonalSyncRecovery) as Promise<PersonalSyncRecoveryHealth>,
+    reviewPersonalSyncReceipts: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudReviewPersonalSyncReceipts) as Promise<PersonalSyncReceiptReview>,
+    discardPersonalSyncReceiptReview: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudDiscardPersonalSyncReceiptReview) as Promise<{cancelled:true}>,
+    reconcilePersonalSyncReceipts: (input:PersonalSyncReceiptConfirmation) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudReconcilePersonalSyncReceipts,input) as Promise<PersonalSyncReceiptReconcileResult>,
     personalSyncConflicts: () =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudPersonalSyncConflicts) as Promise<PersonalSyncConflictRecord[]>,
     personalSyncLegacyReview:() =>

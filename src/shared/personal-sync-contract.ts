@@ -147,6 +147,81 @@ export function parseSyncOperationResult(value: unknown): SyncOperationResult {
     serverVersion, cursor: row.cursor as string | null };
 }
 
+/** Authenticated read-only server metadata; excludes owner identity and payloads. */
+export type PersonalSyncDeviceStatus="active"|"revoked"|"unregistered";
+export interface PersonalSyncDeviceInspection {
+  deviceStatus:PersonalSyncDeviceStatus;
+  serverCursor:string;
+}
+export function parsePersonalSyncDeviceInspection(value:unknown):PersonalSyncDeviceInspection{
+  const row=record(value);
+  exactKeys(row,["deviceStatus","serverCursor"]);
+  if(row.deviceStatus!=="active"&&row.deviceStatus!=="revoked"&&row.deviceStatus!=="unregistered")
+    throw Error("Invalid remote sync device status");
+  if(typeof row.serverCursor!=="string"||!/^(0|[1-9][0-9]{0,18})$/.test(row.serverCursor)||
+     BigInt(row.serverCursor)>9223372036854775807n)
+    throw Error("Invalid remote sync cursor");
+  return {deviceStatus:row.deviceStatus,serverCursor:row.serverCursor};
+}
+
+export type PersonalSyncReceiptLookup =
+  |{status:"not-found"|"mismatch";response:null}
+  |{status:"matched";response:SyncOperationResult};
+export function parsePersonalSyncReceiptLookup(value:unknown):PersonalSyncReceiptLookup{
+  const row=record(value);
+  exactKeys(row,["status","response"]);
+  if(row.status==="not-found"||row.status==="mismatch"){
+    if(row.response!==null)throw Error("Unexpected data in missing sync receipt");
+    return {status:row.status,response:null};
+  }
+  if(row.status!=="matched")throw Error("Invalid sync receipt lookup status");
+  return {status:"matched",response:parseSyncOperationResult(row.response)};
+}
+
+/** No owner or device UUID is exposed to the renderer's recovery panel. */
+export type PersonalSyncHealthStatus=
+  "uninitialized"|"local-invalid"|"pending-replay"|"active"|"revoked"|
+  "unregistered"|"cursor-ahead"|"cloud-unavailable";
+export interface PersonalSyncRecoveryHealth {
+  status:PersonalSyncHealthStatus;
+  localCursor:string|null;
+  serverCursor:string|null;
+  taskPending:number;
+  calendarPending:number;
+  conflicts:number;
+  pendingReplay:boolean;
+  detail:string;
+}
+/** Read-only preview: no outgoing operation and no local acknowledgement. */
+export interface PersonalSyncReceiptReview {
+  reviewToken:string|null;
+  inspected:number;
+  eligibleToAcknowledge:number;
+  notFound:number;
+  unresolved:number;
+  pending:number;
+  hasMore:boolean;
+}
+export interface PersonalSyncReceiptConfirmation {
+  reviewToken:string;
+  confirmation:true;
+}
+export function parsePersonalSyncReceiptConfirmation(value:unknown):PersonalSyncReceiptConfirmation{
+  const row=record(value);
+  exactKeys(row,["reviewToken","confirmation"]);
+  if(row.confirmation!==true)throw Error("Explicit receipt acknowledgement confirmation is required");
+  return {reviewToken:requireUuid(row.reviewToken),confirmation:true};
+}
+
+export interface PersonalSyncReceiptReconcileResult {
+  inspected:number;
+  acknowledged:number;
+  notFound:number;
+  unresolved:number;
+  pending:number;
+  hasMore:boolean;
+}
+
 export interface PersonalSyncChange {
   cursor:string;
   entityType:PersonalSyncEntity;
