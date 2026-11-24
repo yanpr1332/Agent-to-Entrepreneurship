@@ -160,8 +160,7 @@ export class PersonalSyncService{
   cancel():void{this.stopping=true;this.replacementReview=null;}
 
   waitForIdle():Promise<void>{
-    const jobs=[this.running,this.replacementRunning].filter((x):x is Promise<unknown>=>x!==null);
-    return Promise.allSettled(jobs).then(()=>undefined);
+    return Promise.allSettled([this.running,this.replacementRunning]).then(()=>undefined);
   }
 
   private assertOwner(ownerId:string):void{
