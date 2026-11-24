@@ -243,7 +243,8 @@ export default function CloudWorkspace() {
       const result=await window.desktop.cloud.syncPersonalNow();
       setPersonalSyncResult(result);
       await refreshPersonalSync();
-      setNotice(result.pushDeferred?"检测到尚未拉取的云端变更：本轮先拉取，没有上传待发送修改。请检查冲突后再次手动同步。":"个人数据同步流程已完成；本地待发送队列和冲突状态已刷新。");
+      setNotice(result.recoveredPages?"已重新应用上次中断的同步页面，Cursor 已安全恢复。本轮没有直接上传旧待发送修改；请检查待发送和冲突状态后再次同步。":
+        result.pushDeferred?"检测到尚未拉取的云端变更：本轮先拉取，没有上传待发送修改。请检查冲突后再次手动同步。":"个人数据同步流程已完成；本地待发送队列和冲突状态已刷新。");
     });
   }
 
@@ -387,7 +388,8 @@ export default function CloudWorkspace() {
           {personalSyncResult.rejected ? " · 被拒绝 "+personalSyncResult.rejected+" 项" : ""}
           {personalSyncResult.retryableFailures ? " · 可重试失败 "+personalSyncResult.retryableFailures+" 项" : ""}
           {personalSyncResult.hasMore ? " · 还有更多变更待拉取" : ""}
-          {personalSyncResult.pushDeferred ? " · 本轮因云端存在新变更已暂缓上传" : ""}
+          {personalSyncResult.recoveredPages ? " · 已恢复上次中断的拉取 "+personalSyncResult.recoveredPages+" 页" : ""}
+          {personalSyncResult.pushDeferred ? (personalSyncResult.recoveredPages?" · 本轮恢复后暂缓上传":" · 本轮因云端存在新变更已暂缓上传") : ""}
         </div>}
         <div className="cloud-sync-device-recovery">
           <h3>设备身份恢复（需人工确认）</h3>

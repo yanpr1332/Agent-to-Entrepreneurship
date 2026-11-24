@@ -7,9 +7,10 @@ import type { MailCandidateAction, MailCandidateChoiceResult, MailCandidateDecis
 import { suggestedTaskTitle } from "../shared/mail-candidates";
 import type { MailRecord } from "../shared/mail-model";
 import { requireUuid } from "../shared/cloud-model";
+import { parsePersonalSyncPullPage } from "../shared/personal-sync-contract";
 import type {
   PersonalSyncChange, PersonalSyncConflict, PersonalSyncConflictRecord, PersonalSyncCandidate,
-  PersonalTaskSnapshot, PersonalSyncResolutionRequest,
+  PersonalTaskSnapshot, PersonalSyncResolutionRequest, PersonalSyncPullPage,
 } from "../shared/personal-sync-contract";
 import {
   parseCreateTask, parseFocusCompletion, parseFocusTitleUpdate, parseTaskId, parseUpdateTask,
@@ -109,8 +110,8 @@ export class LocalStore {
 
   private migrate(): void {
     const version = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (version > 9) throw new Error("Database created by a newer application; refusing to downgrade");
-    if (version === 9) return;
+    if (version > 10) throw new Error("Database created by a newer application; refusing to downgrade");
+    if (version === 10) return;
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -294,7 +295,19 @@ export class LocalStore {
             ON personal_sync_conflicts(owner_id,updated_at DESC);
         `);
       }
-      this.db.exec("PRAGMA user_version = 9");
+      if (version <= 9) {
+        // A durable record of the *exact* pull page must exist before either
+        // SQLite store is modified, so interrupted cross-store applies replay.
+        this.db.exec(`CREATE TABLE personal_sync_pull_checkpoints (
+          owner_id TEXT PRIMARY KEY CHECK(length(owner_id)=36),
+          device_id TEXT NOT NULL,
+          from_cursor TEXT NOT NULL,
+          next_cursor TEXT NOT NULL,
+          page_json TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );`);
+      }
+      this.db.exec("PRAGMA user_version = 10");
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -360,6 +373,8 @@ export class LocalStore {
         "SELECT 1 FROM personal_sync_conflicts WHERE owner_id=? LIMIT 1"
       ).get(owner);
       if(taskPending||unresolved)throw Error("Resolve local pending operations and conflicts before replacing a device");
+      if(this.db.prepare("SELECT 1 FROM personal_sync_pull_checkpoints WHERE owner_id=?").get(owner))
+        throw Error("Recover the interrupted personal sync pull before replacing a device");
       const deviceId=randomUUID();
       const result=this.db.prepare(
         "UPDATE personal_sync_devices SET device_id=?,created_at=?,last_sync_at=NULL "+
@@ -371,11 +386,85 @@ export class LocalStore {
     }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
 
+  /** A checkpoint is the durable evidence needed to safely replay across
+   * task and calendar SQLite files after process interruption. */
+  getPendingPersonalSyncPull(ownerInput:unknown):
+    {deviceId:string;fromCursor:string;page:PersonalSyncPullPage}|null{
+    const owner=syncOwnerId(ownerInput);
+    const row=this.db.prepare(
+      "SELECT device_id,from_cursor,next_cursor,page_json FROM personal_sync_pull_checkpoints WHERE owner_id=?"
+    ).get(owner) as {device_id:string;from_cursor:string;next_cursor:string;page_json:string}|undefined;
+    if(!row)return null;
+    try{
+      const device=this.getOrCreatePersonalSyncDevice(owner);
+      if(device.deviceId!==row.device_id||device.cursor!==row.from_cursor)
+        throw Error("Checkpoint does not match the current device and cursor");
+      const page=parsePersonalSyncPullPage(JSON.parse(row.page_json));
+      if(page.changes.length===0||page.changes.length>200||
+        page.nextCursor!==row.next_cursor||
+        BigInt(page.changes[0].cursor)<=BigInt(row.from_cursor))
+        throw Error("Checkpoint page is inconsistent");
+      return {deviceId:device.deviceId,fromCursor:device.cursor,page};
+    }catch{
+      throw Error("Saved personal sync pull checkpoint is invalid; no upload or cursor change is allowed");
+    }
+  }
+
+  /** Persist before changing either store. One unfinished page per owner. */
+  beginPersonalSyncPullPage(ownerInput:unknown,deviceInput:unknown,fromCursor:string,
+    rawPage:PersonalSyncPullPage):void{
+    const owner=syncOwnerId(ownerInput),deviceId=requireUuid(deviceInput);
+    const page=parsePersonalSyncPullPage(rawPage);
+    if(page.changes.length===0||page.changes.length>200||
+       !/^(0|[1-9][0-9]{0,18})$/.test(fromCursor)||
+       BigInt(fromCursor)>9223372036854775807n||
+       BigInt(page.changes[0].cursor)<=BigInt(fromCursor))
+      throw Error("Invalid personal sync checkpoint page");
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const row=this.db.prepare(
+        "SELECT device_id,cursor FROM personal_sync_devices WHERE owner_id=?"
+      ).get(owner) as {device_id:string;cursor:string}|undefined;
+      if(!row||row.device_id!==deviceId||row.cursor!==fromCursor)
+        throw Error("Device or cursor changed before pull checkpoint");
+      if(this.db.prepare("SELECT 1 FROM personal_sync_pull_checkpoints WHERE owner_id=?").get(owner))
+        throw Error("An unfinished personal sync pull must be replayed first");
+      this.db.prepare(`INSERT INTO personal_sync_pull_checkpoints
+        (owner_id,device_id,from_cursor,next_cursor,page_json,created_at)
+        VALUES(?,?,?,?,?,?)`).run(owner,deviceId,fromCursor,page.nextCursor,
+        JSON.stringify(page),new Date().toISOString());
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+
+  /** Cursor and checkpoint clearance commit atomically in task SQLite.
+   * A failed finish leaves the full page available for the next replay. */
+  finishPersonalSyncPullPage(ownerInput:unknown,deviceInput:unknown,fromCursor:string,
+    nextCursor:string):void{
+    const owner=syncOwnerId(ownerInput),deviceId=requireUuid(deviceInput);
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const checkpoint=this.getPendingPersonalSyncPull(owner);
+      if(!checkpoint||checkpoint.deviceId!==deviceId||
+         checkpoint.fromCursor!==fromCursor||checkpoint.page.nextCursor!==nextCursor)
+        throw Error("Personal sync pull checkpoint changed; refusing cursor advance");
+      const updated=this.db.prepare(
+        "UPDATE personal_sync_devices SET cursor=?,last_sync_at=? "+
+        "WHERE owner_id=? AND device_id=? AND cursor=?"
+      ).run(nextCursor,new Date().toISOString(),owner,deviceId,fromCursor);
+      if(updated.changes!==1)throw Error("Personal sync device changed during pull commit");
+      this.db.prepare("DELETE FROM personal_sync_pull_checkpoints WHERE owner_id=?").run(owner);
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+
   /** Advance only after a complete page has been durably applied locally. */
   advancePersonalSyncCursor(ownerId:string,cursor:string):void {
     const owner=syncOwnerId(ownerId);
     if(typeof cursor!=="string"||!/^(0|[1-9][0-9]{0,18})$/.test(cursor))
       throw new Error("Invalid personal sync cursor");
+    if(this.db.prepare("SELECT 1 FROM personal_sync_pull_checkpoints WHERE owner_id=?").get(owner))
+      throw Error("Cannot directly advance cursor with a pending pull checkpoint");
     const current=this.db.prepare(
       "SELECT cursor FROM personal_sync_devices WHERE owner_id=?"
     ).get(owner) as {cursor:string}|undefined;

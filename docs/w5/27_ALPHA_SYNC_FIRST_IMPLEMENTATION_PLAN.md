@@ -120,3 +120,8 @@ PR #40 已合并，legacy ownerless 审查流程完成。002F 首先实施不涉
 ## 13. 002F 续篇：设备显式更换与零 Cursor 上传预检（2026-11-24）
 
 在 PR #41 已合并的基础上，本轮增加当前账号无任务/日历 Outbox 且无持久冲突时的安全设备更换。Main 创建只属于当前登录 owner + deviceId + cursor 的一次性 review token；用户二次确认后撤销旧设备，再通过本地 CAS 更换本机设备 ID，原游标不倒退、不清空待发送操作，也不自动上传。撤销失败、账号切换、待发送操作在途出现、确认过期均阻断更换。所有存在 pending 的同步（包括 Cursor=0）都要先只读 pull 预检。损坏 Cursor 重建与待发送操作重放/对账留在下一阶段，参考 [36](36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md)。
+
+
+## 14. ALPHA-SYNC-002G：持久增量检查点与跨 SQLite 中断恢复（2026-11-24）
+
+PR #42 已合并。本轮集中解决前述“task DB 已应用、calendar DB 未应用、cursor 仍旧”这一跨库崩溃窗口：任务库 v10 在处理每个 Pull 页前事务性记录 owner/device/fromCursor/完整白名单页；两库与冲突记录成功后 CAS 提交 Cursor 并同事务删除检查点。应用在途中断后，下次**用户手动同步**从本地检查点重放，阻断本轮未审查上传；设备更换期间不得丢弃检查点。不可解析的检查点、损坏/超前 Cursor 均失败关闭，不自动清零。完整验收与限制见 [37](37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md)；真实 Supabase RLS、多设备和 GUI 仍待单独授权验收。

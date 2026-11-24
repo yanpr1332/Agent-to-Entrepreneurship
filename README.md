@@ -49,11 +49,24 @@ W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全�
 - PR #39 已合并：本地/云端冲突二次确认、owner/版本/operationId 校验；未解决冲突阻止继续上传/覆写。
 - PR #40 已合并：旧 ownerless 同步数据的只读审查与逐条重新授权；历史删除墓碑继续隔离。
 - PR #41 已合并：校验本地设备身份/Cursor，对有待发送内容的账号执行只读拉取预检；远端有新变更时本轮延后上传。
-- 当前 ALPHA-SYNC-002F 续篇：在任务/日历 Outbox 和冲突均为空时，用户二次确认后可撤销旧设备身份并更换本机 UUID；保留 Cursor，不清空本地记录；Cursor 损坏的恢复、真实设备验收仍待后续。
+- PR #42 已合并：只在任务/日历 Outbox 与冲突均为空时，经二次确认撤销旧设备、轮换本机 UUID 并保留 Cursor；Cursor 0 也需要上传前只读预检。
+- 当前 ALPHA-SYNC-002G：任务库 schema v10 新增持久 Pull 页检查点；两库应用中断时下次手动同步先恢复原页并持久提交 Cursor；损坏检查点阻断同步。真正的云端设备实测、损坏 Cursor 重建仍待后续。
 
-详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 、[32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md) 、[33 冲突解决](docs/w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md) 、[34 旧数据审查](docs/w5/34_ALPHA_SYNC_002E_LEGACY_REVIEW.md) 、[35 Cursor 预检](docs/w5/35_ALPHA_SYNC_002F_CURSOR_PREFLIGHT.md) 与 [36 设备安全更换](docs/w5/36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md)。
+详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 、[32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md) 、[33 冲突解决](docs/w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md) 、[34 旧数据审查](docs/w5/34_ALPHA_SYNC_002E_LEGACY_REVIEW.md) 、[35 Cursor 预检](docs/w5/35_ALPHA_SYNC_002F_CURSOR_PREFLIGHT.md) 、[36 设备安全更换](docs/w5/36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md) 与 [37 崩溃安全拉取](docs/w5/37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md)。
 
 **重要边界：目前只提供用户手动触发的同步，不会后台自动上传；002E 只允许对本地待发送操作与云端变更冲突选择一方，来源冲突、学习计划占用、容量问题仍需人工处理。旧 ownerless 记录只有逐条明确确认才生成新的待发送意图，不会直接上传历史内容；旧删除墓碑不会变成远端删除。Supabase 迁移未部署，真实 RLS/双设备验收尚未完成。** Canvas、ICS、邮件、知识库、专注记录、学习计划和 legacy ownerless 队列均不会自动上传。
+
+### ALPHA-SYNC-002G 崩溃安全拉取定向测试
+
+```sh
+npm ci
+npm run typecheck
+node node_modules/vitest/vitest.mjs run src/main/personal-sync-pull-recovery.test.ts src/main/personal-sync-device-replacement.test.ts src/main/personal-sync-preflight.test.ts src/main/personal-sync.test.ts src/main/local-store.test.ts src/main/fixed-calendar-store.test.ts src/shared/personal-sync-contract.test.ts
+npm test
+npm run build
+```
+
+任务库从 v9 升级到 v10，首次启动之前会创建可核验的预迁移 SQLite 备份；本机仍需使用隔离的 `ATE_USER_DATA_DIR`。测试覆盖崩溃重放但不意味着真实 Supabase / 两设备已验收，详见 [37](docs/w5/37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md)。
 
 ## Windows / macOS 本地 Alpha 验收指南
 

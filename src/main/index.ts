@@ -797,7 +797,7 @@ app.whenReady().then(async () => {
   if(sandboxDisabled)report("SANDBOX_DISABLED","app");
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
-    await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",9);
+    await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",10);
     await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",3);
     await backupBeforeMigration(app.getPath("userData"),"ate-fixed-calendar.sqlite",5);
     await backupBeforeMigration(app.getPath("userData"),"ate-plans.sqlite",2);
