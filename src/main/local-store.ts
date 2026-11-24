@@ -428,6 +428,42 @@ export class LocalStore {
         action:row.action,baseVersion:row.base_version,payload:row.payload,createdAt:row.created_at}));
   }
 
+  getPersonalSyncPendingIntent(ownerInput:unknown,entityInput:unknown):{
+    operationId:string;action:"upsert"|"delete";payload:string|null;
+  }|null{
+    const ownerId=syncOwnerId(ownerInput),entityId=parseTaskId(entityInput);
+    const row=this.db.prepare(
+      "SELECT operation_id,action,payload FROM personal_sync_outbox "+
+      "WHERE owner_id=? AND entity_type='personal-task' AND entity_id=?"
+    ).get(ownerId,entityId) as {
+      operation_id:string;action:"upsert"|"delete";payload:string|null;
+    }|undefined;
+    return row?{operationId:row.operation_id,action:row.action,payload:row.payload}:null;
+  }
+
+  /** Reconcile a newer local edit into the held conflict so the user can
+   * re-review it. Never change the already reviewed remote version here. */
+  refreshPersonalSyncConflictLocal(ownerInput:unknown,entityType:PersonalSyncConflict["entityType"],
+    entityInput:unknown,pending:{
+      operationId:string;action:"upsert"|"delete";payload:string|null;
+    }):void{
+    const ownerId=syncOwnerId(ownerInput),entityId=requireUuid(entityInput);
+    const operationId=requireUuid(pending.operationId);
+    if(entityType!=="personal-task"&&entityType!=="manual-calendar-event")
+      throw Error("Invalid conflict type");
+    if(pending.action!=="upsert"&&pending.action!=="delete")
+      throw Error("Invalid local conflict action");
+    if((pending.action==="upsert")!== (pending.payload!==null))
+      throw Error("Invalid local conflict snapshot");
+    this.db.prepare(`UPDATE personal_sync_conflicts
+      SET local_operation_id=?,local_action=?,local_payload=?,updated_at=?
+      WHERE owner_id=? AND entity_type=? AND entity_id=?
+        AND reason IN ('remote-change-while-local-pending','remote-delete-while-local-pending')
+        AND (local_operation_id IS NOT ? OR local_action IS NOT ? OR local_payload IS NOT ?)`)
+      .run(operationId,pending.action,pending.payload,new Date().toISOString(),
+        ownerId,entityType,entityId,operationId,pending.action,pending.payload);
+  }
+
   hasPendingPersonalSyncOperation(ownerInput:unknown,operationIdInput:unknown):boolean{
     const ownerId=syncOwnerId(ownerInput),operationId=requireUuid(operationIdInput);
     return Boolean(this.db.prepare(
