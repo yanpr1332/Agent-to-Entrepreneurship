@@ -261,11 +261,13 @@ export class LocalStore {
   }
 
   private enqueuePersonalTask(id: string, now = new Date()): void {
-    const task = this.findTask(id);
-    if (!task || task.source !== null) throw new Error("Only personal tasks can be queued");
+    // Most tasks (including Canvas imports) are not enrolled. Return before
+    // validating provenance so ordinary edits never become sync operations.
     const enrolled = this.db.prepare("SELECT server_version FROM personal_task_sync_enrollment WHERE task_id=?")
       .get(id) as {server_version:number|null}|undefined;
     if (!enrolled) return;
+    const task = this.findTask(id);
+    if (!task || task.source !== null) throw new Error("Only personal tasks can be queued");
     const mail = this.db.prepare("SELECT 1 AS found FROM mail_candidate_reviews WHERE task_id=? AND decision='accepted'")
       .get(id);
     if (mail) throw new Error("Mail-derived tasks cannot be queued");
