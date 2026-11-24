@@ -52,6 +52,17 @@ export default function KnowledgeBase(){
     return ()=>{active=false;};
   },[]);
 
+  useEffect(()=>{
+    if(!embeddingStatus?.running)return;
+    let active=true;
+    const timer=window.setInterval(()=>{
+      void window.desktop.knowledge.embeddingStatus().then(value=>{
+        if(active)setEmbeddingStatus(value);
+      }).catch(()=>{});
+    },1200);
+    return ()=>{active=false;window.clearInterval(timer);};
+  },[embeddingStatus?.running]);
+
   async function perform(fn:()=>Promise<void>):Promise<void>{
     if(busy)return;
     setBusy(true);setError("");setNotice("");
@@ -151,6 +162,43 @@ export default function KnowledgeBase(){
     });
   }
 
+  async function importOfflineModel():Promise<void>{
+    if(!window.confirm(
+      "仅导入你自行获得、已确认来源及许可的本机 UTF-8 .vec 词向量文件（最大 32 MiB）。"+
+      "Study Anchor 不会联网下载模型，也不会上传个人资料；模型文件会复制到本机数据目录。"+
+      "这是静态词向量模型，不是 E5/BGE Transformer，检索质量取决于词表覆盖率。继续？"))return;
+    await perform(async()=>{
+      const status=await window.desktop.knowledge.importOfflineModel(true);
+      if(!status)return;
+      setEmbeddingStatus(status);
+      setNotice("离线词向量模型已校验并导入。点击「构建本机语义索引」才会处理已导入的资料。");
+    });
+  }
+  async function startOfflineIndex():Promise<void>{
+    await perform(async()=>{
+      const status=await window.desktop.knowledge.startOfflineIndex();
+      setEmbeddingStatus(status);
+      setNotice("已开始在本机逐批生成词向量；可取消，已写入的完整批次会保留。");
+    });
+  }
+  async function cancelOfflineIndex():Promise<void>{
+    await perform(async()=>{
+      setEmbeddingStatus(await window.desktop.knowledge.cancelOfflineIndex());
+      setNotice("已请求取消后续索引；再次开始可从尚未索引的资料继续。");
+    });
+  }
+  async function removeOfflineModel():Promise<void>{
+    if(!window.confirm(
+      "删除本机已安装的词向量模型副本及全部派生向量？原文、复习卡和知识图谱不会删除。"+
+      "模型来源文件及历史磁盘备份不会被自动擦除。"))return;
+    await perform(async()=>{
+      setEmbeddingStatus(await window.desktop.knowledge.removeOfflineModel(
+        "REMOVE_LOCAL_MODEL_AND_VECTORS"));
+      setResults([]);
+      setNotice("本机模型副本及当前向量索引已清除，原始知识库资料仍完整保留。");
+    });
+  }
+
   const dueCards=cards.filter(card=>card.nextDue<=day());
   const currentSource=passage?.body??null;
 
@@ -199,12 +247,37 @@ export default function KnowledgeBase(){
           <button className="secondary-button" disabled={busy} type="submit">本地搜索</button>
         </div>
       </form>
-      <p className="privacy-note" role="status">
-        {embeddingStatus?.model
-          ? "本机向量索引："+embeddingStatus.indexed+"/"+embeddingStatus.total+
-            " 个原文片段。实际模型推理尚未接入，当前搜索仍只使用精确与容错匹配。"
-          : "当前搜索使用本机精确及容错匹配。语义模型尚未安装或启用，不会自动下载模型或上传原文。"}
-      </p>
+      <div className="panel">
+        <div className="eyebrow">OPT-IN OFFLINE EMBEDDINGS</div>
+        <h3>本机词向量语义索引（可选）</h3>
+        <p className="privacy-note" role="status">
+          {embeddingStatus?.installed
+            ? "已安装静态词向量模型 · 索引 "+embeddingStatus.indexed+"/"+embeddingStatus.total+
+              " 个原文片段。搜索同时使用精确、容错及已建立的本机语义向量。"
+            : "未启用语义模型：当前只使用精确及容错搜索，不会自动下载任何模型。"}
+          {embeddingStatus?.running?" · 正在构建索引，可随时取消。":""}
+          {embeddingStatus?.error?" · "+embeddingStatus.error:""}
+        </p>
+        <div className="button-row">
+          <button type="button" className="secondary-button" disabled={busy||embeddingStatus?.running}
+            onClick={()=>void importOfflineModel()}>导入本机 .vec 词向量</button>
+          {embeddingStatus?.installed&&<>
+            <button type="button" className="secondary-button"
+              disabled={busy||embeddingStatus.running}
+              onClick={()=>void startOfflineIndex()}>构建/继续本地索引</button>
+            <button type="button" className="secondary-button"
+              disabled={busy||!embeddingStatus.running}
+              onClick={()=>void cancelOfflineIndex()}>取消索引</button>
+            <button type="button" className="secondary-button" disabled={busy}
+              onClick={()=>void removeOfflineModel()}>卸载本机模型与向量</button>
+          </>}
+        </div>
+        <p className="privacy-note">
+          仅支持用户自备的有词表标题行的 UTF-8 静态词向量；不是 E5/BGE Transformer。
+          中文词表覆盖率不足或未命中时自动保留原有搜索结果。权重来源与使用许可需你自行核对，
+          文件不会被上传，也不会读取原始资料路径以外的文件。
+        </p>
+      </div>
       {results.length>0&&<section className="panel kb-results">
         <div className="eyebrow">TRACEABLE EXCERPTS</div><h2>搜索结果 · {results.length} 条</h2>
         <ul className="kb-result-list">{results.map(hit=><li
