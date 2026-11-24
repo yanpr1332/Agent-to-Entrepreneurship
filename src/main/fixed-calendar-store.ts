@@ -438,7 +438,9 @@ export class FixedCalendarStore {
           this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE entity_id=?").run(item.event_id);
         }
       }
-      const removed=Number(this.db.prepare("DELETE FROM fixed_events WHERE series_id=? AND source='manual'")
+      // Series deletion applies to ICS imports as before; only manually enrolled
+      // occurrences above can have personal-sync tombstones.
+      const removed=Number(this.db.prepare("DELETE FROM fixed_events WHERE series_id=?")
         .run(row.series_id).changes);
       this.db.exec("COMMIT");
       return removed;
