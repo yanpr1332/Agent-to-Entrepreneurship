@@ -308,12 +308,14 @@ export function parsePersonalSyncPullPage(value:unknown):PersonalSyncPullPage {
   if(!Array.isArray(row.changes)||row.changes.length>500||typeof row.hasMore!=="boolean"||
     (row.hasMore&&row.changes.length===0))
     throw Error("Invalid personal sync page");
-  if(typeof row.nextCursor!=="string"||!/^(0|[1-9][0-9]{0,18})$/.test(row.nextCursor))
+  if(typeof row.nextCursor!=="string"||!/^(0|[1-9][0-9]{0,18})$/.test(row.nextCursor)||
+     BigInt(row.nextCursor)>9223372036854775807n)
     throw Error("Invalid personal sync cursor");
   const changes=row.changes.map((input):PersonalSyncChange=>{
     const change=record(input);
     exactKeys(change,["cursor","entityType","entityId","version","payload","deleted","updatedAt"]);
-    if(typeof change.cursor!=="string"||!/^[1-9][0-9]{0,18}$/.test(change.cursor))
+    if(typeof change.cursor!=="string"||!/^[1-9][0-9]{0,18}$/.test(change.cursor)||
+       BigInt(change.cursor)>9223372036854775807n)
       throw Error("Invalid personal sync change cursor");
     if(change.entityType!=="personal-task"&&change.entityType!=="manual-calendar-event")
       throw Error("Unsupported personal sync change");
