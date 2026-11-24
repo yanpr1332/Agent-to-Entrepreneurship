@@ -59,6 +59,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "cloud:resolve-personal-sync-conflict",
       "cloud:review-personal-sync-device-replacement",
       "cloud:reconcile-personal-sync-receipts",
+      "cloud:review-personal-sync-receipts",
       "cloud:send-message",
       "cloud:set-manual-event-sync",
       "cloud:set-personal-task-sync",
@@ -126,7 +127,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
     const all = Object.values(IPC_CHANNELS);
     expect(new Set(all).size).toBe(all.length);
     expect(all.filter((name) => name.startsWith("mail:"))).toHaveLength(10);
-    expect(all.filter((name) => name.startsWith("cloud:"))).toHaveLength(27);
+    expect(all.filter((name) => name.startsWith("cloud:"))).toHaveLength(28);
   });
 
   it("permits only explicit AI status, configuration, approval, cancel and disconnect calls",()=>{
