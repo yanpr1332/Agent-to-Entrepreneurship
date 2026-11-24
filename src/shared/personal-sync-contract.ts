@@ -274,6 +274,8 @@ export interface PersonalSyncRunResult {
   pushConflicts:number;
   rejected:number;
   retryableFailures:number;
+  /** Remote changes were found before upload; this run pulls first, never pushes stale intent. */
+  pushDeferred:boolean;
   pending:number;
   cursor:string;
   hasMore:boolean;
