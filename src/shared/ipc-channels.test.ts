@@ -81,6 +81,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "knowledge:cards",
       "knowledge:create-card",
       "knowledge:delete",
+      "knowledge:embedding-status",
       "knowledge:documents",
       "knowledge:graph",
       "knowledge:graph-create-edge",
