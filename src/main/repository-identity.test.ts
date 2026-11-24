@@ -26,17 +26,25 @@ describe("REPO-RENAME-001: Study Anchor repository identity",()=>{
     expect(prototype).toContain("<small>ANCHOR</small>");
   });
 
-  it("preserves OS install identity and all legacy data-path compatibility",()=>{
+  it("ships Study Anchor install ID, display name, userData bootstrap and renamed storage",()=>{
     const pkg=JSON.parse(projectFile("package.json")) as {
       build:{appId:string;productName:string};
     };
-    // Changes here require a separate backward-compatible data migration and GUI test.
-    expect(pkg.build.appId).toBe("org.agenttoentrepreneurship.desktop");
-    expect(pkg.build.productName).toBe("Agent to Entrepreneurship");
+    expect(pkg.build.appId).toBe("org.studyanchor.desktop");
+    expect(pkg.build.productName).toBe("Study Anchor");
     const main=projectFile("src/main/index.ts");
+    expect(main).toContain('app.setName("Study Anchor")');
+    expect(main).toContain("process.env.STUDY_ANCHOR_USER_DATA_DIR");
     expect(main).toContain("process.env.ATE_USER_DATA_DIR");
-    expect(main).toContain("ate-local.sqlite");
-    expect(main).toContain("ate-shared-history.sqlite");
+    expect(main).toContain("migrateStudyAnchorProfile");
+    expect(main).toContain("study-anchor-tasks.sqlite");
+    expect(main).toContain("study-anchor-team-history.sqlite");
+    expect(main).toContain("study-anchor-campus-mail.enc");
+    expect(main).not.toContain('join(app.getPath("userData"), "ate-local.sqlite")');
+    const backup=projectFile("src/main/local-backup.ts");
+    expect(backup).toContain("study-anchor-tasks.sqlite");
+    const diagnostics=projectFile("src/main/diagnostics.ts");
+    expect(diagnostics).toContain('DIAGNOSTIC_FILE="study-anchor-diagnostics.jsonl"');
   });
 
   it("points current repo setup and governance to the renamed remote",()=>{
