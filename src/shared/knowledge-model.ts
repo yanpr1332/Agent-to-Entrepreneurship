@@ -26,6 +26,14 @@ export interface KnowledgeSearchHit {
   pageNumber: number | null;
   matchType?: "exact" | "fuzzy" | "semantic";
 }
+export interface KnowledgeEmbeddingStatus {
+  model: {
+    id:string;revision:string;dimension:number;
+    format:"float32-l2";protocol:"passage-query-v1";
+  }|null;
+  indexed:number;
+  total:number;
+}
 export interface KnowledgePassage {
   documentId: string;
   documentTitle: string;
