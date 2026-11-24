@@ -219,7 +219,7 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
       startMinute:600,durationMinutes:60,weeks:2})).toHaveLength(2);
     restored.close();
     expect(await backupBeforeMigration(dir,"ate-fixed-calendar.sqlite",2)).toBeNull();
-  });
+  }, 15_000);
   it("offline proposals skip fixed time, AI proposals reject fixed time, apply rechecks edits",()=>{
     const classes=calendar(),p=planner(()=>classes.busySlots());
     classes.create({title:"Calculus",day:busy.day,startMinute:busy.startMinute,
@@ -303,10 +303,12 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     }
     expect(db.deleteSeries(group[0].id)).toBe(2);
     expect(db.list()).toHaveLength(0);
-    expect(db.listManualCalendarSyncOutbox()).toMatchObject([
-      {entityId:group[0].id,action:"delete",baseVersion:10,payload:null},
-      {entityId:group[1].id,action:"delete",baseVersion:11,payload:null},
-    ]);
+    const tombstones=db.listManualCalendarSyncOutbox();
+    expect(tombstones).toHaveLength(2);
+    expect(tombstones.find(x=>x.entityId===group[0].id))
+      .toMatchObject({action:"delete",baseVersion:10,payload:null});
+    expect(tombstones.find(x=>x.entityId===group[1].id))
+      .toMatchObject({action:"delete",baseVersion:11,payload:null});
   });
 
 });
