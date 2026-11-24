@@ -776,8 +776,12 @@ export default function CloudWorkspace() {
                 {historyStatus?.mode==="durable"
                   ? "已启用持久补拉 · 当前工作空间变更位点 "+historyStatus.cursor+
                     (historyStatus.hasMore?" · 历史仍在分批补拉":" · 已追上本次服务端位点")
-                  : "持久历史增量 RPC 未启用：仅显示服务端最近 100 条窗口，仍会安全定时刷新。"}
+                  : "持久历史暂不可用（服务端未部署或本机缓存不可用）：仅显示服务端最近 100 条窗口。"}
               </p>
+              {historyStatus?.mode==="durable"&&<p className="privacy-note">
+                本机已保存本小组已同步的消息与任务历史（SQLite 明文缓存，未额外加密）。
+                使用共享设备时请注意本机磁盘访问权限；退出登录不会自动清空历史文件。
+              </p>}
               <ul className="cloud-message-list">{[...visibleMessages].reverse().map(item=><li key={item.id}>
                 <div><strong>{members.find(m=>m.user_id===item.author_id)?.display_name??"成员"}</strong>
                   <small>{timestamp(item.created_at)}</small></div>
