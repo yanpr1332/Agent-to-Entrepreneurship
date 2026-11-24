@@ -414,6 +414,9 @@ export default function CloudWorkspace() {
   async function loadOlder(kind:"message"|"task"):Promise<void>{
     if(!selected||historyStatus?.mode!=="durable"||historyLoading)return;
     const workspace=selected;
+    // A newer RLS catch-up can apply a tombstone while this history page is
+    // loading. Never append an older result over that newer verified snapshot.
+    const fetchGeneration=workspaceFetchSeq.current;
     const current=kind==="message"?[...messages,...olderMessages]:[...tasks,...olderTasks];
     const sorted=[...current].sort((a,b)=>
       b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id));
@@ -423,7 +426,7 @@ export default function CloudWorkspace() {
     setHistoryLoading(true);
     try{
       const result=await window.desktop.cloud.workspaceHistoryOlder(workspace,kind,marker);
-      if(selectedRef.current!==workspace)return;
+      if(selectedRef.current!==workspace||workspaceFetchSeq.current!==fetchGeneration)return;
       if(kind==="message"){
         const existing=new Set([...messages,...olderMessages].map(x=>x.id));
         setOlderMessages(previous=>[...previous,...result.items.filter(
