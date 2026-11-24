@@ -673,10 +673,9 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return workspaceRealtime.watch(workspaceId);
   });
-  handle(IPC_CHANNELS.cloudStopWorkspaceWatch, (event) => {
+  handle(IPC_CHANNELS.cloudStopWorkspaceWatch, (event, workspaceId:unknown) => {
     requireTrustedSender(event);
-    workspaceRealtime.stop();
-    return {stopped:true as const};
+    return workspaceRealtime.stopWatching(workspaceId);
   });
   handle(IPC_CHANNELS.cloudSendMessage, (event, workspaceId: unknown, body: unknown) => {
     requireTrustedSender(event);
