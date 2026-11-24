@@ -203,7 +203,7 @@ export default function KnowledgeBase(){
         <ul className="kb-result-list">{results.map(hit=><li
           key={`${hit.documentId}:${hit.ordinal}`}>
           <button className="kb-source-link" disabled={busy}
-            onClick={()=>void openHit(hit)}>{hit.documentTitle} · {hit.matchType==="fuzzy"?"容错匹配 · ":""}{hit.pageNumber?`PDF 第 ${hit.pageNumber} 页 · `:""}原文片段 #{hit.ordinal+1} · v{hit.documentRevision}</button>
+            onClick={()=>void openHit(hit)}>{hit.documentTitle} · {hit.matchType==="fuzzy"?"容错匹配 · ":hit.matchType==="semantic"?"本地语义 · ":""}{hit.pageNumber?`PDF 第 ${hit.pageNumber} 页 · `:""}原文片段 #{hit.ordinal+1} · v{hit.documentRevision}</button>
           <p>{hit.excerpt}</p>
         </li>)}</ul>
       </section>}
