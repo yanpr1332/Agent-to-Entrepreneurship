@@ -58,7 +58,7 @@ W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全�
 - PR #44 已合并：当前账号只读设备/Cursor 健康诊断，及人工预览、二次确认后严格匹配的 operationId 回执核销；新只读 RPC 未在真实项目部署。
 - PR #45 已合并：团队消息/任务获得 Main-only Realtime 提醒、成员验证与最近 100 条 REST/RLS 兼容补拉；对应 SQL publication 未在隔离项目部署。
 - PR #46 已合并：团队消息/任务的持久增量日志、SQLite Cursor、删除墓碑及历史分页；003B 云端迁移未进行真实项目部署。\n- 当前 ALPHA-SYNC-003C：Owner 显式压缩旧日志时先生成完整版本化快照；过期 Cursor 会得到服务器明确的恢复协议。客户端分批严格验证并持久暂存、重启续传，全部完成且复核成员资格后原子替换旧数据；**无自动清零、无跳过删除、无默认生产日志裁剪**。仍待隔离项目、五账号 RLS 和真实安装验收。
-- 当前 ALPHA-SYNC-003D：团队历史 SQLite v3 的正文及未完成快照使用 Electron OS safeStorage 加密，原 v1/v2 文件原子转换，切换账号/退出时清理所属团队缓存，UI 可确认清理本设备缓存。**旧明文库和迁移前备份仍可能含原文**，不能保证磁盘安全擦除；PR #48 UI 视觉改版未合并期间仅在开发分支推进，不开第二个 PR。
+- 当前 ALPHA-SYNC-003D：团队历史 SQLite v3 的正文及未完成快照使用 Electron OS safeStorage 加密，原 v1/v2 文件原子转换，切换账号/退出时清理所属团队缓存，UI 可确认清理本设备缓存。**旧明文库和迁移前备份仍可能含原文**，不能保证磁盘安全擦除；PR #48 UI 视觉改版仍由另一贡献者独立推进；经用户明确同意，003D 另提独立 PR，按非重叠文件范围并行开发、分别审查。
 
 详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 、[32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md) 、[33 冲突解决](docs/w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md) 、[34 旧数据审查](docs/w5/34_ALPHA_SYNC_002E_LEGACY_REVIEW.md) 、[35 Cursor 预检](docs/w5/35_ALPHA_SYNC_002F_CURSOR_PREFLIGHT.md) 、[36 设备安全更换](docs/w5/36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md) 、[37 崩溃安全拉取](docs/w5/37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md) 与 [38 同步诊断和回执对账](docs/w5/38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
 
