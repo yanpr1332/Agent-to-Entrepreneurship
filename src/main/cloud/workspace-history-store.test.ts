@@ -144,7 +144,7 @@ describe("ALPHA-SYNC-003B durable workspace SQLite store",()=>{
     expect(()=>corrupted.getCursor(OWNER,WORKSPACE)).toThrow("cursor");
     corrupted.close();opened.length=0;
     const modified=new DatabaseSync(file);
-    modified.exec("PRAGMA user_version=2");modified.close();
+    modified.exec("PRAGMA user_version=3");modified.close();
     expect(()=>new WorkspaceHistoryStore(file)).toThrow("newer app");
   });
 });
