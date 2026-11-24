@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, type IpcMainInvokeEvent } from "electron";
 import { join,basename,extname } from "node:path";
 import { configureUserDataOverride } from "./user-data-override";
+import {migrateStudyAnchorProfile} from "./profile-migration";
+import {mkdirSync} from "node:fs";
 import { randomUUID } from "node:crypto";
 import { lstat,readFile,writeFile } from "node:fs/promises";
 import { FixedCalendarStore } from "./fixed-calendar-store";
@@ -61,15 +63,29 @@ const sandboxDisabled=app.commandLine.hasSwitch("no-sandbox");
  */
 // A failed override must never silently fall back to the default data store.
 let userDataOverrideFailure = false;
+let customUserData=false;
 try {
-  const customPath = configureUserDataOverride(
-    process.env.ATE_USER_DATA_DIR,
-    (directory) => app.setPath("userData", directory),
-  );
-  // Never print local profile paths in normal diagnostics.
-} catch (error) {
-  userDataOverrideFailure = true;
-  console.error("[ate] custom data directory could not be initialized.");
+  app.setName("Study Anchor");
+  const modern=process.env.STUDY_ANCHOR_USER_DATA_DIR;
+  const legacy=process.env.ATE_USER_DATA_DIR;
+  if(modern!==undefined&&legacy!==undefined&&
+     modern.trim()!==legacy.trim())
+    throw Error("Conflicting userData directory override variables");
+  const raw=modern??legacy;
+  customUserData=raw!==undefined;
+  if(customUserData){
+    configureUserDataOverride(raw,(directory)=>app.setPath("userData",directory));
+  }else{
+    // App data location is explicit, not indirectly derived from the renamed
+    // package or installer ID. Used for a one-time legacy directory migration.
+    const selected=join(app.getPath("appData"),"Study Anchor");
+    mkdirSync(selected,{recursive:true,mode:0o700});
+    app.setPath("userData",selected);
+  }
+  // Never print profile paths, tokens or credentials to normal diagnostics.
+}catch{
+  userDataOverrideFailure=true;
+  console.error("[study-anchor] data directory cannot be initialized.");
 }
 
 let diagnostics: DiagnosticLogger | null = null;
@@ -842,8 +858,22 @@ app.whenReady().then(async () => {
   if (userDataOverrideFailure) {
     dialog.showErrorBox(
       "无法打开自定义数据目录",
-      "ATE_USER_DATA_DIR 指定的目录无法创建或设置。应用不会改用默认目录，以免意外使用另一份数据。请检查路径和权限后重试。",
+      "STUDY_ANCHOR_USER_DATA_DIR（兼容旧 ATE_USER_DATA_DIR）目录无效或两项设置冲突。程序不会自动切换到其他数据目录，请核对环境变量及目录权限。",
     );
+    app.quit();
+    return;
+  }
+  // Strictly BEFORE any store, diagnostic writer, vault or background sync.
+  // If migration is ambiguous, stop rather than opening a new empty profile.
+  try{
+    await migrateStudyAnchorProfile({
+      appData:app.getPath("appData"),
+      destination:app.getPath("userData"),
+      inPlace:customUserData,
+    });
+  }catch{
+    dialog.showErrorBox("Study Anchor 数据迁移已暂停",
+      "检测到无法安全迁移的旧数据或目标目录冲突。旧数据未被自动删除；请关闭旧版程序、备份用户数据目录，并按仓库迁移指南检查后重试。程序不会打开空白数据库覆盖现有资料。");
     app.quit();
     return;
   }
@@ -852,14 +882,14 @@ app.whenReady().then(async () => {
   if(sandboxDisabled)report("SANDBOX_DISABLED","app");
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
-    await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",10);
-    await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",3);
-    await backupBeforeMigration(app.getPath("userData"),"ate-fixed-calendar.sqlite",5);
-    await backupBeforeMigration(app.getPath("userData"),"ate-plans.sqlite",2);
-    store = new LocalStore(join(app.getPath("userData"), "ate-local.sqlite"));
-    knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "ate-knowledge.sqlite"));
+    await backupBeforeMigration(app.getPath("userData"),"study-anchor-tasks.sqlite",10);
+    await backupBeforeMigration(app.getPath("userData"),"study-anchor-knowledge.sqlite",3);
+    await backupBeforeMigration(app.getPath("userData"),"study-anchor-calendar.sqlite",5);
+    await backupBeforeMigration(app.getPath("userData"),"study-anchor-planning.sqlite",2);
+    store = new LocalStore(join(app.getPath("userData"), "study-anchor-tasks.sqlite"));
+    knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "study-anchor-knowledge.sqlite"));
     fixedCalendarStore = new FixedCalendarStore(
-      join(app.getPath("userData"),"ate-fixed-calendar.sqlite"),
+      join(app.getPath("userData"),"study-anchor-calendar.sqlite"),
       ()=>planningStore?.listCommitted()??[],
       ()=>canvasSync?.scope()??null,
     );
@@ -868,7 +898,7 @@ app.whenReady().then(async () => {
     // calendar, mail or knowledge unavailable if its file is damaged.
     try{
       workspaceHistoryStore=new WorkspaceHistoryStore(
-        join(app.getPath("userData"),"ate-shared-history.sqlite"));
+        join(app.getPath("userData"),"study-anchor-team-history.sqlite"));
       workspaceHistoryService=new WorkspaceHistoryService(sharedCloud,workspaceHistoryStore);
     }catch{
       workspaceHistoryStore=null;workspaceHistoryService=null;
@@ -876,11 +906,11 @@ app.whenReady().then(async () => {
       // Keep the file untouched. Cloud UI continues with RLS-backed 003A
       // latest-window refresh; old history pages remain disabled.
     }
-    planningStore = new PlanningStore(join(app.getPath("userData"), "ate-plans.sqlite"),
+    planningStore = new PlanningStore(join(app.getPath("userData"), "study-anchor-planning.sqlite"),
       ()=>fixedCalendar().busySlots());
-    aiLedger = new AIUsageLedger(join(app.getPath("userData"), "ate-ai-usage.sqlite"));
+    aiLedger = new AIUsageLedger(join(app.getPath("userData"), "study-anchor-ai-usage.sqlite"));
     aiService = new AIService(
-      new AIKeyVault(join(app.getPath("userData"), "ai-personal.enc"), safeStorage),
+      new AIKeyVault(join(app.getPath("userData"), "study-anchor-ai.enc"), safeStorage),
       aiLedger,
     );
     // An inaccessible old key does not block offline tasks or knowledge.
@@ -888,9 +918,9 @@ app.whenReady().then(async () => {
     aiPlanning = new AIPlanningCoordinator(
       aiService,planningStore,()=>localStore().listTasks(),
     );
-    canvasVault = new CanvasCredentialVault(join(app.getPath("userData"), "canvas-personal.enc"), safeStorage);
-    mailStore = new CampusMailStore(join(app.getPath("userData"), "ate-mail.sqlite"));
-    const mailVault = new CampusMailVault(join(app.getPath("userData"), "campus-mail.enc"), safeStorage);
+    canvasVault = new CanvasCredentialVault(join(app.getPath("userData"), "study-anchor-canvas.enc"), safeStorage);
+    mailStore = new CampusMailStore(join(app.getPath("userData"), "study-anchor-mail.sqlite"));
+    const mailVault = new CampusMailVault(join(app.getPath("userData"), "study-anchor-campus-mail.enc"), safeStorage);
     mailService = new CampusMailService(mailVault, mailStore, undefined, undefined, () => {
       if(mailService?.snapshot().lastError)report("MAIL_SYNC_FAILED","mail");
       for (const window of BrowserWindow.getAllWindows()) {
