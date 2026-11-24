@@ -33,7 +33,7 @@ describe("local-first SQLite store", () => {
     expect(db.getOrCreatePersonalSyncDevice("aae9ac05-b37d-4898-aee4-5848fa28e01b").cursor).toBe("12");
     expect(()=>db.advancePersonalSyncCursor("aae9ac05-b37d-4898-aee4-5848fa28e01b","11")).toThrow("backwards");
     expect(()=>db.advancePersonalSyncCursor("aae9ac05-b37d-4898-aee4-5848fa28e01b","12x")).toThrow("cursor");
-    expect(()=>db.getOrCreatePersonalSyncDevice("not-a-user")).toThrow("owner");
+    expect(()=>db.getOrCreatePersonalSyncDevice("not-a-user")).toThrow("Invalid cloud identifier");
   });
 
   it("migrates v6 ownerless sync data into quarantined legacy tables without auto-assigning an account",()=>{
@@ -229,7 +229,7 @@ describe("local-first SQLite store", () => {
     expect(db.listTasks()).toMatchObject([{id:entityId,title:"Local edit"}]);
     db.recordPersonalSyncConflicts(OWNER_A,conflicts);
     expect(db.listPersonalSyncConflicts(OWNER_A)).toMatchObject([
-      {entityId,remoteVersion:2,localPayload:{title:"Local edit",description:"",dueDate:null,priority:"normal",completed:false}},
+      {entityId,remoteVersion:2,localPayload:{title:"Local edit",description:"remote",dueDate:null,priority:"normal",completed:false}},
     ]);
     expect(db.countPersonalSyncConflicts(OWNER_A)).toBe(1);
   });

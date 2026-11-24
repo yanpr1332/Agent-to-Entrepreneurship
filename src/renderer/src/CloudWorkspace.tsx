@@ -3,11 +3,19 @@ import type {
   CloudSessionStatus, SharedMember, SharedMessage, SharedTask, SharedWorkspace,
 } from "../../shared/cloud-model";
 import type {
-  PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncRunResult,
+  PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncConflictReason, PersonalSyncRunResult,
 } from "../../shared/personal-sync-contract";
 
 const empty:CloudSessionStatus={configured:false,authenticated:false,userId:null,email:null};
 const POLL_MS=10_000;
+const conflictReason:Record<PersonalSyncConflictReason,string>={
+  "remote-change-while-local-pending":"本地修改尚未上传，云端也有新修改",
+  "remote-delete-while-local-pending":"本地修改尚未上传，但云端已删除",
+  "local-entity-not-eligible":"本机同 ID 记录不属于可同步的个人数据",
+  "remote-overlaps-study-plan":"云端课程与本机已确认学习计划冲突",
+  "local-calendar-capacity":"本机日历容量已满",
+};
+
 function issue(error:unknown):string{return error instanceof Error?error.message:"云端操作未完成";}
 function timestamp(value:string):string {
   const date=new Date(value);return Number.isFinite(date.getTime())?date.toLocaleString("zh-CN"):value;
@@ -321,7 +329,7 @@ export default function CloudWorkspace() {
             {personalSyncResult && personalSyncResult.conflicts>personalConflicts.length ? " 当前仅展示最新 100 条。" : ""}</p>
           {personalConflicts.map(item=><article className="cloud-sync-conflict" key={item.entityType+":"+item.entityId}>
             <strong>{item.localPayload?.title??item.entityId}</strong>
-            <small>{item.entityType==="personal-task"?"个人任务":"手动课程"} · 云端版本 {item.remoteVersion}</small>
+            <small>{item.entityType==="personal-task"?"个人任务":"手动课程"} · 云端版本 {item.remoteVersion} · {conflictReason[item.reason]}</small>
             <p>本机：{item.localAction==="delete"?"已删除":item.localPayload?.title??"本机记录待检查"}</p>
             <p>云端：{item.remoteDeleted?"已删除":item.remotePayload?.title??"云端内容不可用"}</p>
           </article>)}
