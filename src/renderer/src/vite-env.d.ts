@@ -20,6 +20,7 @@ import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncRunResult,
   PersonalSyncResolutionRequest, PersonalSyncLegacyReview, PersonalSyncLegacyAdoptionRequest,
   PersonalSyncDeviceReplacementReview, PersonalSyncDeviceReplacementRequest,
+  PersonalSyncRecoveryHealth, PersonalSyncReceiptReconcileResult,
 } from "../../shared/personal-sync-contract";
 
 import type {
@@ -89,6 +90,8 @@ declare global {
         setPersonalTaskSync: (id:string,enabled:boolean) => Promise<{saved:true}>;
         setManualEventSync: (id:string,enabled:boolean) => Promise<{saved:true}>;
         personalSyncConflicts: () => Promise<PersonalSyncConflictRecord[]>;
+        inspectPersonalSyncRecovery: () => Promise<PersonalSyncRecoveryHealth>;
+        reconcilePersonalSyncReceipts: () => Promise<PersonalSyncReceiptReconcileResult>;
         reviewPersonalSyncDeviceReplacement: () => Promise<PersonalSyncDeviceReplacementReview>;
         confirmPersonalSyncDeviceReplacement: (input:PersonalSyncDeviceReplacementRequest) => Promise<{replaced:true}>;
         personalSyncLegacyReview:() => Promise<PersonalSyncLegacyReview>;
