@@ -794,3 +794,59 @@ input:hover:not(:disabled),textarea:hover:not(:disabled),select:hover:not(:disab
 .focus-side .history-list>li>span{background:var(--tint);border-radius:8px;padding:6px 8px;color:var(--accent);font-size:11px;font-weight:650;white-space:nowrap}
 @media(max-width:1200px){.focus-layout{grid-template-columns:1fr}.focus-layout>.timer-panel{min-height:unset;padding:30px 20px}.focus-side{grid-template-columns:1fr 1fr}}
 @media(max-width:760px){.focus-side{grid-template-columns:1fr}.timer-display{font-size:80px}.timer-panel h2{font-size:20px}}
+
+
+/* KNOWLEDGE UI · personal reading library */
+.kb-page{gap:20px}
+.kb-page>.page-heading{align-items:flex-end}
+.kb-page>.page-heading h1{letter-spacing:-1px}
+.kb-page>.page-heading p{max-width:720px;line-height:1.75}
+.kb-page>.connector-warning{padding:15px 17px;border-radius:11px;line-height:1.8;font-size:11px}
+.kb-toolbar{padding:13px 0;border-bottom:1px solid var(--line)}
+.kb-toolbar .filter-tabs{gap:6px}
+.kb-toolbar .chip{padding:9px 13px;border-radius:9px}
+.kb-toolbar .button-row{gap:8px}
+.kb-search{padding:2px 0 4px;gap:10px}
+.kb-search label{font-size:11px;letter-spacing:.3px}
+.kb-search-row input{padding:13px 15px;border-radius:11px}
+.kb-search-row button{padding:12px 16px;border-radius:10px}
+.kb-layout{grid-template-columns:minmax(240px,.72fr) minmax(0,1.28fr);gap:16px}
+.kb-layout>.panel{padding:22px;min-width:0}
+.kb-layout>.kb-library{position:sticky;top:18px}
+.kb-library h2,.kb-reader h2{font-size:17px;letter-spacing:-.3px;margin:7px 0 14px}
+.kb-document-list{margin-top:15px}
+.kb-document-list li{padding:13px 0;gap:7px}
+.kb-doc,.kb-doc-active{font-size:12px;line-height:1.6}
+.kb-document-list small{font-size:10px;line-height:1.65}
+.kb-reader .panel-heading{gap:12px;align-items:flex-start}
+.kb-reader .panel-heading h2{overflow-wrap:anywhere}
+.kb-reader .panel-heading button{white-space:nowrap;font-size:11px;padding:8px 10px;border-radius:8px}
+.kb-reader>.privacy-note{line-height:1.7}
+.kb-reading-switch{padding:4px 0 10px;gap:6px}
+.kb-reading-switch .chip{padding:8px 12px;border-radius:8px}
+.kb-rendered-document{max-height:600px;padding:22px 24px;border-radius:12px;line-height:1.85}
+.kb-source-preview{max-height:600px;border-radius:12px;padding:18px;line-height:1.75}
+.kb-passage-evidence{margin:15px 0;padding:13px;border:1px solid var(--line);border-radius:10px}
+.kb-passage-evidence summary{font-size:11px;cursor:pointer;line-height:1.7}
+.kb-passage-evidence pre{max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:12px;font-size:11px;line-height:1.7}
+.kb-card-form{margin-top:20px;padding:18px;border:1px solid var(--line);border-radius:12px;gap:12px}
+.kb-card-form h3{font-size:14px;letter-spacing:-.2px}
+.kb-card-form label{gap:7px;font-size:11px}
+.kb-card-form input,.kb-card-form textarea{padding:12px 13px;border-radius:9px;line-height:1.7}
+.kb-results{padding:20px 22px}
+.kb-result-list li{padding:14px 0}
+.kb-result-list p{line-height:1.85;margin-top:7px}
+.kb-review-layout{gap:16px}
+.kb-progress{gap:8px}
+.kb-progress span{padding:11px 14px;border-radius:10px}
+.kb-progress strong{font-size:20px}
+.kb-review-card{padding:24px;gap:15px;border-radius:13px}
+.kb-review-card h2{font-size:20px;line-height:1.55;letter-spacing:-.35px}
+.kb-answer{gap:10px}
+.kb-answer p,.kb-answer blockquote{line-height:1.85}
+.kb-answer blockquote{padding:15px;border-radius:8px}
+.kb-rating{gap:8px;flex-wrap:wrap}
+.kb-rating button{border-radius:9px;padding:10px 14px}
+.kb-review-list li{padding:12px 0;line-height:1.6}
+@media(max-width:1200px){.kb-layout{grid-template-columns:minmax(0,1fr)}.kb-layout>.kb-library{position:static}}
+@media(max-width:760px){.kb-page>.page-heading{align-items:flex-start;flex-direction:column}.kb-toolbar{align-items:flex-start}.kb-toolbar .button-row{width:100%}.kb-toolbar .button-row button{flex:1}.kb-search-row{flex-direction:column;align-items:stretch}.kb-search-row button{width:100%}.kb-layout>.panel{padding:17px}.kb-review-card{padding:18px}.kb-progress{display:grid;grid-template-columns:1fr 1fr}.kb-progress span:last-child{grid-column:1/-1}}
