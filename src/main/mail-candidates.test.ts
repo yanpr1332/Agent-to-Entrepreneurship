@@ -110,7 +110,9 @@ describe("mail candidate reviews in canonical local task database",()=>{
       first.close();
       // Simulate a pre-upgrade v3 file; all earlier tables and data remain intact.
       const raw=new DatabaseSync(file);
-      raw.exec("DROP TABLE mail_candidate_reviews; DROP TABLE personal_sync_outbox; DROP TABLE personal_task_sync_enrollment; PRAGMA user_version = 3");
+      raw.exec("DROP TABLE mail_candidate_reviews; DROP TABLE personal_sync_outbox; DROP TABLE personal_task_sync_enrollment; "+
+        "DROP TABLE personal_sync_legacy_outbox; DROP TABLE personal_task_sync_legacy_enrollment; "+
+        "DROP TABLE personal_sync_devices; PRAGMA user_version = 3");
       raw.close();
       const upgraded=new LocalStore(file);
       expect(upgraded.listTasks()).toMatchObject([{

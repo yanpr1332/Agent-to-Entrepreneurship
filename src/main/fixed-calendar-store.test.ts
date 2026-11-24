@@ -198,7 +198,7 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     expect(db.deleteSeries(stored[0].id)).toBe(3);
     expect(db.list()).toEqual([]);
   });
-  it("retains v1 events and verified backup when upgrading the calendar to schema v2",async()=>{
+  it("retains v1 events and verified backup when upgrading the calendar to owner-scoped schema v5",async()=>{
     const dir=mkdtempSync(join(tmpdir(),"ate-calendar-v1-"));folders.push(dir);
     const path=join(dir,"ate-fixed-calendar.sqlite");
     const initial=new FixedCalendarStore(path);
@@ -207,10 +207,11 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     initial.close();
     const old=new DatabaseSync(path);
     old.exec("DROP TABLE manual_calendar_sync_outbox; DROP TABLE manual_calendar_sync_enrollment; "+
+      "DROP TABLE manual_calendar_sync_legacy_outbox; DROP TABLE manual_calendar_sync_legacy_enrollment; "+
       "DROP TABLE canvas_calendar_events; DROP INDEX fixed_events_series; "+
       "ALTER TABLE fixed_events DROP COLUMN series_id; PRAGMA user_version=1;");
     old.close();
-    const copied=await backupBeforeMigration(dir,"ate-fixed-calendar.sqlite",2);
+    const copied=await backupBeforeMigration(dir,"ate-fixed-calendar.sqlite",5);
     expect(copied).toBeTruthy();
     const pre=new DatabaseSync(join(copied!,"ate-fixed-calendar.sqlite"),{readOnly:true});
     expect((pre.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(1);
@@ -220,7 +221,7 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     expect(restored.create({title:"New weekly",day:"2026-11-12",
       startMinute:600,durationMinutes:60,weeks:2})).toHaveLength(2);
     restored.close();
-    expect(await backupBeforeMigration(dir,"ate-fixed-calendar.sqlite",2)).toBeNull();
+    expect(await backupBeforeMigration(dir,"ate-fixed-calendar.sqlite",5)).toBeNull();
   }, 15_000);
   it("offline proposals skip fixed time, AI proposals reject fixed time, apply rechecks edits",()=>{
     const classes=calendar(),p=planner(()=>classes.busySlots());
@@ -333,8 +334,8 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     expect(()=>db.acknowledgeManualCalendarSyncOperation(OWNER_B,a.operationId,5)).toThrow("no longer pending");
     db.edit({id:event.id,title:"Updated for both accounts",day:event.day,
       startMinute:600,durationMinutes:60});
-    expect(db.listManualCalendarSyncOutbox(OWNER_A)[0].operationId).not.toBe(a.operationId);
-    expect(db.listManualCalendarSyncOutbox(OWNER_B)[0].operationId).not.toBe(b.operationId);
+    expect(db.listManualCalendarSyncOutbox(OWNER_A)[0].operationId).toBe(a.operationId);
+    expect(db.listManualCalendarSyncOutbox(OWNER_B)[0].operationId).toBe(b.operationId);
     db.acknowledgeManualCalendarSyncOperation(OWNER_A,
       db.listManualCalendarSyncOutbox(OWNER_A)[0].operationId,6);
     expect(db.listManualCalendarSyncOutbox(OWNER_A)).toEqual([]);

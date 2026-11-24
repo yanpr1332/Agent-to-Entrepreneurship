@@ -122,8 +122,8 @@ describe("local-first SQLite store", () => {
     expect(a.operationId).not.toBe(b.operationId);
     expect(()=>db.acknowledgePersonalSyncOperation(OWNER_B,a.operationId,3)).toThrow("no longer pending");
     db.updateTask({id:task.id,title:"Edited for both explicitly enrolled accounts"});
-    expect(db.listPersonalSyncOutbox(OWNER_A)[0].operationId).not.toBe(a.operationId);
-    expect(db.listPersonalSyncOutbox(OWNER_B)[0].operationId).not.toBe(b.operationId);
+    expect(db.listPersonalSyncOutbox(OWNER_A)[0].operationId).toBe(a.operationId);
+    expect(db.listPersonalSyncOutbox(OWNER_B)[0].operationId).toBe(b.operationId);
     db.acknowledgePersonalSyncOperation(OWNER_A,db.listPersonalSyncOutbox(OWNER_A)[0].operationId,4);
     expect(db.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
     expect(db.listPersonalSyncOutbox(OWNER_B)).toHaveLength(1);

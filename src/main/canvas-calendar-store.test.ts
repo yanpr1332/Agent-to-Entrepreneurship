@@ -94,9 +94,11 @@ describe("Canvas calendar cache is private, durable and user-controlled",()=>{
       startMinute:700,durationMinutes:60,weeks:1})[0];
     first.close();
     const old=new DatabaseSync(path);
-    old.exec("DROP TABLE manual_calendar_sync_outbox; DROP TABLE manual_calendar_sync_enrollment; DROP INDEX canvas_calendar_scope; DROP TABLE canvas_calendar_events; PRAGMA user_version=2;");
+    old.exec("DROP TABLE manual_calendar_sync_outbox; DROP TABLE manual_calendar_sync_enrollment; "+
+      "DROP TABLE manual_calendar_sync_legacy_outbox; DROP TABLE manual_calendar_sync_legacy_enrollment; "+
+      "DROP INDEX canvas_calendar_scope; DROP TABLE canvas_calendar_events; PRAGMA user_version=2;");
     old.close();
-    const backupFolder=await backupBeforeMigration(folder,"ate-fixed-calendar.sqlite",3);
+    const backupFolder=await backupBeforeMigration(folder,"ate-fixed-calendar.sqlite",5);
     expect(backupFolder).toBeTruthy();
     const preserved=new DatabaseSync(join(backupFolder!,"ate-fixed-calendar.sqlite"),{readOnly:true});
     expect((preserved.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(2);

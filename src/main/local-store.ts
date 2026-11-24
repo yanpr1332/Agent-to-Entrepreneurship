@@ -379,7 +379,7 @@ export class LocalStore {
       INSERT INTO personal_sync_outbox(owner_id,operation_id,entity_type,entity_id,action,base_version,payload,created_at)
       VALUES(?,?,'personal-task',?,'upsert',?,?,?)
       ON CONFLICT(owner_id,entity_type,entity_id) DO UPDATE SET
-        operation_id=excluded.operation_id,action='upsert',base_version=excluded.base_version,
+        action='upsert',base_version=excluded.base_version,
         payload=excluded.payload,created_at=excluded.created_at
     `).run(ownerId,randomUUID(),id,enrolled.server_version,payload,now.toISOString());
   }

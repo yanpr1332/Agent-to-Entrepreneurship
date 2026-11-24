@@ -187,7 +187,7 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 
 ## ALPHA-SYNC-002B 个人云端协议基础（2026-11-24）
 
-当前开发轮增加个人同步服务端 SQL/RLS、owner 认证的设备注册/撤销、幂等 apply、版本冲突回执、增量 Cursor pull RPC，以及本机 per-owner deviceId/cursor 持久化。详细边界、数据表、RPC 与未完成项见 [30](30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)。
+PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/撤销、幂等 apply、版本冲突回执、增量 Cursor pull RPC，以及本机 per-owner deviceId/cursor 持久化。详细边界、数据表、RPC 与未完成项见 [30](30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)。
 
 此阶段不自动部署 Supabase，不发起真实账号请求，不自动上传本地 Outbox；RPC 的单测与静态 SQL 检查不是 RLS 真实验收。
 
