@@ -140,3 +140,8 @@ PR #44 已合并，开始团队实时工作流：Electron Main 用当前用户 J
 ## 17. ALPHA-SYNC-003B：可靠历史变更日志与持久增量（2026-11-24）
 
 PR #45 已合并，当前开发 003B：新增 workspace-scoped 事务提交顺序 Cursor、已有消息/任务回填、UPDATE/DELETE 变更日志、只读成员鉴权 RPC，客户端按页严格校验连续 Cursor、在独立 SQLite 中 CAS 原子提交。重启从已持久 Cursor 继续，历史消息/任务可本机键集分页，单次最多 2000 事件防止大同步独占 UI。当前队列涉及 **本地明文历史缓存**，需明确隐私与数据留存要求；新 SQL 尚未部署。服务器压缩/裁剪的安全恢复、真实五账号撤权 RLS 与平台 GUI 仍待 003C。见 [40](40_ALPHA_SYNC_003B_DURABLE_HISTORY.md)。
+
+
+## 18. ALPHA-SYNC-003C：安全历史压缩与 Cursor 过期检查点（2026-11-24）
+
+003B PR #46 已合并，当前 003C：增加 Owner-only 手动 checkpoint RPC 与受控事件裁剪、按当前 JWT 成员资格核验的不可变全量快照页；服务器返回明确的 expired checkpoint。客户端在 `study-anchor-team-history.sqlite` v2 中按 project/account/workspace 隔离暂存完整快照并持久化 ordinal，任何失败/中断不移动原 Cursor；全部完成后重新验证成员资格，再原子替换主缓存和位点，并继续拉取检查点后的变更。UI 重建期间隐藏旧缓存，禁止把不完整的最近 100 条冒充历史。迁移未在真实 Supabase 部署，Owner 压缩不会自动执行；五账号 RLS 及硬盘明文缓存保留/擦除仍需验收。参见 [41](41_ALPHA_SYNC_003C_CHECKPOINT_RECOVERY.md)。

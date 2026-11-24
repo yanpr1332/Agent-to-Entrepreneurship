@@ -242,3 +242,8 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 ## ALPHA-SYNC-003B：持久团队日志、历史分页和重启恢复（开发中，2026-11-24）
 
 [40 历史日志 Cursor/SQLite 恢复及隐私验收](40_ALPHA_SYNC_003B_DURABLE_HISTORY.md)：服务端按 workspace 行锁序列化变更 Cursor 并回填已有任务/消息；本机每页严格验证后在独立 SQLite 中同时提交记录和 Cursor。支持超过 100 条历史和更早消息/任务分页；撤权后清理该工作空间缓存。迁移须单独审核部署，SQLite 明文留存、真正五账号/RLS 及两平台安装包仍待验收。
+
+
+## ALPHA-SYNC-003C：显式历史检查点与过期 Cursor 的无损恢复（开发中）
+
+[41 检查点协议与 SQLite v2 原子快照重建](41_ALPHA_SYNC_003C_CHECKPOINT_RECOVERY.md)：Owner 在经过审查的隔离云项目中显式生成完整快照并裁剪旧事件；客户端按 checkpoint 版本与 ordinal 严格分批恢复，全部校验成功且再次复核成员资格后才同时替换本机记录和 Cursor。断网/重启可继续、旧世代不混页。**仍未部署真实云端迁移或进行五账号真机验收，也没有生产自动压缩/安全擦除承诺**。

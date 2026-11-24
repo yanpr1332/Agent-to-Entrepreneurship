@@ -897,6 +897,10 @@ app.whenReady().then(async () => {
     // The optional cloud history cache must never make offline tasks,
     // calendar, mail or knowledge unavailable if its file is damaged.
     try{
+      // Preserve a verified v1 snapshot before introducing checkpoint staging
+      // (v2). Failed backup leaves the original optional cache untouched.
+      await backupBeforeMigration(app.getPath("userData"),
+        "study-anchor-team-history.sqlite",2);
       workspaceHistoryStore=new WorkspaceHistoryStore(
         join(app.getPath("userData"),"study-anchor-team-history.sqlite"));
       workspaceHistoryService=new WorkspaceHistoryService(sharedCloud,workspaceHistoryStore);

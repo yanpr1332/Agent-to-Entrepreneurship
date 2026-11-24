@@ -132,7 +132,7 @@ export default function CloudWorkspace() {
       setMessages(snapshot.messages);
       setTasks(snapshot.tasks);
       setHistoryStatus(snapshot.history??null);
-      if((snapshot.history?.applied??0)>0){
+      if(snapshot.history?.rebuilding||(snapshot.history?.applied??0)>0){
         // An immutable journal page may contain tombstones for older items.
         // Drop historical UI pages so deleted records cannot remain visible.
         setOlderMessages([]);setOlderTasks([]);
@@ -412,7 +412,7 @@ export default function CloudWorkspace() {
   }
 
   async function loadOlder(kind:"message"|"task"):Promise<void>{
-    if(!selected||historyStatus?.mode!=="durable"||historyLoading)return;
+    if(!selected||historyStatus?.mode!=="durable"||historyStatus.rebuilding||historyLoading)return;
     const workspace=selected;
     // A newer RLS catch-up can apply a tombstone while this history page is
     // loading. Never append an older result over that newer verified snapshot.
@@ -473,10 +473,10 @@ export default function CloudWorkspace() {
     });
   }
 
-  const visibleMessages=[...messages,...olderMessages.filter(old=>
+  const visibleMessages=historyStatus?.rebuilding?[]:[...messages,...olderMessages.filter(old=>
     !messages.some(item=>item.id===old.id))].sort((a,b)=>
       b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id));
-  const visibleTasks=[...tasks,...olderTasks.filter(old=>
+  const visibleTasks=historyStatus?.rebuilding?[]:[...tasks,...olderTasks.filter(old=>
     !tasks.some(item=>item.id===old.id))].sort((a,b)=>
       b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id));
   const messagesMore=historyStatus?.mode==="durable"&&
@@ -777,8 +777,12 @@ export default function CloudWorkspace() {
               <p className="privacy-note" role="status">{liveLabels[workspaceLivePhase]}</p>
               <p className="privacy-note" role="status">
                 {historyStatus?.mode==="durable"
-                  ? "已启用持久补拉 · 当前工作空间变更位点 "+historyStatus.cursor+
-                    (historyStatus.hasMore?" · 历史仍在分批补拉":" · 已追上本次服务端位点")
+                  ? historyStatus.rebuilding
+                    ? "历史 Cursor 已过期：正在分批校验并重建完整快照（旧缓存暂不展示）。"+
+                      " 当前旧位点 "+historyStatus.cursor+"；下一轮将自动续传，重建完成后才会恢复列表。"
+                    : "已启用持久补拉 · 当前工作空间变更位点 "+historyStatus.cursor+
+                      (historyStatus.checkpointCursor?" · 已恢复服务端检查点 "+historyStatus.checkpointCursor:"")+
+                      (historyStatus.hasMore?" · 历史仍在分批补拉":" · 已追上本次服务端位点")
                   : "持久历史暂不可用（服务端未部署或本机缓存不可用）：仅显示服务端最近 100 条窗口。"}
               </p>
               {historyStatus?.mode==="durable"&&<p className="privacy-note">
@@ -789,7 +793,7 @@ export default function CloudWorkspace() {
                 <div><strong>{members.find(m=>m.user_id===item.author_id)?.display_name??"成员"}</strong>
                   <small>{timestamp(item.created_at)}</small></div>
                 <p>{item.body}</p></li>)}</ul>
-              {!visibleMessages.length && <p className="empty-state">暂无消息，发送第一条小组消息。</p>}
+              {!visibleMessages.length&&!historyStatus?.rebuilding && <p className="empty-state">暂无消息，发送第一条小组消息。</p>}
               {messagesMore&&<button type="button" className="secondary-button"
                 disabled={busy||historyLoading} onClick={()=>void loadOlder("message")}>
                 {historyLoading?"正在读取历史…":"加载更早消息（每次最多 100 条）"}
@@ -807,7 +811,7 @@ export default function CloudWorkspace() {
                   onChange={()=>void toggleTask(item)} aria-label={`完成共享任务：${item.title}`} />
                 <div><strong className={item.completed?"done":""}>{item.title}</strong>
                   <small>{item.due_date??"未设置截止日期"} · {members.find(m=>m.user_id===item.assigned_to)?.display_name??"未分配"}</small></div>
-              </li>)}</ul> : <p className="empty-state">暂无共享任务；个人日历任务不会自动复制到这里。</p>}
+              </li>)}</ul> : !historyStatus?.rebuilding&&<p className="empty-state">暂无共享任务；个人日历任务不会自动复制到这里。</p>}
               {tasksMore&&<button type="button" className="secondary-button"
                 disabled={busy||historyLoading} onClick={()=>void loadOlder("task")}>
                 {historyLoading?"正在读取历史…":"加载更多历史任务（每次最多 100 条）"}

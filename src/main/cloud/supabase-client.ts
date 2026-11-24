@@ -256,6 +256,21 @@ export class SharedCloudClient {
   }
 
   /** Authenticated, scoped journal pull. Never creates or edits cloud rows. */
+  /** Pinned, read-only checkpoint page. Always uses the signed-in user JWT
+   * through the same protected RPC transport as normal history pulls. */
+  async pullWorkspaceCheckpoint(workspaceInput:unknown,checkpointInput:unknown,
+    afterInput:unknown,limit=100):Promise<unknown>{
+    const workspace=requireUuid(workspaceInput);
+    const checkpoint=workspaceCursor(checkpointInput);
+    const after=workspaceCursor(afterInput);
+    if(checkpoint==="0"||!Number.isInteger(limit)||limit<1||limit>100)
+      throw Error("Invalid team checkpoint page request");
+    return this.rpc("ate_workspace_history_snapshot",{
+      p_workspace_id:workspace,p_checkpoint_cursor:checkpoint,
+      p_after:after,p_limit:limit,
+    });
+  }
+
   async pullWorkspaceHistory(workspaceInput:unknown,cursorInput:unknown,limit=100):Promise<unknown>{
     const workspace=requireUuid(workspaceInput);
     const cursor=workspaceCursor(cursorInput);
