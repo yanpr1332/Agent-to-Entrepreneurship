@@ -24,7 +24,7 @@ export interface KnowledgeSearchHit {
   ordinal: number;
   excerpt: string;
   pageNumber: number | null;
-  matchType?: "exact" | "fuzzy";
+  matchType?: "exact" | "fuzzy" | "semantic";
 }
 export interface KnowledgePassage {
   documentId: string;
