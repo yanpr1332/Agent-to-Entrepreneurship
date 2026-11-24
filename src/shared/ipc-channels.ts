@@ -107,6 +107,7 @@ export const IPC_CHANNELS = {
   cloudConfirmPersonalSyncDeviceReplacement: "cloud:confirm-personal-sync-device-replacement",
   cloudInspectPersonalSyncRecovery: "cloud:inspect-personal-sync-recovery",
   cloudReviewPersonalSyncReceipts: "cloud:review-personal-sync-receipts",
+  cloudDiscardPersonalSyncReceiptReview: "cloud:discard-personal-sync-receipt-review",
   cloudReconcilePersonalSyncReceipts: "cloud:reconcile-personal-sync-receipts",
 } as const;
 
