@@ -1,6 +1,6 @@
 # ALPHA-SYNC-002B：个人云端协议与设备身份基础
 
-> **状态：本轮代码/协议实现；未部署到 Supabase、未连接本地 Outbox 网络传输、未完成双向同步。** 本文件不构成执行云端迁移的授权。
+> **状态：PR #36 已合并；未部署到 Supabase、未连接本地 Outbox 网络传输、未完成双向同步。** 本文件不构成执行云端迁移的授权。
 
 ## 1. 本轮交付
 
@@ -67,3 +67,10 @@ npm run build
 ## 7. 下一轮建议
 
 先做本地 owner-scoped enrollment/Outbox schema 升级与安全迁移，再接入显式手动同步按钮、push + ack、pull + 本地事务应用、冲突保留/选择 UI。只有这几步完成后，才可把功能称为个人任务/手动日历跨设备同步 MVP。
+
+
+## 8. 后续阶段状态
+
+PR #36 已合并。其本机 deviceId/cursor 仍在 ate-local.sqlite schema v7；随后 ALPHA-SYNC-002C 将该任务库升至 v8，并将独立手动日历库升至 v5，以便 enrollment/Outbox 按 owner 隔离。旧 ownerless 行会被迁入隔离表，必须由用户明确重新授权，不会自动上传。详见 [31](31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md)。
+
+002C 完成后，才进入 uploader、push ack、pull 本地事务应用与冲突 UI。

@@ -40,11 +40,15 @@ W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全�
 
 个人同步协议白名单、字段来源投影、五账号 RLS 手动验收脚本及离线 mock 已归档；真实项目仍需用户提供隔离测试项目、五个独立账号与明确写入授权。脚本：`npm run test:sync-rls`，不会由 CI 自动连接。详见 [SYNC-001 实施及测试](docs/w5/28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)。
 
-### ALPHA-SYNC-002 本地 Outbox 与个人云端协议（分阶段推进）
+### ALPHA-SYNC-002 个人任务与手动日历跨设备同步（分阶段推进）
 
-PR #35 已合并：个人任务/手动日历逐条授权、事务性本地 Outbox、待发送操作合并和版本化删除墓碑已落地。当前开发轮补充个人云端表、owner-scoped RLS、设备注册/撤销、版本检查、幂等回执和增量 Cursor RPC；本机也新增按账号持久化的 deviceId/cursor。详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md) 与 [30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)。
+- PR #35 已合并：逐条授权、本地 Outbox、待发送操作合并和版本化删除墓碑。
+- PR #36 已合并：个人云端表/RLS、设备注册/撤销、版本检查、幂等回执、增量 Cursor RPC。
+- 当前开发轮 ALPHA-SYNC-002C：本地 Outbox/enrollment 按 owner 隔离；旧版无账号归属的队列迁入隔离区，只有用户明确重新授权后才为当前账号生成新快照。SQLite 本地任务库升至 v8，手动日历库升至 v5。
 
-**重要边界：本轮仍未把 Outbox 接入网络上传，也未将远端增量应用到本机；没有冲突解决 UI、真实 Supabase 部署或多设备联机证据。** 不要将 RPC/Mock/CI 通过称为跨设备同步已经可用。下一阶段必须先把本地 Outbox 按 owner 隔离，再接入上传确认、Cursor 拉取应用、冲突处理与逐条授权 UI。
+详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md) 与 [31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md)。
+
+**重要边界：当前仍未把 Outbox 接入网络上传，也未将远端增量应用到本机；没有冲突解决 UI、逐条授权 UI、真实 Supabase 部署或多设备联机证据。** 旧删除墓碑不会自动绑定账号或发送。
 
 ## Windows / macOS 本地 Alpha 验收指南
 
