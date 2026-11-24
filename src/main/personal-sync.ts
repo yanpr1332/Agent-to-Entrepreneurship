@@ -4,6 +4,7 @@ import {
   parsePersonalSyncDeviceReplacementRequest,
   type PersonalSyncChange, type PersonalSyncConflict, type PersonalSyncConflictRecord,
   type PersonalSyncRunResult, type PersonalSyncDeviceReplacementReview, type PersonalSyncPullPage,
+  type PersonalSyncRecoveryHealth, type PersonalSyncReceiptReconcileResult,
 } from "../shared/personal-sync-contract";
 import type { SharedCloudClient } from "./cloud/supabase-client";
 import type { LocalStore } from "./local-store";
@@ -31,12 +32,13 @@ function deviceLabel():string{
 export class PersonalSyncService{
   private running:Promise<PersonalSyncRunResult>|null=null;
   private replacementRunning:Promise<{replaced:true}>|null=null;
+  private receiptRunning:Promise<PersonalSyncReceiptReconcileResult>|null=null;
   private replacementReview:{ownerId:string;deviceId:string;cursor:string;token:string}|null=null;
   private stopping=false;
 
   constructor(
     private readonly cloud:Pick<SharedCloudClient,
-      "currentUserId"|"registerPersonalSyncDevice"|"applyPersonalSyncOperation"|"pullPersonalSyncChanges"|"revokePersonalSyncDevice">,
+      "currentUserId"|"registerPersonalSyncDevice"|"applyPersonalSyncOperation"|"pullPersonalSyncChanges"|"revokePersonalSyncDevice"|"inspectPersonalSyncDevice"|"lookupPersonalSyncReceipt">,
     private readonly tasks:LocalStore,
     private readonly calendar:FixedCalendarStore,
   ){}
@@ -44,6 +46,7 @@ export class PersonalSyncService{
   syncNow():Promise<PersonalSyncRunResult>{
     if(this.stopping)return Promise.reject(Error("Personal synchronization is stopping"));
     if(this.replacementRunning)return Promise.reject(Error("Device replacement is in progress"));
+    if(this.receiptRunning)return Promise.reject(Error("Receipt reconciliation is in progress"));
     if(this.running)return this.running;
     const job=this.performSync().finally(()=>{if(this.running===job)this.running=null;});
     this.running=job;
@@ -104,7 +107,117 @@ export class PersonalSyncService{
     return {resolved:true,choice:input.choice};
   }
 
-  hasInFlightRun():boolean{return this.running!==null||this.replacementRunning!==null;}
+  hasInFlightRun():boolean{return this.running!==null||this.replacementRunning!==null||this.receiptRunning!==null;}
+
+  /** No RPC here registers a device, uploads content, or changes local state. */
+  async inspectRecovery():Promise<PersonalSyncRecoveryHealth>{
+    if(this.stopping||this.hasInFlightRun())throw Error("Wait until personal sync is idle before inspecting recovery");
+    const ownerId=this.cloud.currentUserId();
+    const taskPending=this.tasks.countPersonalSyncOutbox(ownerId);
+    const calendarPending=this.calendar.countManualCalendarSyncOutbox(ownerId);
+    const conflicts=this.tasks.countPersonalSyncConflicts(ownerId);
+    const base={taskPending,calendarPending,conflicts};
+    let device:{deviceId:string;cursor:string}|null;
+    try{device=this.tasks.peekPersonalSyncDevice(ownerId);}catch{
+      return {...base,status:"local-invalid",localCursor:null,serverCursor:null,pendingReplay:false,
+        detail:"本机设备身份或 Cursor 已损坏，已阻止云端检查。请先保留完整数据库备份，不要清零 Cursor。"};
+    }
+    if(!device)return {...base,status:"uninitialized",localCursor:null,serverCursor:null,
+      pendingReplay:false,detail:"当前账号还没有建立本机同步设备；只有用户点击“立即同步”才会注册。"};
+    let checkpoint:boolean;
+    try{checkpoint=this.tasks.getPendingPersonalSyncPull(ownerId)!==null;}catch{
+      return {...base,status:"local-invalid",localCursor:device.cursor,serverCursor:null,pendingReplay:true,
+        detail:"上次同步检查点损坏或不匹配，禁止继续同步；请先备份并人工诊断。"};
+    }
+    if(checkpoint)return {...base,status:"pending-replay",localCursor:device.cursor,
+      serverCursor:null,pendingReplay:true,
+      detail:"有上次未完成的本地 Pull 页面。点击“立即同步”会先尝试重放，暂不进行未经核实的上传。"};
+    let remote:Awaited<ReturnType<typeof this.cloud.inspectPersonalSyncDevice>>;
+    try{remote=await this.cloud.inspectPersonalSyncDevice(device.deviceId);}catch{
+      this.assertOwner(ownerId);
+      return {...base,status:"cloud-unavailable",localCursor:device.cursor,serverCursor:null,
+        pendingReplay:false,
+        detail:"无法读取云端只读诊断。可能尚未部署 002H RPC、网络异常或权限失效；本次未修改本地数据。"};
+    }
+    this.assertOwner(ownerId);
+    const status=BigInt(device.cursor)>BigInt(remote.serverCursor)?"cursor-ahead":remote.deviceStatus;
+    const explanation:Record<typeof status,string>={
+      active:"设备有效，Cursor 不超前；仍需完成正常同步及冲突核验。",
+      revoked:"该设备已在云端撤销。不要重置 Cursor；请先处理待发送操作，再走设备更换流程。",
+      unregistered:"云端没有当前账号的此设备记录。只读检查未创建设备；请审阅数据后手动同步。",
+      "cursor-ahead":"本机 Cursor 领先云端，禁止自动回退或上传；请备份并进行人工数据对账。",
+    };
+    return {...base,status,localCursor:device.cursor,serverCursor:remote.serverCursor,
+      pendingReplay:false,detail:explanation[status]};
+  }
+
+  /** Read exact receipts for a bounded owner queue. This NEVER invokes apply.
+   * All remote responses are validated before any local acknowledgement, so
+   * a missing RPC or a mismatched saved operation leaves every item intact. */
+  reconcileReceipts():Promise<PersonalSyncReceiptReconcileResult>{
+    if(this.stopping||this.hasInFlightRun())return Promise.reject(Error("Personal sync is in progress"));
+    const job=this.performReceiptReconciliation().finally(()=>{
+      if(this.receiptRunning===job)this.receiptRunning=null;
+    });
+    this.receiptRunning=job;
+    return job;
+  }
+
+  private async performReceiptReconciliation():Promise<PersonalSyncReceiptReconcileResult>{
+    const ownerId=this.cloud.currentUserId();
+    const device=this.tasks.peekPersonalSyncDevice(ownerId);
+    if(!device)throw Error("No local personal sync device exists; receipt lookup cannot be performed");
+    if(this.tasks.getPendingPersonalSyncPull(ownerId))
+      throw Error("Finish the interrupted pull checkpoint before reconciling receipts");
+    const tasks=this.tasks.listPersonalSyncOutbox(ownerId,PUSH_LIMIT)
+      .map(item=>({...item,entityType:"personal-task" as const}));
+    const events=this.calendar.listManualCalendarSyncOutbox(ownerId,PUSH_LIMIT)
+      .map(item=>({...item,entityType:"manual-calendar-event" as const}));
+    const items:PendingOutbox[]=[...tasks,...events].sort((a,b)=>
+      a.createdAt.localeCompare(b.createdAt)||a.operationId.localeCompare(b.operationId));
+    const receipts:Array<{item:PendingOutbox;status:"not-found"|"matched";result:null|Awaited<ReturnType<typeof this.cloud.lookupPersonalSyncReceipt>>}> = [];
+    for(const item of items){
+      this.assertOwner(ownerId);
+      const createdAt=new Date(item.createdAt);
+      if(!Number.isFinite(createdAt.getTime()))throw Error("Invalid pending operation timestamp");
+      const op=parsePersonalSyncOperation({
+        operationId:item.operationId,deviceId:device.deviceId,actorId:ownerId,ownerId,
+        entityType:item.entityType,entityId:item.entityId,action:item.action,
+        baseVersion:item.baseVersion,clientTimestamp:createdAt.toISOString(),
+        payload:item.payload===null?null:JSON.parse(item.payload),
+      });
+      const result=await this.cloud.lookupPersonalSyncReceipt(op);
+      this.assertOwner(ownerId);
+      if(result.status==="mismatch")throw Error("Cloud receipt request differs from saved operation; manual review required");
+      receipts.push({item,status:result.status,result:result.status==="matched"?result:null});
+    }
+    let acknowledged=0,notFound=0,unresolved=0;
+    for(const {item,status,result} of receipts){
+      this.assertOwner(ownerId);
+      if(status==="not-found"){notFound++;continue;}
+      if(!result||result.status!=="matched")throw Error("Malformed saved sync receipt");
+      const receipt=result.response;
+      if(receipt.status!=="accepted"&&receipt.status!=="duplicate"){unresolved++;continue;}
+      if(receipt.serverVersion===null)throw Error("Receipt is missing server version");
+      if(item.entityType==="personal-task"){
+        const ack=this.tasks.acknowledgePersonalSyncOperation(ownerId,item.operationId,item.entityId,
+          item.action,receipt.serverVersion,item.baseVersion);
+        if(ack==="not-pending")this.tasks.rebasePersonalSyncOperation(ownerId,item.entityId,item.action,
+          receipt.serverVersion,item.baseVersion);
+      }else{
+        const ack=this.calendar.acknowledgeManualCalendarSyncOperation(ownerId,item.operationId,
+          item.entityId,item.action,receipt.serverVersion,item.baseVersion);
+        if(ack==="not-pending")this.calendar.rebaseManualCalendarSyncOperation(ownerId,item.entityId,
+          item.action,receipt.serverVersion,item.baseVersion);
+      }
+      acknowledged++;
+    }
+    const pending=this.tasks.countPersonalSyncOutbox(ownerId)+
+      this.calendar.countManualCalendarSyncOutbox(ownerId);
+    return {inspected:receipts.length,acknowledged,notFound,unresolved,pending,
+      hasMore:items.length<this.tasks.countPersonalSyncOutbox(ownerId)+
+        this.calendar.countManualCalendarSyncOutbox(ownerId)+acknowledged};
+  }
 
   /** The preview is local-only and has no power to choose an owner or device. */
   reviewDeviceReplacement():PersonalSyncDeviceReplacementReview{
@@ -166,7 +279,7 @@ export class PersonalSyncService{
   cancel():void{this.stopping=true;this.replacementReview=null;}
 
   waitForIdle():Promise<void>{
-    return Promise.allSettled([this.running,this.replacementRunning]).then(()=>undefined);
+    return Promise.allSettled([this.running,this.replacementRunning,this.receiptRunning]).then(()=>undefined);
   }
 
   private assertOwner(ownerId:string):void{
