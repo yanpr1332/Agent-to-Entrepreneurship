@@ -4,7 +4,7 @@
 
 **GitHub 仓库：** [yanpr1332/study-anchor](https://github.com/yanpr1332/study-anchor)（原 `Agent-to-Entrepreneurship` 已于 2026-11-24 更名）。
 
-> **已有用户数据兼容说明**：本轮仅调整仓库、npm 包名和界面展示名称。Electron 的历史 `build.appId`、`build.productName`、`ATE_USER_DATA_DIR`、各 `ate-*.sqlite` 文件名以及既有 Supabase RPC/表名**暂时不改**，避免旧安装包及数据路径静默改变。正式安装包品牌和数据目录迁移应单独审查，见 [改名兼容记录](docs/w4/09_REPOSITORY_RENAME_STUDY_ANCHOR.md)。
+> **完整品牌与数据目录迁移（PR #47）**：Electron 安装包名称、appId 和新建数据文件名一并改成 Study Anchor。首次启动时会尝试从旧版用户目录自动生成包含 WAL 的一致性 SQLite 快照及加密凭据副本，并原子切换至新目录；旧数据保留不删。发现双目录冲突、多个旧来源或文件异常时停止启动，**不创建空白用户数据库**。升级前必须关闭旧程序并备份旧目录；真实 Windows/macOS 安装升级和系统凭据解密仍需人工验收。详见 [数据迁移与回滚说明](docs/w4/09_REPOSITORY_RENAME_STUDY_ANCHOR.md)。
 
 当前产品需求、交互原型和技术架构见 [PRD](docs/PRD.md)、[W2 UI/UX](docs/ui-ux/README.md)、[W3 架构](docs/architecture/README.md) 与 [W4 开发计划](docs/w4/README.md)。
 
@@ -110,6 +110,22 @@ npm run build
 ```
 
 测试会以真实本地 SQLite 文件关闭/重开模拟客户端重启，验证百条以上分页、删除墓碑和 Cursor 原子回滚。新的本地文件 `ate-shared-history.sqlite` **保存明文团队消息/任务缓存**，首次使用前须按 [40 持久历史验收和隐私约束](docs/w5/40_ALPHA_SYNC_003B_DURABLE_HISTORY.md) 评估本机留存；不能将其当作加密存储。新增缓存数据库打开失败时仍保留其文件并降级当前 JWT 的 REST 刷新，不阻止其他本地模块启动。新增云端迁移 `supabase/migrations/20261124_ate_workspace_durable_history.sql` **不会通过 CI 自动部署**，需要独立审核、用户授权与隔离项目测试。
+
+### Study Anchor 安装及旧数据目录升级（PR #47）
+
+首次启动新构建前，务必退出旧应用并将旧用户数据目录**另行备份**：
+
+- Windows 旧目录：`%APPDATA%\\Agent to Entrepreneurship`；新目录：`%APPDATA%\\Study Anchor`
+- macOS 旧目录：`~/Library/Application Support/Agent to Entrepreneurship`；新目录：`~/Library/Application Support/Study Anchor`
+- 自定义目录：新变量 `STUDY_ANCHOR_USER_DATA_DIR`，兼容 `ATE_USER_DATA_DIR`，不得设置成互相冲突的两条路径。
+
+新安装标识：`org.studyanchor.desktop`，安装包显示名称：**Study Anchor**。原目录和原凭据副本由迁移器保留；发现冲突时拒绝自动合并。迁移测试：
+
+```sh
+node node_modules/vitest/vitest.mjs run src/main/profile-migration.test.ts src/main/repository-identity.test.ts src/main/local-backup.test.ts
+```
+
+更多平台细节、WAL 一致性、备份/回滚和真正安装升级前的必须验收项见 [09 仓库及桌面品牌迁移](docs/w4/09_REPOSITORY_RENAME_STUDY_ANCHOR.md)。
 
 ## Windows / macOS 本地 Alpha 验收指南
 
@@ -300,7 +316,7 @@ node node_modules/vitest/vitest.mjs run --pool=threads
 
 **后续知识库规划（ALPHA-KB-005，尚未实现）**：拟在现有精确/容错结果上加入可选的**本地 embedding 语义检索**，让同义词和中英混合问题能命中不同措辞的原文。模型下载需用户同意，索引默认本地、断网可用，详情见 [模型可得性和工程难度评估](docs/w5/26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md)。该功能不属于当前 PR #32 的实际交付。
 
-**任务执行时间编辑（PR #28）**：在日历中选中日期，找到「任务执行时间」，点击「+ 安排任务时间」为可见、未完成的任务指定具体日期、开始时刻和时长（15–480 分钟、5 分钟刻度）。同一任务可安排多段，也可对已确认的时间块逐段修改或删除。固定课程及其他时间块重叠会被主进程拦截。任务截止日期不变。此轮将 `ate-plans.sqlite` 从 v1 升至 v2，原规划库会在迁移前生成快照；详情和本地集中测试案例见 [任务执行时间实施文档](docs/w5/21_ALPHA_TIME_003_TASK_SCHEDULES.md)。
+**任务执行时间编辑（PR #28）**：在日历中选中日期，找到「任务执行时间」，点击「+ 安排任务时间」为可见、未完成的任务指定具体日期、开始时刻和时长（15–480 分钟、5 分钟刻度）。同一任务可安排多段，也可对已确认的时间块逐段修改或删除。固定课程及其他时间块重叠会被主进程拦截。任务截止日期不变。此轮将 旧版 `ate-plans.sqlite`（新版本自动迁为 `study-anchor-planning.sqlite`）从 v1 升至 v2，原规划库会在迁移前生成快照；详情和本地集中测试案例见 [任务执行时间实施文档](docs/w5/21_ALPHA_TIME_003_TASK_SCHEDULES.md)。
 9. 关闭应用，在**同一** ATE_USER_DATA_DIR 下重新启动，核实任务、专注记录和主题保留。
 
 本轮交互变更与未实现的反馈见 [Alpha 验收反馈路线图](docs/w5/19_ALPHA_UX_FEEDBACK_ROADMAP.md)，逐功能当前证据见 [验收矩阵](docs/w5/00_ACCEPTANCE_MATRIX.md)。
@@ -313,7 +329,7 @@ node node_modules/vitest/vitest.mjs run --pool=threads
 | npm audit --omit=dev 为 0 但 npm audit 有告警 | 运行与开发依赖风险不同；不要直接 --force 破坏锁定版本 |
 | Error: Electron uninstall | 检查 Windows electron.exe 和 path.txt，补运行 electron/install.js |
 | GPU process isn't usable | 参考排障文档检查沙箱，dev:compat 只能用于可信本地开发 |
-| 本地数据无法打开 | 检查 ATE_USER_DATA_DIR 可写性，不要直接删除真实数据 |
+| 本地数据无法打开 | 检查 STUDY_ANCHOR_USER_DATA_DIR（或兼容的 ATE_USER_DATA_DIR）可写性，不要直接删除真实数据 |
 | libpng warning: iCCP: known incorrect sRGB profile | 记录出现时机和图片来源；可能是 PNG 色彩配置，单独出现不代表数据库损坏 |
 | npm test 中 fork worker timeout | 参考上文 --pool=threads，CI 标准检查仍须另行通过 |
 
