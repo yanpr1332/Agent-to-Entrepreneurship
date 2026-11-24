@@ -678,7 +678,9 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.cloudWorkspaceSnapshot, (event, workspaceId:unknown) => {
     requireTrustedSender(event);
-    return teamHistory().snapshot(workspaceId);
+    return workspaceHistoryService
+      ? workspaceHistoryService.snapshot(workspaceId)
+      : sharedCloud.workspaceSnapshot(workspaceId);
   });
   handle(IPC_CHANNELS.cloudWorkspaceHistoryOlder, (event,workspaceId:unknown,
     kind:"message"|"task",before:unknown) => {
@@ -862,9 +864,18 @@ app.whenReady().then(async () => {
       ()=>canvasSync?.scope()??null,
     );
     personalSync = new PersonalSyncService(sharedCloud,localStore(),fixedCalendar());
-    workspaceHistoryStore=new WorkspaceHistoryStore(
-      join(app.getPath("userData"),"ate-shared-history.sqlite"));
-    workspaceHistoryService=new WorkspaceHistoryService(sharedCloud,workspaceHistoryStore);
+    // The optional cloud history cache must never make offline tasks,
+    // calendar, mail or knowledge unavailable if its file is damaged.
+    try{
+      workspaceHistoryStore=new WorkspaceHistoryStore(
+        join(app.getPath("userData"),"ate-shared-history.sqlite"));
+      workspaceHistoryService=new WorkspaceHistoryService(sharedCloud,workspaceHistoryStore);
+    }catch{
+      workspaceHistoryStore=null;workspaceHistoryService=null;
+      report("STORAGE_OPEN_FAILED","storage");
+      // Keep the file untouched. Cloud UI continues with RLS-backed 003A
+      // latest-window refresh; old history pages remain disabled.
+    }
     planningStore = new PlanningStore(join(app.getPath("userData"), "ate-plans.sqlite"),
       ()=>fixedCalendar().busySlots());
     aiLedger = new AIUsageLedger(join(app.getPath("userData"), "ate-ai-usage.sqlite"));
