@@ -4,6 +4,8 @@
  */
 export interface SafeHistoryStorage {
   isEncryptionAvailable():boolean;
+  /** Electron may report insecure basic_text on Linux without a keyring. */
+  getSelectedStorageBackend?():string;
   encryptString(text:string):Buffer;
   decryptString(payload:Buffer):string;
 }
@@ -14,7 +16,7 @@ export interface TeamHistoryCipher {
 const PREFIX="sa1:";
 const BASE64=/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 export function createTeamHistoryCipher(storage:SafeHistoryStorage):TeamHistoryCipher{
-  if(!storage.isEncryptionAvailable())
+  if(!storage.isEncryptionAvailable()||storage.getSelectedStorageBackend?.()==="basic_text")
     throw Error("Team history protection requires OS encryption; local cache disabled");
   return {
     encrypt(plaintext:string):string{
