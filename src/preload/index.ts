@@ -105,8 +105,7 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.cloudMessages, workspaceId) as Promise<SharedMessage[]>,
     workspaceHistoryOlder:(workspaceId:string,kind:"message"|"task",
       before:WorkspaceHistoryMarker|null) =>
-      ipcRenderer.invoke(IPC_CHANNELS.cloudWorkspaceHistoryOlder,workspaceId,kind,before)
-        as Promise<WorkspaceHistoryItems<SharedMessage|SharedTask>>,
+      ipcRenderer.invoke(IPC_CHANNELS.cloudWorkspaceHistoryOlder,workspaceId,kind,before) as Promise<WorkspaceHistoryItems<SharedMessage|SharedTask>>,
     workspaceSnapshot: (workspaceId:string) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudWorkspaceSnapshot,workspaceId) as Promise<SharedWorkspaceSnapshot>,
     watchWorkspace: (workspaceId:string) =>
