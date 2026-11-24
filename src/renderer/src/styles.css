@@ -935,3 +935,129 @@ input:hover:not(:disabled),textarea:hover:not(:disabled),select:hover:not(:disab
 .kg-space .kb-card-form select{max-width:100%;min-width:0}
 .kg-space .button-row{flex-wrap:wrap}
 @media(max-width:880px){.kg-layout{grid-template-columns:minmax(0,1fr)}.kg-space>.panel,.kg-layout>.panel{padding:17px}}
+
+/* PHASE 6 · collaboration, AI, mail and connector workspaces */
+:is(.cloud-page,.ai-page,.mail-page,.connector-page){gap:20px;min-width:0}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page)>.page-heading{align-items:flex-start;gap:14px}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page)>.page-heading>div{min-width:0}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page)>.page-heading h1{letter-spacing:-.65px}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page)>.page-heading p{line-height:1.75;max-width:760px}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page)>.page-heading .count-chip{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page)>.connector-warning{padding:15px 17px;line-height:1.85}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page) .connector-notice{border-color:var(--line);color:var(--ink);background:var(--surface);line-height:1.7;overflow-wrap:anywhere}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page) .privacy-note{line-height:1.8;overflow-wrap:anywhere}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page) .panel{min-width:0;padding:21px 22px}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page) .panel h2{font-size:17px;line-height:1.45;letter-spacing:-.2px;margin:7px 0 14px;overflow-wrap:anywhere}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page) .panel-heading{align-items:flex-start;gap:12px;flex-wrap:wrap}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page) .button-row{flex-wrap:wrap}
+:is(.cloud-page,.ai-page,.mail-page,.connector-page) :is(.primary-button,.secondary-button,.text-button){max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(.cloud-form,.ai-config-form,.mail-form,.connector-form){gap:14px}
+:is(.cloud-form,.ai-config-form,.mail-form,.connector-form) label{font-size:12px;line-height:1.55;min-width:0}
+:is(.cloud-form,.ai-config-form,.mail-form,.connector-form) :is(input,select,textarea){min-width:0;max-width:100%;padding:11px 12px;border-radius:9px;font-size:13px;line-height:1.55}
+:is(.ai-page,.mail-page) .review-stage-label{display:block;font-size:13px;color:var(--ink);padding-bottom:11px;border-bottom:1px solid var(--line)}
+
+/* TEAM · workspace navigation, shared tasks/messages, separate personal sync */
+.cloud-page .cloud-session-row{padding:12px 15px;border:1px solid var(--line);border-radius:10px;background:var(--surface);gap:12px;flex-wrap:wrap;overflow-wrap:anywhere}
+.cloud-page .cloud-layout{grid-template-columns:minmax(215px,.65fr) minmax(0,1.55fr);gap:16px}
+.cloud-page .cloud-workspaces{gap:10px}
+.cloud-page .cloud-workspace-list{display:grid;gap:5px}
+.cloud-page .cloud-workspace-list .chip{text-align:left;padding:10px 12px;white-space:normal;overflow-wrap:anywhere;border-radius:8px}
+.cloud-page .cloud-workspaces .cloud-form{border-top:1px solid var(--line);padding-top:13px}
+.cloud-page .cloud-main{min-width:0;gap:16px}
+.cloud-page .cloud-members{gap:8px}
+.cloud-page .cloud-members .chip{white-space:normal;overflow-wrap:anywhere}
+.cloud-page .cloud-message-list{max-height:420px;background:var(--canvas);padding:4px 14px;border-radius:10px;border:1px solid var(--line)}
+.cloud-page .cloud-message-list li{padding:13px 0}
+.cloud-page .cloud-message-list li:last-child{border-bottom:0}
+.cloud-page .cloud-message-list li>div{flex-wrap:wrap}
+.cloud-page .cloud-message-list strong{font-size:12px;overflow-wrap:anywhere}
+.cloud-page .cloud-message-list p{font-size:13px;line-height:1.75}
+.cloud-page .cloud-message-form{margin-top:13px;gap:12px}
+.cloud-page .cloud-message-form textarea{font-size:13px;line-height:1.65;min-height:90px}
+.cloud-page .cloud-task-list li{padding:13px 0}
+.cloud-page .cloud-task-list li>div{min-width:0;overflow-wrap:anywhere}
+.cloud-page .cloud-task-list strong{font-size:13px;line-height:1.55}
+.cloud-page .cloud-task-list small{font-size:11px;line-height:1.6}
+.cloud-page .cloud-personal-sync{margin:0;gap:16px}
+.cloud-page :is(.cloud-sync-recovery-diagnostics,.cloud-sync-device-recovery,.cloud-sync-candidates,.cloud-sync-conflicts,.cloud-sync-legacy){min-width:0;border-top:1px solid var(--line);padding-top:16px}
+.cloud-page .cloud-personal-sync h3{font-size:13px;line-height:1.55;margin:0 0 7px}
+.cloud-page .cloud-sync-candidate{padding:11px 12px;border-radius:8px}
+.cloud-page :is(.cloud-sync-conflict,.cloud-sync-legacy-item){padding:14px;gap:9px;min-width:0}
+.cloud-page .cloud-sync-conflict{grid-template-columns:repeat(2,minmax(0,1fr))}
+.cloud-page .cloud-sync-conflict>:not(.cloud-sync-version){grid-column:1/-1}
+.cloud-page .cloud-sync-version{background:var(--canvas);padding:12px}
+.cloud-page .cloud-sync-confirm{border-color:var(--warning);padding:14px;overflow-wrap:anywhere}
+
+/* AI · explicit request preview, reading area, and unaccepted suggestions */
+.ai-page .ai-layout{grid-template-columns:minmax(225px,.65fr) minmax(0,1.55fr);gap:16px}
+.ai-page .ai-connection{gap:9px;padding:12px 0;border-bottom:1px solid var(--line)}
+.ai-page .ai-connection p{font-size:12px;line-height:1.65}
+.ai-page .ai-chat .ai-config-form textarea{min-height:145px;line-height:1.75}
+.ai-page .ai-char-count{font-variant-numeric:tabular-nums;font-size:11px}
+.ai-page .ai-chat .ai-answer-list{max-height:660px;padding-right:3px}
+.ai-page .ai-answer{padding:15px;gap:9px}
+.ai-page .ai-answer p,.ai-page .ai-answer-text{font-size:13px;line-height:1.85}
+.ai-page .ai-answer-text{padding:15px}
+.ai-page .ai-preview{border-color:var(--warning);background:var(--surface);padding:17px}
+.ai-page .ai-question-preview{background:var(--canvas);font-size:13px;line-height:1.75;max-height:360px}
+.ai-page .ai-draft-panel{display:grid;gap:12px}
+.ai-page .ai-draft-panel h2{margin:0}
+.ai-page .ai-draft-panel>label{display:grid;gap:7px;justify-items:start;font-size:12px;color:var(--muted)}
+.ai-page .ai-draft-panel>label input{max-width:100%}
+.ai-page .ai-draft-candidates{margin:0;border:1px solid var(--line);border-radius:10px;padding:4px 13px;max-height:380px}
+.ai-page .ai-draft-candidates .planner-select{padding:11px 0;border-bottom:1px solid var(--line);font-size:12px;line-height:1.65}
+.ai-page .ai-draft-candidates .planner-select:last-child{border-bottom:0}
+.ai-page .ai-draft-candidates .planner-select span{min-width:0;overflow-wrap:anywhere}
+.ai-page .ai-draft-panel>.primary-button{justify-self:start}
+.ai-page .ai-draft-result{border:1px solid var(--line);border-left:3px solid var(--warning);border-radius:9px;padding:15px;background:var(--canvas);max-height:480px}
+.ai-page .ai-draft-result h3{font-size:14px;margin:0}
+.ai-page .ai-draft-result ul{margin:0;padding-left:20px}
+.ai-page .ai-draft-result li{padding:8px 0;line-height:1.7;overflow-wrap:anywhere}
+
+/* MAIL · inbox metadata, reviewable candidates and explicit send confirmation */
+.mail-page .mail-layout{grid-template-columns:minmax(225px,.65fr) minmax(0,1.55fr);gap:16px}
+.mail-page .mail-connection .runtime-line{flex-wrap:wrap;gap:8px}
+.mail-page .mail-connection .runtime-line strong{overflow-wrap:anywhere}
+.mail-page .mail-list{max-height:540px;margin:8px 0;padding-right:3px}
+.mail-page .mail-list li{padding:14px 0;line-height:1.6}
+.mail-page .mail-list strong{font-size:13px;line-height:1.55}
+.mail-page .mail-meta{font-size:11px;gap:5px 12px;line-height:1.6}
+.mail-page .mail-candidate{color:var(--muted);font-size:11px}
+.mail-page .mail-candidate-title{flex-wrap:wrap}
+.mail-page .mail-review-actions{gap:8px}
+.mail-page .mail-candidates,.mail-page .mail-compose{gap:12px}
+.mail-page .mail-candidate-toggle{font-size:12px;padding:6px 0}
+.mail-page .mail-compose .mail-form textarea{min-height:200px;line-height:1.8}
+.mail-page .mail-compose .mail-form>.primary-button{justify-self:start}
+.mail-page .mail-preview{padding:18px;gap:12px;border-color:var(--warning);background:var(--surface)}
+.mail-page .mail-preview>p{line-height:1.7}
+.mail-page .mail-preview-body{background:var(--canvas);padding:18px;line-height:1.85;font-size:13px}
+
+/* CANVAS · true connection status, course scope and assignment deadlines */
+.connector-page .connector-layout{grid-template-columns:minmax(225px,.68fr) minmax(0,1.5fr);gap:16px}
+.connector-page .connector-settings .help-text{line-height:1.7}
+.connector-page .connector-settings .runtime-line{flex-wrap:wrap;gap:8px}
+.connector-page .connector-settings .runtime-line strong{overflow-wrap:anywhere}
+.connector-page .connector-list{max-height:460px;margin-top:8px;padding-right:3px}
+.connector-page .connector-list li{padding:14px 0;gap:12px;align-items:flex-start}
+.connector-page .connector-list li>div{min-width:0;flex:1;overflow-wrap:anywhere}
+.connector-page .connector-list strong{font-size:13px;line-height:1.55}
+.connector-page .connector-list small{font-size:11px;line-height:1.6}
+.connector-page .connector-list .text-button{flex:0 0 auto}
+.connector-page .course-switch{display:flex;gap:7px;align-items:center;margin-top:9px;font-size:12px;color:var(--muted)}
+.connector-page .course-switch input{accent-color:var(--accent);flex:0 0 auto}
+.connector-page .connector-assignments{margin:0}
+.connector-page .connector-assignments .muted-tag{white-space:normal;text-align:right;flex:0 1 auto}
+
+@media(max-width:1080px){
+  .cloud-page .cloud-layout,.ai-page .ai-layout,.mail-page .mail-layout,.connector-page .connector-layout{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:760px){
+  :is(.cloud-page,.ai-page,.mail-page,.connector-page)>.page-heading{flex-direction:column;align-items:flex-start}
+  :is(.cloud-page,.ai-page,.mail-page,.connector-page) .panel{padding:17px}
+  .cloud-page .cloud-sync-conflict{grid-template-columns:minmax(0,1fr)}
+  .cloud-page .cloud-session-row{align-items:flex-start}
+  .mail-page .mail-list,.connector-page .connector-list{max-height:420px}
+  .connector-page .connector-list li{flex-wrap:wrap}
+  .connector-page .connector-list li>div{flex:1 1 160px}
+}

@@ -141,7 +141,7 @@ export default function CampusMail() {
       <div className="page-heading">
         <div><div className="eyebrow">CAMPUS IMAP / SMTP</div><h1>交大邮箱</h1>
           <p>只读同步收件箱元数据 · 写草稿 · 核对后单次确认发送</p></div>
-        <span className="count-chip">{status.connected ? `已连接 · ${status.email}` : "尚未连接"}</span>
+        <span className="count-chip" role="status">{status.running ? "同步中…" : status.connected ? `已连接 · ${status.email}` : "尚未连接"}</span>
       </div>
       <div className="connector-warning" role="note">
         <strong>隐私与发送控制</strong>
@@ -243,6 +243,7 @@ export default function CampusMail() {
         <div className="eyebrow">CONFIRMED SEND ONLY</div><h2>撰写并发送纯文本邮件</h2>
         {preview ? (
           <div className="mail-preview" role="region" aria-label="邮件发送确认预览">
+            <strong className="review-stage-label">待确认 · 邮件尚未发送</strong>
             <p><strong>发件人：</strong>{preview.from}</p>
             <p><strong>收件人：</strong>{preview.to.join("、")}</p>
             <p><strong>主题：</strong>{preview.subject}</p>

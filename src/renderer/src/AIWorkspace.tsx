@@ -146,7 +146,7 @@ export default function AIWorkspace(){
         <h1>AI 学习助手 · 单轮问答</h1>
         <p>自己配置 OpenAI API Key，先预览，再明确确认后发送单次问题</p>
       </div>
-      <span className="count-chip">{status.connected?"已保存个人 API Key":"尚未连接"}</span>
+      <span className="count-chip" role="status">{sending?"请求处理中":status.connected?"已保存个人 API Key":"尚未连接"}</span>
     </div>
     <div className="connector-warning" role="note">
       <strong>付费与隐私告知</strong>
@@ -161,7 +161,7 @@ export default function AIWorkspace(){
       <button onClick={()=>setError("")}>关闭</button></div>}
     {notice&&<div className="connector-notice" role="status">{notice}</div>}
     <div className="ai-layout">
-      <section className="panel">
+      <section className="panel ai-model-panel">
         <div className="eyebrow">LOCAL KEY STORAGE</div>
         <h2>模型连接</h2>
         {status.connected&&<div className="ai-connection">
@@ -202,7 +202,7 @@ export default function AIWorkspace(){
           </article>
         )}</div>}
         {preview ? <div className="ai-preview" role="region" aria-label="付费 AI 请求确认">
-          <strong>发送前最后核对</strong>
+          <strong className="review-stage-label">待确认 · 发送前最后核对</strong>
           <p>将向 <strong>OpenAI</strong> 发送以下文字，模型为 <strong>{preview.model}</strong>：</p>
           <div className="ai-question-preview">{preview.prompt}</div>
           <p className="privacy-note">单次输出最多 {preview.maxOutputTokens} token；确认有效至 {new Date(preview.expiresAt).toLocaleString("zh-CN")}。
@@ -229,7 +229,7 @@ export default function AIWorkspace(){
           onClick={()=>void cancelRequest()}>尝试中止当前请求（可能仍产生费用）</button>}
       </section>
     </div>
-    <section className="panel">
+    <section className="panel ai-draft-panel">
       <div className="eyebrow">OPT-IN STRUCTURED PLANNING DRAFT</div>
       <h2>AI 学习时间草稿（不自动应用）</h2>
       <p className="privacy-note">只选择你愿意外传的任务。预览会完整展示实际发送内容；AI 结果只做格式与范围验证，不作为已确认时间块，也不自动查询课表。请不要勾选包含敏感信息的标题。</p>
@@ -237,7 +237,7 @@ export default function AIWorkspace(){
         <input type="date" value={planStart} min={new Date().toLocaleDateString("en-CA")}
           disabled={busy||sending||!!preview} onChange={event=>setPlanStart(event.target.value)}/>
       </label>
-      <div className="planner-candidates">
+      <div className="planner-candidates ai-draft-candidates" aria-label="允许发送的任务候选">
         {tasks.filter(t=>t.visible&&!t.completed).slice(0,50).map(task=>
           <label key={task.id} className="planner-select">
             <input type="checkbox" disabled={busy||sending||!!preview}
@@ -251,7 +251,7 @@ export default function AIWorkspace(){
       <p className="privacy-note">已选 {chosen.length}/8 项；隐藏或完成的任务不可选择，任务描述和来源 URL 不会发送。</p>
       <button className="primary-button" disabled={busy||sending||!!preview||!status.connected||status.remainingToday===0||chosen.length===0}
         onClick={()=>void preparePlan()}>预览选中任务的 AI 规划请求</button>
-      {planDraft!==null&&<div className="ai-answer-list" role="region" aria-label="AI 学习草稿">
+      {planDraft!==null&&<div className="ai-answer-list ai-draft-result" role="region" aria-label="AI 学习草稿">
         <h3>待人工核对的 AI 建议 · {planDraft.length} 段</h3>
         {planDraft.length===0?<p>模型未安排任何时间块。</p>:
           <ul>{planDraft.map((block,i)=><li key={i}>

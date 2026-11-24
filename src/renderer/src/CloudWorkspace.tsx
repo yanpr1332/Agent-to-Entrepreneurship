@@ -492,7 +492,7 @@ export default function CloudWorkspace() {
       <div><div className="eyebrow">FIVE-PERSON CLOUD POC</div>
         <h1>云端小组协作</h1>
         <p>独立账号、受服务端 RLS 保护的共享任务与消息（当前为 Supabase 测试方案）</p>
-      </div><span className="count-chip">{status.authenticated ? status.email : "尚未登录"}</span>
+      </div><span className="count-chip" role="status">{status.authenticated ? "已登录" : status.configured ? "尚未登录" : "尚未配置"}</span>
     </div>
     <div className="connector-warning" role="note">
       <strong>请只连接你自己有权限管理的隔离测试项目。</strong>
@@ -539,7 +539,99 @@ export default function CloudWorkspace() {
         <span>当前登录：{status.email}</span>
         <button className="secondary-button" disabled={busy} onClick={()=>void logout()}>退出云端账号</button>
       </div>
-      <section className="panel cloud-personal-sync">
+      <div className="cloud-layout">
+        <section className="panel cloud-workspaces">
+          <div className="eyebrow">SHARED WORKSPACES</div><h2>我的小组</h2>
+          {workspaces.length ? <div className="cloud-workspace-list">
+            {workspaces.map(item=><button key={item.id}
+              className={selected===item.id ? "chip selected" : "chip"} aria-pressed={selected===item.id}
+              onClick={()=>void enterWorkspace(item.id)}>{item.name}</button>)}
+          </div> : <p className="empty-state">尚未加入工作空间。创建一个小组或使用邀请码加入。</p>}
+          <form className="cloud-form" onSubmit={event=>void createWorkspace(event)}>
+            <h3>创建新小组</h3>
+            <label>小组名称<input required value={workspaceName} maxLength={120}
+              onChange={event=>setWorkspaceName(event.target.value)} /></label>
+            <label>本人显示名称<input required value={displayName} maxLength={60}
+              onChange={event=>setDisplayName(event.target.value)} /></label>
+            <button className="secondary-button" disabled={busy}>创建（最多 5 人）</button>
+          </form>
+          <form className="cloud-form" onSubmit={event=>void joinWorkspace(event)}>
+            <h3>使用邀请码加入</h3>
+            <label>48 位邀请码<input required value={joinCode} maxLength={48} autoComplete="off"
+              onChange={event=>setJoinCode(event.target.value)} /></label>
+            <button className="secondary-button" disabled={busy}>加入小组</button>
+          </form>
+        </section>
+
+        <section className="cloud-main">
+          {!selected ? <div className="panel"><p className="empty-state">选择左侧工作空间查看消息和共享任务。</p></div> : <>
+            <section className="panel">
+              <div className="panel-heading"><div><div className="eyebrow">MEMBERSHIP</div><h2>{active?.name??"工作空间"} · 成员</h2></div>
+                <span className="muted-tag">{members.length}/5</span></div>
+              <div className="cloud-members">{members.map(member=><span className="chip" key={member.user_id}>
+                {member.display_name} {member.role==="owner"?"· 所有者":""}
+              </span>)}</div>
+              {owner && <div className="cloud-invite">
+                <button className="secondary-button" disabled={busy} onClick={()=>void makeInvite()}>生成邀请码</button>
+                {invite && <div className="cloud-invite-secret" role="status"><strong>仅显示本次生成的邀请码：</strong>
+                  <code>{invite}</code><small>最多 4 人、48 小时有效。请私下分享，不要发布到公开仓库。</small></div>}
+              </div>}
+            </section>
+            <section className="panel cloud-chat" aria-label="小组消息">
+              <div className="eyebrow">TEAM MESSAGES</div><h2>小组消息 · 实时提醒与安全补拉</h2>
+              <p className="privacy-note" role="status">{liveLabels[workspaceLivePhase]}</p>
+              <p className="privacy-note" role="status">
+                {historyStatus?.mode==="durable"
+                  ? "已启用持久补拉 · 当前工作空间变更位点 "+historyStatus.cursor+
+                    (historyStatus.hasMore?" · 历史仍在分批补拉":" · 已追上本次服务端位点")
+                  : "持久历史暂不可用（服务端未部署或本机缓存不可用）：仅显示服务端最近 100 条窗口。"}
+              </p>
+              {historyStatus?.mode==="durable"&&<p className="privacy-note">
+                本机已保存本小组已同步的消息与任务历史（SQLite 明文缓存，未额外加密）。
+                使用共享设备时请注意本机磁盘访问权限；退出登录不会自动清空历史文件。
+              </p>}
+              <ul className="cloud-message-list">{[...visibleMessages].reverse().map(item=><li key={item.id}>
+                <div><strong>{members.find(m=>m.user_id===item.author_id)?.display_name??"成员"}</strong>
+                  <small>{timestamp(item.created_at)}</small></div>
+                <p>{item.body}</p></li>)}</ul>
+              {!visibleMessages.length && <p className="empty-state">暂无消息，发送第一条小组消息。</p>}
+              {messagesMore&&<button type="button" className="secondary-button"
+                disabled={busy||historyLoading} onClick={()=>void loadOlder("message")}>
+                {historyLoading?"正在读取历史…":"加载更早消息（每次最多 100 条）"}
+              </button>}
+              <form className="cloud-message-form" onSubmit={event=>void sendMessage(event)}>
+                <textarea rows={3} required maxLength={2000} placeholder="输入小组消息（最多 2000 字）"
+                  value={text} onChange={event=>setText(event.target.value)} />
+                <button className="primary-button" disabled={busy}>发送消息</button>
+              </form>
+            </section>
+            <section className="panel cloud-shared-tasks" aria-label="小组共享任务">
+              <div className="eyebrow">SHARED TASKS</div><h2>小组共享任务</h2>
+              {visibleTasks.length ? <ul className="cloud-task-list">{visibleTasks.map(item=><li key={item.id}>
+                <input type="checkbox" checked={item.completed} disabled={busy}
+                  onChange={()=>void toggleTask(item)} aria-label={`完成共享任务：${item.title}`} />
+                <div><strong className={item.completed?"done":""}>{item.title}</strong>
+                  <small>{item.due_date??"未设置截止日期"} · {members.find(m=>m.user_id===item.assigned_to)?.display_name??"未分配"}</small></div>
+              </li>)}</ul> : <p className="empty-state">暂无共享任务；个人日历任务不会自动复制到这里。</p>}
+              {tasksMore&&<button type="button" className="secondary-button"
+                disabled={busy||historyLoading} onClick={()=>void loadOlder("task")}>
+                {historyLoading?"正在读取历史…":"加载更多历史任务（每次最多 100 条）"}
+              </button>}
+              <form className="cloud-form" onSubmit={event=>void createTask(event)}>
+                <label>共享任务标题<input value={taskTitle} required maxLength={120}
+                  onChange={event=>setTaskTitle(event.target.value)} /></label>
+                <label>截止日期<input type="date" value={taskDue} onChange={event=>setTaskDue(event.target.value)} /></label>
+                <label>分配给谁<select value={taskAssignee} onChange={event=>setTaskAssignee(event.target.value)}>
+                  <option value="">暂不分配</option>
+                  {members.map(member=><option key={member.user_id} value={member.user_id}>{member.display_name}</option>)}
+                </select></label>
+                <button className="primary-button" disabled={busy}>创建共享任务</button>
+              </form>
+            </section>
+          </>}
+        </section>
+      </div>
+      <section className="panel cloud-personal-sync" aria-label="个人数据同步与恢复">
         <div className="panel-heading">
           <div><div className="eyebrow">PERSONAL DEVICE SYNC · MANUAL</div><h2>个人任务与手动日历同步</h2></div>
           <button className="primary-button" disabled={busy} onClick={()=>void syncPersonalNow()}>
@@ -734,98 +826,6 @@ export default function CloudWorkspace() {
           })}
         </div>}
       </section>
-      <div className="cloud-layout">
-        <section className="panel cloud-workspaces">
-          <div className="eyebrow">SHARED WORKSPACES</div><h2>我的小组</h2>
-          {workspaces.length ? <div className="cloud-workspace-list">
-            {workspaces.map(item=><button key={item.id}
-              className={selected===item.id ? "chip selected" : "chip"}
-              onClick={()=>void enterWorkspace(item.id)}>{item.name}</button>)}
-          </div> : <p className="empty-state">尚未加入工作空间。创建一个小组或使用邀请码加入。</p>}
-          <form className="cloud-form" onSubmit={event=>void createWorkspace(event)}>
-            <h3>创建新小组</h3>
-            <label>小组名称<input required value={workspaceName} maxLength={120}
-              onChange={event=>setWorkspaceName(event.target.value)} /></label>
-            <label>本人显示名称<input required value={displayName} maxLength={60}
-              onChange={event=>setDisplayName(event.target.value)} /></label>
-            <button className="secondary-button" disabled={busy}>创建（最多 5 人）</button>
-          </form>
-          <form className="cloud-form" onSubmit={event=>void joinWorkspace(event)}>
-            <h3>使用邀请码加入</h3>
-            <label>48 位邀请码<input required value={joinCode} maxLength={48} autoComplete="off"
-              onChange={event=>setJoinCode(event.target.value)} /></label>
-            <button className="secondary-button" disabled={busy}>加入小组</button>
-          </form>
-        </section>
-
-        <section className="cloud-main">
-          {!selected ? <div className="panel"><p className="empty-state">选择左侧工作空间查看消息和共享任务。</p></div> : <>
-            <section className="panel">
-              <div className="panel-heading"><div><div className="eyebrow">MEMBERSHIP</div><h2>{active?.name??"工作空间"} · 成员</h2></div>
-                <span className="muted-tag">{members.length}/5</span></div>
-              <div className="cloud-members">{members.map(member=><span className="chip" key={member.user_id}>
-                {member.display_name} {member.role==="owner"?"· 所有者":""}
-              </span>)}</div>
-              {owner && <div className="cloud-invite">
-                <button className="secondary-button" disabled={busy} onClick={()=>void makeInvite()}>生成邀请码</button>
-                {invite && <div className="cloud-invite-secret" role="status"><strong>仅显示本次生成的邀请码：</strong>
-                  <code>{invite}</code><small>最多 4 人、48 小时有效。请私下分享，不要发布到公开仓库。</small></div>}
-              </div>}
-            </section>
-            <section className="panel cloud-chat">
-              <div className="eyebrow">TEAM MESSAGES</div><h2>小组消息 · 实时提醒与安全补拉</h2>
-              <p className="privacy-note" role="status">{liveLabels[workspaceLivePhase]}</p>
-              <p className="privacy-note" role="status">
-                {historyStatus?.mode==="durable"
-                  ? "已启用持久补拉 · 当前工作空间变更位点 "+historyStatus.cursor+
-                    (historyStatus.hasMore?" · 历史仍在分批补拉":" · 已追上本次服务端位点")
-                  : "持久历史暂不可用（服务端未部署或本机缓存不可用）：仅显示服务端最近 100 条窗口。"}
-              </p>
-              {historyStatus?.mode==="durable"&&<p className="privacy-note">
-                本机已保存本小组已同步的消息与任务历史（SQLite 明文缓存，未额外加密）。
-                使用共享设备时请注意本机磁盘访问权限；退出登录不会自动清空历史文件。
-              </p>}
-              <ul className="cloud-message-list">{[...visibleMessages].reverse().map(item=><li key={item.id}>
-                <div><strong>{members.find(m=>m.user_id===item.author_id)?.display_name??"成员"}</strong>
-                  <small>{timestamp(item.created_at)}</small></div>
-                <p>{item.body}</p></li>)}</ul>
-              {!visibleMessages.length && <p className="empty-state">暂无消息，发送第一条小组消息。</p>}
-              {messagesMore&&<button type="button" className="secondary-button"
-                disabled={busy||historyLoading} onClick={()=>void loadOlder("message")}>
-                {historyLoading?"正在读取历史…":"加载更早消息（每次最多 100 条）"}
-              </button>}
-              <form className="cloud-message-form" onSubmit={event=>void sendMessage(event)}>
-                <textarea rows={3} required maxLength={2000} placeholder="输入小组消息（最多 2000 字）"
-                  value={text} onChange={event=>setText(event.target.value)} />
-                <button className="primary-button" disabled={busy}>发送消息</button>
-              </form>
-            </section>
-            <section className="panel cloud-shared-tasks">
-              <div className="eyebrow">SHARED TASKS</div><h2>小组共享任务</h2>
-              {visibleTasks.length ? <ul className="cloud-task-list">{visibleTasks.map(item=><li key={item.id}>
-                <input type="checkbox" checked={item.completed} disabled={busy}
-                  onChange={()=>void toggleTask(item)} aria-label={`完成共享任务：${item.title}`} />
-                <div><strong className={item.completed?"done":""}>{item.title}</strong>
-                  <small>{item.due_date??"未设置截止日期"} · {members.find(m=>m.user_id===item.assigned_to)?.display_name??"未分配"}</small></div>
-              </li>)}</ul> : <p className="empty-state">暂无共享任务；个人日历任务不会自动复制到这里。</p>}
-              {tasksMore&&<button type="button" className="secondary-button"
-                disabled={busy||historyLoading} onClick={()=>void loadOlder("task")}>
-                {historyLoading?"正在读取历史…":"加载更多历史任务（每次最多 100 条）"}
-              </button>}
-              <form className="cloud-form" onSubmit={event=>void createTask(event)}>
-                <label>共享任务标题<input value={taskTitle} required maxLength={120}
-                  onChange={event=>setTaskTitle(event.target.value)} /></label>
-                <label>截止日期<input type="date" value={taskDue} onChange={event=>setTaskDue(event.target.value)} /></label>
-                <label>分配给谁<select value={taskAssignee} onChange={event=>setTaskAssignee(event.target.value)}>
-                  <option value="">暂不分配</option>
-                  {members.map(member=><option key={member.user_id} value={member.user_id}>{member.display_name}</option>)}
-                </select></label>
-                <button className="primary-button" disabled={busy}>创建共享任务</button>
-              </form>
-            </section>
-          </>}
-        </section>
-      </div>
     </>}
   </section>;
 }
