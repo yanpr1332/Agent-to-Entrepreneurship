@@ -671,7 +671,12 @@ export class LocalStore {
         const acceptedMail=this.db.prepare(
           "SELECT 1 AS found FROM mail_candidate_reviews WHERE task_id=? AND decision='accepted'"
         ).get(entityId);
-        if(task&&(!enrollment||task.source!==null||acceptedMail)){
+        // Multiple explicitly enrolled cloud owners share this canonical local
+        // task ID. Never let A's remote snapshot silently change B's local copy.
+        const anotherOwner=task&&Boolean(this.db.prepare(
+          "SELECT 1 FROM personal_task_sync_enrollment WHERE task_id=? AND owner_id<>? LIMIT 1"
+        ).get(entityId,ownerId));
+        if(task&&(!enrollment||task.source!==null||acceptedMail||anotherOwner)){
           const localPayload=task.source===null&&!acceptedMail?{
             title:task.title,description:task.description,dueDate:task.dueDate,
             priority:task.priority,completed:task.completed,

@@ -343,6 +343,24 @@ describe("local-first SQLite store", () => {
     expect(db.countPersonalSyncConflicts(OWNER_A)).toBe(0);
   });
 
+  it("blocks a remote update that would mutate another owner's enrolled task",()=>{
+    const db=memory(),task=db.createTask({title:"Shared local copy"});
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    db.setTaskSyncEnabled(task.id,true,OWNER_B);
+    const a=db.listPersonalSyncOutbox(OWNER_A)[0],b=db.listPersonalSyncOutbox(OWNER_B)[0];
+    db.acknowledgePersonalSyncOperation(OWNER_A,a.operationId,task.id,"upsert",1,null);
+    db.acknowledgePersonalSyncOperation(OWNER_B,b.operationId,task.id,"upsert",1,null);
+    const change:PersonalSyncChange={cursor:"2",entityType:"personal-task",entityId:task.id,
+      version:2,payload:{title:"Account A change",description:"",dueDate:null,
+        priority:"normal",completed:true},
+      deleted:false,updatedAt:"2026-11-24T11:00:00.000Z"};
+    expect(db.applyRemotePersonalTaskChanges(OWNER_A,[change])).toMatchObject([
+      {entityId:task.id,reason:"local-entity-not-eligible",remoteVersion:2},
+    ]);
+    expect(db.listTasks()).toMatchObject([{id:task.id,title:"Shared local copy",completed:false}]);
+    expect(db.listPersonalSyncEnrollments(OWNER_B)).toMatchObject([{serverVersion:1}]);
+  });
+
   it("handles remote deletion decisions without resurrecting data automatically",()=>{
     const db=memory(),task=db.createTask({title:"Keep my task"});
     db.setTaskSyncEnabled(task.id,true,OWNER_A);

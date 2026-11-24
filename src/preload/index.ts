@@ -117,8 +117,7 @@ const desktopApi = Object.freeze({
     personalSyncConflicts: () =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudPersonalSyncConflicts) as Promise<PersonalSyncConflictRecord[]>,
     resolvePersonalSyncConflict:(input:PersonalSyncResolutionRequest) =>
-      ipcRenderer.invoke(IPC_CHANNELS.cloudResolvePersonalSyncConflict,input)
-        as Promise<{resolved:true;choice:"keep-local"|"use-remote"}>,
+      ipcRenderer.invoke(IPC_CHANNELS.cloudResolvePersonalSyncConflict,input) as Promise<{resolved:true;choice:"keep-local"|"use-remote"}>,
   }),
   canvas: Object.freeze({
     status: () => ipcRenderer.invoke(IPC_CHANNELS.canvasStatus) as Promise<CanvasConnectionStatus>,

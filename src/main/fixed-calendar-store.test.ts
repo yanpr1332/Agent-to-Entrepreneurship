@@ -513,6 +513,26 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     expect(db.listManualCalendarSyncEnrollments(OWNER_A)).toMatchObject([{serverVersion:2}]);
   });
 
+  it("blocks silent remote updates to an event enrolled for another owner",()=>{
+    const db=calendar();
+    const event=db.create({title:"Shared local course",day:"2026-11-12",startMinute:540,
+      durationMinutes:60,weeks:1},now)[0];
+    db.setManualEventSyncEnabled(event.id,true,OWNER_A,now);
+    db.setManualEventSyncEnabled(event.id,true,OWNER_B,now);
+    const a=db.listManualCalendarSyncOutbox(OWNER_A)[0],b=db.listManualCalendarSyncOutbox(OWNER_B)[0];
+    db.acknowledgeManualCalendarSyncOperation(OWNER_A,a.operationId,event.id,"upsert",1,null);
+    db.acknowledgeManualCalendarSyncOperation(OWNER_B,b.operationId,event.id,"upsert",1,null);
+    const remote:PersonalSyncChange={cursor:"2",entityType:"manual-calendar-event",
+      entityId:event.id,version:2,payload:{title:"Account A changed course",day:event.day,
+        startMinute:660,durationMinutes:60,seriesId:null},
+      deleted:false,updatedAt:"2026-11-24T11:00:00.000Z"};
+    expect(db.applyRemoteManualCalendarChanges(OWNER_A,[remote])).toMatchObject([
+      {entityId:event.id,reason:"local-entity-not-eligible",remoteVersion:2},
+    ]);
+    expect(db.list()).toMatchObject([{id:event.id,title:"Shared local course",startMinute:540}]);
+    expect(db.listManualCalendarSyncEnrollments(OWNER_B)).toMatchObject([{serverVersion:1}]);
+  });
+
   it("blocks adopting a remote calendar slot that overlaps confirmed study time",()=>{
     const db=calendar(()=>[busy]);
     const event=db.create({title:"Safe local",day:"2026-11-12",startMinute:540,

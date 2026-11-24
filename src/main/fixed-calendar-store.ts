@@ -523,7 +523,12 @@ export class FixedCalendarStore {
         if(enrollment?.server_version!==null&&enrollment?.server_version!==undefined&&
           change.version<=enrollment.server_version)continue;
         const event=this.list().find(item=>item.id===entityId);
-        if(event&&(!enrollment||event.source!=="manual"||event.sourceUid!==null)){
+        // A remote update/delete must not implicitly mutate the same canonical
+        // event enrolled by a different account on this device.
+        const anotherOwner=event&&Boolean(this.db.prepare(
+          "SELECT 1 FROM manual_calendar_sync_enrollment WHERE event_id=? AND owner_id<>? LIMIT 1"
+        ).get(entityId,ownerId));
+        if(event&&(!enrollment||event.source!=="manual"||event.sourceUid!==null||anotherOwner)){
           const localPayload=event.source==="manual"&&event.sourceUid===null?{
             title:event.title,day:event.day,startMinute:event.startMinute,
             durationMinutes:event.durationMinutes,seriesId:event.seriesId,
