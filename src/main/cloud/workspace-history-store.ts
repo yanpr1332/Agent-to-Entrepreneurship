@@ -308,11 +308,13 @@ export class WorkspaceHistoryStore {
     this.db.exec("BEGIN IMMEDIATE");
     let workspaces=0;
     try{
-      const old=this.db.prepare("SELECT count(*) AS n FROM progress WHERE owner_id=?")
-        .get(id) as {n:number};
-      const staging=this.db.prepare("SELECT count(*) AS n FROM checkpoint_progress WHERE owner_id=?")
-        .get(id) as {n:number};
-      workspaces=old.n+staging.n;
+      // Count distinct workspace partitions; a workspace can have BOTH a
+      // published cursor and an unfinished checkpoint stage.
+      const existing=this.db.prepare(`SELECT count(*) AS n FROM (
+        SELECT workspace_id FROM progress WHERE owner_id=?
+        UNION SELECT workspace_id FROM checkpoint_progress WHERE owner_id=?
+      )`).get(id,id) as {n:number};
+      workspaces=existing.n;
       this.db.prepare("DELETE FROM checkpoint_progress WHERE owner_id=?").run(id);
       this.db.prepare("DELETE FROM progress WHERE owner_id=?").run(id);
       this.db.exec("COMMIT");
