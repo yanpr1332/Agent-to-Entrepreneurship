@@ -72,13 +72,16 @@ export function encodeEmbedding(value:readonly number[],dimension:number):Buffer
     throw Error("Embedding normalization failed");
   return out;
 }
-export function embeddingCosine(query:Buffer,stored:Buffer):number{
-  if(!Buffer.isBuffer(query)||!Buffer.isBuffer(stored)||
+export function embeddingCosine(query:Buffer,stored:Uint8Array):number{
+  // node:sqlite returns BLOBs as Uint8Array (not necessarily Buffer).
+  // Validate the exact byte count before reading little-endian floats.
+  if(!Buffer.isBuffer(query)||!(stored instanceof Uint8Array)||
      query.length!==stored.length||query.length<8||query.length%4!==0)
     throw Error("Corrupt indexed embedding dimension");
+  const bytes=Buffer.from(stored.buffer,stored.byteOffset,stored.byteLength);
   let dot=0;
   for(let p=0;p<query.length;p+=4){
-    const q=query.readFloatLE(p),v=stored.readFloatLE(p);
+    const q=query.readFloatLE(p),v=bytes.readFloatLE(p);
     if(!Number.isFinite(q)||!Number.isFinite(v))
       throw Error("Corrupt nonfinite indexed embedding");
     dot+=q*v;
