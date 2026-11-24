@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type {
   CloudSessionStatus, SharedMember, SharedMessage, SharedTask, SharedWorkspace,
 } from "../../shared/cloud-model";
+import type {
+  PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncRunResult,
+} from "../../shared/personal-sync-contract";
 
 const empty:CloudSessionStatus={configured:false,authenticated:false,userId:null,email:null};
 const POLL_MS=10_000;
@@ -36,12 +39,24 @@ export default function CloudWorkspace() {
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
+  const [personalCandidates,setPersonalCandidates]=useState<PersonalSyncCandidate[]>([]);
+  const [personalConflicts,setPersonalConflicts]=useState<PersonalSyncConflictRecord[]>([]);
+  const [personalSyncResult,setPersonalSyncResult]=useState<PersonalSyncRunResult|null>(null);
 
   useEffect(()=>{
     let active=true;
     void window.desktop.cloud.status().then(next=>{if(active)setStatus(next);})
       .catch(reason=>{if(active)setError(issue(reason));});
     return()=>{active=false;};
+  },[]);
+
+  const refreshPersonalSync=useCallback(async()=>{
+    const [candidates,conflicts]=await Promise.all([
+      window.desktop.cloud.personalSyncCandidates(),
+      window.desktop.cloud.personalSyncConflicts(),
+    ]);
+    setPersonalCandidates(candidates);
+    setPersonalConflicts(conflicts);
   },[]);
 
   const refreshSelected=useCallback(async (workspaceId:string)=>{
@@ -54,6 +69,18 @@ export default function CloudWorkspace() {
     setMessages(remoteMessages);
     setTasks(remoteTasks);
   },[]);
+
+  useEffect(()=>{
+    if(!status.authenticated){
+      setPersonalCandidates([]);
+      setPersonalConflicts([]);
+      setPersonalSyncResult(null);
+      return;
+    }
+    let active=true;
+    void refreshPersonalSync().catch(reason=>{if(active)setError(issue(reason));});
+    return()=>{active=false;};
+  },[status.authenticated,refreshPersonalSync]);
 
   useEffect(()=>{
     if(!status.authenticated || !selected)return;
@@ -97,6 +124,7 @@ export default function CloudWorkspace() {
         const next=await window.desktop.cloud.login(credentials);
         setStatus(next);
         setNotice("已使用独立云账号登录。");
+        await refreshPersonalSync();
         const available=await window.desktop.cloud.workspaces();
         setWorkspaces(available);
       }
@@ -110,6 +138,7 @@ export default function CloudWorkspace() {
       const next=await window.desktop.cloud.logout();
       setStatus(next);setWorkspaces([]);setSelected(null);
       setMembers([]);setMessages([]);setTasks([]);setInvite("");
+      setPersonalCandidates([]);setPersonalConflicts([]);setPersonalSyncResult(null);
       setNotice("已退出云端账号；个人本地任务与其他连接器不受影响。");
     });
   }
@@ -149,6 +178,26 @@ export default function CloudWorkspace() {
       const code=await window.desktop.cloud.createInvite(selected);
       setInvite(code);
       setNotice("此邀请码 48 小时内有效，最多还能用于 4 人加入。只分享给要邀请的成员。");
+    });
+  }
+
+  async function syncPersonalNow():Promise<void>{
+    await run(async()=>{
+      const result=await window.desktop.cloud.syncPersonalNow();
+      setPersonalSyncResult(result);
+      await refreshPersonalSync();
+      setNotice("个人数据同步流程已完成；本地待发送队列和冲突状态已刷新。");
+    });
+  }
+
+  async function setPersonalSyncEnabled(item:PersonalSyncCandidate,enabled:boolean):Promise<void>{
+    await run(async()=>{
+      if(item.entityType==="personal-task")
+        await window.desktop.cloud.setPersonalTaskSync(item.entityId,enabled);
+      else
+        await window.desktop.cloud.setManualEventSync(item.entityId,enabled);
+      await refreshPersonalSync();
+      setNotice(enabled?"已授权此条目同步到当前云账号。":"已停止此条目的后续同步；云端已有副本不会因此删除。");
     });
   }
 
@@ -237,6 +286,47 @@ export default function CloudWorkspace() {
         <span>当前登录：{status.email}</span>
         <button className="secondary-button" disabled={busy} onClick={()=>void logout()}>退出云端账号</button>
       </div>
+      <section className="panel cloud-personal-sync">
+        <div className="panel-heading">
+          <div><div className="eyebrow">PERSONAL DEVICE SYNC · MANUAL</div><h2>个人任务与手动日历同步</h2></div>
+          <button className="primary-button" disabled={busy} onClick={()=>void syncPersonalNow()}>
+            {busy?"正在处理…":"立即同步"}
+          </button>
+        </div>
+        <p className="privacy-note">
+          只有下方逐条勾选的个人任务和手动课程会同步到当前账号。Canvas、ICS、邮件、知识库、专注记录和学习计划不会上传。
+          同步仅在点击按钮时运行，不会后台自动上传。取消勾选不会删除云端已有副本。
+        </p>
+        {personalSyncResult && <div className="connector-notice" role="status">
+          上传 {personalSyncResult.pushed} 项 · 拉取 {personalSyncResult.pulled} 项 ·
+          待发送 {personalSyncResult.pending} 项 · 冲突 {personalSyncResult.conflicts} 项
+          {personalSyncResult.pushConflicts ? " · 服务端版本冲突 "+personalSyncResult.pushConflicts+" 项" : ""}
+          {personalSyncResult.rejected ? " · 被拒绝 "+personalSyncResult.rejected+" 项" : ""}
+          {personalSyncResult.retryableFailures ? " · 可重试失败 "+personalSyncResult.retryableFailures+" 项" : ""}
+          {personalSyncResult.hasMore ? " · 还有更多变更待拉取" : ""}
+        </div>}
+        <div className="cloud-sync-candidates">
+          <h3>逐条选择同步内容</h3>
+          {personalCandidates.length===0 ? <p className="empty-state">当前没有可授权的个人任务或手动课程。</p> :
+            personalCandidates.map(item=><label className="cloud-sync-candidate" key={item.entityType+":"+item.entityId}>
+              <input type="checkbox" checked={item.enabled} disabled={busy}
+                onChange={event=>void setPersonalSyncEnabled(item,event.target.checked)} />
+              <span><strong>{item.title}</strong><small>{item.entityType==="personal-task"?"个人任务":"手动课程"}
+                {item.detail ? " · "+item.detail : ""}</small></span>
+            </label>)}
+        </div>
+        {personalConflicts.length>0 && <div className="cloud-sync-conflicts">
+          <h3>需要人工处理的同步冲突（{personalSyncResult?.conflicts??personalConflicts.length}）</h3>
+          <p className="privacy-note">为避免覆盖修改，系统保留本地待发送版本和云端版本，暂不自动选择任何一方。冲突处理界面将在下一阶段完成。
+            {personalSyncResult && personalSyncResult.conflicts>personalConflicts.length ? " 当前仅展示最新 100 条。" : ""}</p>
+          {personalConflicts.map(item=><article className="cloud-sync-conflict" key={item.entityType+":"+item.entityId}>
+            <strong>{item.localPayload?.title??item.entityId}</strong>
+            <small>{item.entityType==="personal-task"?"个人任务":"手动课程"} · 云端版本 {item.remoteVersion}</small>
+            <p>本机：{item.localAction==="delete"?"已删除":item.localPayload?.title??"本机记录待检查"}</p>
+            <p>云端：{item.remoteDeleted?"已删除":item.remotePayload?.title??"云端内容不可用"}</p>
+          </article>)}
+        </div>}
+      </section>
       <div className="cloud-layout">
         <section className="panel cloud-workspaces">
           <div className="eyebrow">SHARED WORKSPACES</div><h2>我的小组</h2>

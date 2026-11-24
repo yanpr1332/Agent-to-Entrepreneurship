@@ -1,7 +1,8 @@
 /**
- * ALPHA-SYNC-001: fail-closed wire contract for the FUTURE personal sync MVP.
- * This module defines the only eligible source fields. It does not start syncing,
- * create cloud tables, read private records, or authorize a remote caller.
+ * ALPHA-SYNC-001/002D: fail-closed wire contract for explicitly authorized personal sync.
+ * It defines the only eligible source fields and validates every network envelope/page.
+ * Actual account identity and network calls remain in Electron Main; this module never
+ * authorizes a caller or permits unrelated local sources to enter the sync protocol.
  */
 import { parseCreateTask, type LocalTask } from "./local-model";
 import {
@@ -87,9 +88,11 @@ function eventPayload(value: unknown): ManualCalendarSnapshot {
   const row = record(value);
   exactKeys(row, ["title", "day", "startMinute", "durationMinutes", "seriesId"]);
   const seriesId = row.seriesId;
-  if (seriesId !== null &&
-      (typeof seriesId !== "string" || !/^manual:[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(seriesId)))
-    throw Error("Only manual calendar series may sync");
+  if (seriesId !== null) {
+    if(typeof seriesId!=="string"||!seriesId.startsWith("manual:"))
+      throw Error("Only manual calendar series may sync");
+    requireUuid(seriesId.slice("manual:".length));
+  }
   return {
     title: validateFixedTitle(row.title),
     ...validateFixedSlot(row.day, row.startMinute, row.durationMinutes),
@@ -158,6 +161,53 @@ export interface PersonalSyncPullPage {
   nextCursor:string;
   hasMore:boolean;
 }
+
+export type PersonalSyncConflictReason =
+  | "remote-change-while-local-pending"
+  | "remote-delete-while-local-pending"
+  | "local-entity-not-eligible"
+  | "remote-overlaps-study-plan"
+  | "local-calendar-capacity";
+
+export interface PersonalSyncConflict {
+  entityType:PersonalSyncEntity;
+  entityId:string;
+  localOperationId:string|null;
+  localAction:PersonalSyncAction|null;
+  localPayload:PersonalTaskSnapshot|ManualCalendarSnapshot|null;
+  remoteVersion:number;
+  remotePayload:PersonalTaskSnapshot|ManualCalendarSnapshot|null;
+  remoteDeleted:boolean;
+  remoteUpdatedAt:string;
+  reason:PersonalSyncConflictReason;
+}
+export interface PersonalSyncConflictRecord extends PersonalSyncConflict {
+  createdAt:string;
+  updatedAt:string;
+}
+export interface PersonalSyncCandidate {
+  entityType:PersonalSyncEntity;
+  entityId:string;
+  title:string;
+  detail:string|null;
+  enabled:boolean;
+  serverVersion:number|null;
+}
+export interface PersonalSyncRunResult {
+  ownerId:string;
+  deviceId:string;
+  pushed:number;
+  pulled:number;
+  pullPages:number;
+  conflicts:number;
+  pushConflicts:number;
+  rejected:number;
+  retryableFailures:number;
+  pending:number;
+  cursor:string;
+  hasMore:boolean;
+}
+
 
 /** Parse a bounded, ordered page before any local database mutation. */
 export function parsePersonalSyncPullPage(value:unknown):PersonalSyncPullPage {

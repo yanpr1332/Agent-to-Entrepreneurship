@@ -1,6 +1,6 @@
 # ALPHA-SYNC-002C：本地 Outbox 账号隔离与安全迁移
 
-> **状态：本地 schema 与 store 层实现；本轮不执行网络同步。** Supabase 迁移不部署，旧 ownerless 队列不自动绑定账号。
+> **状态：已合并 PR #37；本轮仅完成本地 schema/store 层，不执行网络同步。** Supabase 迁移不部署，旧 ownerless 队列不自动绑定账号。
 
 ## 1. 为什么必须先做
 
@@ -88,7 +88,7 @@ adoption API 必须收到明确的 `confirmation === true`。当前轮只提供 
 5. 没有逐条同步授权 UI、legacy quarantine 审查 UI 或设备管理 UI。
 6. 没有真实 Supabase 部署、RLS 五账号验证或双设备验收。
 
-下一轮 ALPHA-SYNC-002D：在 Main process 中从当前登录会话读取 ownerId，注册稳定设备、按 owner 读取 Outbox、上传并按 owner ack；随后实现 cursor pull 与本地事务应用。先做显式手动同步按钮，自动后台同步须等冲突与恢复策略通过验收后再启用。
+后续 ALPHA-SYNC-002D 已在 [32](32_ALPHA_SYNC_002D_PUSH_PULL.md) 中实现手动 Main-process Push/Pull、逐条授权 UI 与冲突保留。冲突解决 UI、自动后台同步和真实 Supabase/双设备验收仍未完成。
 
 ## 7. 本地验证命令
 

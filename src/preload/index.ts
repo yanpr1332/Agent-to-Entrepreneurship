@@ -16,6 +16,9 @@ import type {
   CloudCredentials, CloudProjectConfig, CloudSessionStatus,
   SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
 } from "../shared/cloud-model";
+import type {
+  PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncRunResult,
+} from "../shared/personal-sync-contract";
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
@@ -102,6 +105,16 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.cloudCreateTask, workspaceId, input) as Promise<SharedTask>,
     markTask: (workspaceId: string, taskId: string, completed: boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudMarkTask, workspaceId, taskId, completed) as Promise<SharedTask>,
+    syncPersonalNow: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudPersonalSyncNow) as Promise<PersonalSyncRunResult>,
+    personalSyncCandidates: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudPersonalSyncCandidates) as Promise<PersonalSyncCandidate[]>,
+    setPersonalTaskSync: (id:string,enabled:boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudSetPersonalTaskSync,{id,enabled}) as Promise<{saved:true}>,
+    setManualEventSync: (id:string,enabled:boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudSetManualEventSync,{id,enabled}) as Promise<{saved:true}>,
+    personalSyncConflicts: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudPersonalSyncConflicts) as Promise<PersonalSyncConflictRecord[]>,
   }),
   canvas: Object.freeze({
     status: () => ipcRenderer.invoke(IPC_CHANNELS.canvasStatus) as Promise<CanvasConnectionStatus>,

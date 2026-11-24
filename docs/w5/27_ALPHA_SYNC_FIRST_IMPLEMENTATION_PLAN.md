@@ -91,3 +91,13 @@ PR #36 已合并：新增个人同步 Supabase schema/RLS、设备注册/撤销�
 本机任务数据库升至 schema v8，手动日历数据库升至 v5。旧版无 owner_id 的 enrollment/outbox 不会猜测归属，而是保留在 legacy quarantine 表中；只有用户明确确认后，仍存在且符合来源白名单的个人任务/手动事件才可重新授权，并以当前本地快照和 null baseVersion 生成新操作。旧删除墓碑、已删除实体、Canvas/邮件/ICS 数据不会自动认领或上传。
 
 **本轮仍不包含上传器、pull 本地应用、冲突 UI、逐条授权 UI、真实 Supabase 部署或多设备验收。** 详见 [31](31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md)。
+
+## 10. 进度更新：ALPHA-SYNC-002D 手动 Push/Pull 与冲突保留（2026-11-24）
+
+当前开发轮在 PR #37 合并后顺序启动。Main process 从当前 Supabase 会话读取 ownerId，不接受 Renderer 传入账号身份；点击“立即同步”时注册稳定设备，按 owner 读取任务/手动日历 Outbox，顺序调用 apply RPC，并仅在服务端 accepted/duplicate 回执后 owner-scoped ack。普通编辑会轮换 operationId，避免同一幂等 ID 对应不同 payload；如果旧请求在本机编辑/删除期间成功，精确 ack 不会跨账号推断替换关系，当前同步任务再基于其已发送快照安全 rebase 新 intent 或补写删除墓碑。
+
+上传前会再次核验操作仍在当前 owner 的 Outbox 中，用户在前一请求等待期间撤销的后续条目不会被继续上传。随后按 cursor 分页 pull（每页 200、每轮最多 10 页），分别将任务和手动课程应用到各自 SQLite。两库应用和冲突记录完成后才推进 cursor；重放安全。存在本地未发送修改时不覆盖本机内容，而是保存本地 pending 与远端版本到 owner-scoped conflict 表。Renderer 增加逐条同步勾选、手动同步按钮、待发送/冲突摘要和冲突双方标题展示。
+
+本机任务库从 schema v8 升至 v9，新增 `personal_sync_conflicts`；手动日历库仍为 v5。启动迁移前备份目标更新为 v9/v5。应用退出时停止继续发送/应用并等待当前网络请求结束，未确认 Outbox 留待下次重试。
+
+**本轮不包含：**自动后台同步、冲突解决（选本机/选云端）操作、legacy quarantine 认领 UI、设备管理/撤销 UI、真实 Supabase 部署或真实双设备验收。没有授权执行 SQL migration；CI 与 mock 只证明本地逻辑，不代表远端已可用。详见 [32](32_ALPHA_SYNC_002D_PUSH_PULL.md)。

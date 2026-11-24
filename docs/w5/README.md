@@ -196,3 +196,9 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 当前开发轮将个人任务与手动日历的 enrollment/Outbox 改为 owner-scoped。旧版 ownerless 队列保留在 legacy quarantine 表，绝不自动归属当前登录账号；重新授权需要明确确认，并从当前本地实体生成新快照。任务库 schema v8、手动日历库 schema v5。详细设计、迁移规则、测试边界与未完成项见 [31](31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md)。
 
 本阶段不上传旧数据、不自动部署 Supabase、不实现网络上传/pull 或冲突解决；不能把本地 schema/单元测试通过称为跨设备同步可用。
+
+## ALPHA-SYNC-002D 手动 Push/Pull（开发中，2026-11-24）
+
+[32 Push/Pull 实施说明](32_ALPHA_SYNC_002D_PUSH_PULL.md) 增加 Main process 当前会话身份、手动设备注册、owner-scoped Outbox 上传/回执、Cursor 分页拉取、任务/手动课程本地应用、owner-scoped 冲突持久化与逐条授权 UI。任务库 schema v9 新增冲突表；日历库仍为 v5。
+
+此轮不会自动后台同步，不会部署 Supabase；冲突仅保留/展示，尚不能在 UI 中选择本机或云端版本。真实 RLS、网络联机与双设备验收仍未完成。

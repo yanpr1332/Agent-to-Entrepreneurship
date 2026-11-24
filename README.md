@@ -44,11 +44,12 @@ W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全�
 
 - PR #35 已合并：逐条授权、本地 Outbox、待发送操作合并和版本化删除墓碑。
 - PR #36 已合并：个人云端表/RLS、设备注册/撤销、版本检查、幂等回执、增量 Cursor RPC。
-- 当前开发轮 ALPHA-SYNC-002C：本地 Outbox/enrollment 按 owner 隔离；旧版无账号归属的队列迁入隔离区，只有用户明确重新授权后才为当前账号生成新快照。SQLite 本地任务库升至 v8，手动日历库升至 v5。
+- PR #37 已合并：owner-scoped 本地 enrollment/Outbox、旧 ownerless 数据隔离和明确重新授权；任务库 schema v8、日历库 v5。
+- 当前开发轮 ALPHA-SYNC-002D：Main 进程手动 push/ack + pull/SQLite 应用、逐条授权 UI、冲突保留与状态展示；任务库 schema v9 增加冲突记录表。
 
-详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md) 与 [31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md)。
+详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 与 [32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md)。
 
-**重要边界：当前仍未把 Outbox 接入网络上传，也未将远端增量应用到本机；没有冲突解决 UI、逐条授权 UI、真实 Supabase 部署或多设备联机证据。** 旧删除墓碑不会自动绑定账号或发送。
+**重要边界：目前只提供用户手动触发的同步，不会后台自动上传；冲突可持久保留并展示，但尚无保留本机/采用云端的解决 UI。Supabase 迁移未部署，真实 RLS/双设备验收尚未完成。** Canvas、ICS、邮件、知识库、专注记录、学习计划和 legacy ownerless 队列均不会自动上传。
 
 ## Windows / macOS 本地 Alpha 验收指南
 

@@ -6,6 +6,7 @@ import {DatabaseSync} from "node:sqlite";
 import {backupBeforeMigration} from "./local-backup";
 import {parseICS} from "../shared/ics-calendar";
 import {FixedCalendarStore} from "./fixed-calendar-store";
+import type {PersonalSyncChange} from "../shared/personal-sync-contract";
 import {PlanningStore} from "./planning-store";
 import type {BusySlot} from "../shared/fixed-calendar-model";
 import type {LocalTask} from "../shared/local-model";
@@ -331,13 +332,14 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     const a=db.listManualCalendarSyncOutbox(OWNER_A)[0];
     const b=db.listManualCalendarSyncOutbox(OWNER_B)[0];
     expect(a.operationId).not.toBe(b.operationId);
-    expect(()=>db.acknowledgeManualCalendarSyncOperation(OWNER_B,a.operationId,5)).toThrow("no longer pending");
+    expect(db.acknowledgeManualCalendarSyncOperation(OWNER_B,a.operationId,event.id,"upsert",5,null)).toBe("not-pending");
+    expect(db.listManualCalendarSyncOutbox(OWNER_B)[0].operationId).toBe(b.operationId);
     db.edit({id:event.id,title:"Updated for both accounts",day:event.day,
       startMinute:600,durationMinutes:60});
-    expect(db.listManualCalendarSyncOutbox(OWNER_A)[0].operationId).toBe(a.operationId);
-    expect(db.listManualCalendarSyncOutbox(OWNER_B)[0].operationId).toBe(b.operationId);
-    db.acknowledgeManualCalendarSyncOperation(OWNER_A,
-      db.listManualCalendarSyncOutbox(OWNER_A)[0].operationId,6);
+    expect(db.listManualCalendarSyncOutbox(OWNER_A)[0].operationId).not.toBe(a.operationId);
+    expect(db.listManualCalendarSyncOutbox(OWNER_B)[0].operationId).not.toBe(b.operationId);
+    const latestA=db.listManualCalendarSyncOutbox(OWNER_A)[0];
+    db.acknowledgeManualCalendarSyncOperation(OWNER_A,latestA.operationId,event.id,"upsert",6,null);
     expect(db.listManualCalendarSyncOutbox(OWNER_A)).toEqual([]);
     expect(db.listManualCalendarSyncOutbox(OWNER_B)).toHaveLength(1);
     db.setManualEventSyncEnabled(event.id,false,OWNER_B,now);
@@ -353,7 +355,7 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     db.setManualEventSyncEnabled(event.id,true,OWNER_A,now);
     db.setManualEventSyncEnabled(event.id,true,OWNER_B,now);
     const a=db.listManualCalendarSyncOutbox(OWNER_A)[0];
-    db.acknowledgeManualCalendarSyncOperation(OWNER_A,a.operationId,11);
+    db.acknowledgeManualCalendarSyncOperation(OWNER_A,a.operationId,event.id,"upsert",11,null);
     expect(db.delete(event.id)).toBe(true);
     expect(db.listManualCalendarSyncOutbox(OWNER_A)).toMatchObject([
       {entityId:event.id,action:"delete",baseVersion:11,payload:null},
@@ -361,19 +363,103 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     expect(db.listManualCalendarSyncOutbox(OWNER_B)).toEqual([]);
   });
 
-  it("coalesces opted-in manual event edits and carries the acknowledged version",()=>{
+  it("coalesces manual event edits while rotating the idempotency key for new payloads",()=>{
     const db=calendar();
     const event=db.create({title:"旧标题",day:"2026-11-12",startMinute:540,durationMinutes:60,weeks:1},now)[0];
     db.setManualEventSyncEnabled(event.id,true,OWNER_A,now);
     const first=db.listManualCalendarSyncOutbox(OWNER_A)[0];
     db.edit({id:event.id,title:"新标题",day:"2026-11-12",startMinute:600,durationMinutes:60});
     const latest=db.listManualCalendarSyncOutbox(OWNER_A)[0];
-    expect(latest.operationId).toBe(first.operationId);
+    expect(latest.operationId).not.toBe(first.operationId);
     expect(JSON.parse(latest.payload!).title).toBe("新标题");
-    db.acknowledgeManualCalendarSyncOperation(OWNER_A,latest.operationId,3);
+    db.acknowledgeManualCalendarSyncOperation(OWNER_A,latest.operationId,event.id,"upsert",3,null);
     db.edit({id:event.id,title:"再次编辑",day:"2026-11-12",startMinute:660,durationMinutes:60});
     expect(db.listManualCalendarSyncOutbox(OWNER_A)[0].baseVersion).toBe(3);
   });
+  it("lists only manually created calendar events as personal sync candidates",()=>{
+    const db=calendar();
+    const manual=db.create({title:"Manual candidate",day:"2026-11-12",startMinute:540,
+      durationMinutes:60,weeks:1},now)[0];
+    db.import([{title:"ICS candidate",day:"2026-11-13",startMinute:540,
+      durationMinutes:60,sourceUid:"ics-candidate"}],now);
+    expect(db.listManualCalendarSyncCandidates(OWNER_A)).toMatchObject([
+      {entityType:"manual-calendar-event",entityId:manual.id,title:"Manual candidate",enabled:false},
+    ]);
+    db.setManualEventSyncEnabled(manual.id,true,OWNER_A,now);
+    expect(db.listManualCalendarSyncCandidates(OWNER_A)[0].enabled).toBe(true);
+    expect(db.listManualCalendarSyncCandidates(OWNER_B)[0].enabled).toBe(false);
+    expect(db.countManualCalendarSyncOutbox(OWNER_A)).toBe(1);
+    expect(db.countManualCalendarSyncOutbox(OWNER_B)).toBe(0);
+  });
+
+  it("applies remote manual calendar snapshots and preserves a conflicting local edit",()=>{
+    const db=calendar();
+    const entityId="3babcb78-c10d-4f4e-ab3e-f47f6ad72447";
+    const first:PersonalSyncChange={cursor:"1",entityType:"manual-calendar-event",entityId,version:1,
+      payload:{title:"Remote class",day:"2026-11-12",startMinute:540,durationMinutes:60,seriesId:null},
+      deleted:false,updatedAt:"2026-11-20T10:00:00.000Z"};
+    expect(db.applyRemoteManualCalendarChanges(OWNER_A,[first])).toEqual([]);
+    expect(db.list()).toMatchObject([{id:entityId,title:"Remote class",source:"manual"}]);
+    expect(db.listManualCalendarSyncEnrollments(OWNER_A)).toMatchObject([{eventId:entityId,serverVersion:1}]);
+    db.edit({id:entityId,title:"Local class edit",day:"2026-11-12",startMinute:600,durationMinutes:60});
+    const second:PersonalSyncChange={...first,cursor:"2",version:2,
+      payload:{title:"Remote class edit",day:"2026-11-13",startMinute:660,durationMinutes:90,seriesId:null},
+      updatedAt:"2026-11-20T10:01:00.000Z"};
+    const conflicts=db.applyRemoteManualCalendarChanges(OWNER_A,[second]);
+    expect(conflicts).toMatchObject([{
+      entityId,localAction:"upsert",remoteVersion:2,reason:"remote-change-while-local-pending",
+    }]);
+    expect(db.list()).toMatchObject([{id:entityId,title:"Local class edit",startMinute:600}]);
+  });
+
+  it("applies remote calendar deletes only when no local edit is pending",()=>{
+    const db=calendar();
+    const entityId="3babcb78-c10d-4f4e-ab3e-f47f6ad72447";
+    const first:PersonalSyncChange={cursor:"1",entityType:"manual-calendar-event",entityId,version:1,
+      payload:{title:"Remote class",day:"2026-11-12",startMinute:540,durationMinutes:60,seriesId:null},
+      deleted:false,updatedAt:"2026-11-20T10:00:00.000Z"};
+    db.applyRemoteManualCalendarChanges(OWNER_A,[first]);
+    const deletion:PersonalSyncChange={...first,cursor:"2",version:2,payload:null,deleted:true,
+      updatedAt:"2026-11-20T10:01:00.000Z"};
+    expect(db.applyRemoteManualCalendarChanges(OWNER_A,[deletion])).toEqual([]);
+    expect(db.list()).toEqual([]);
+    expect(db.listManualCalendarSyncEnrollments(OWNER_A)).toEqual([]);
+  });
+
+  it("rebases an in-flight manual event create when a newer local edit is acknowledged",()=>{
+    const db=calendar();
+    const event=db.create({title:"Before push",day:"2026-11-12",startMinute:540,
+      durationMinutes:60,weeks:1},now)[0];
+    db.setManualEventSyncEnabled(event.id,true,OWNER_A,now);
+    const sent=db.listManualCalendarSyncOutbox(OWNER_A)[0];
+    db.edit({id:event.id,title:"Edited during push",day:event.day,startMinute:600,durationMinutes:60});
+    const newer=db.listManualCalendarSyncOutbox(OWNER_A)[0];
+    expect(newer.operationId).not.toBe(sent.operationId);
+    expect(db.acknowledgeManualCalendarSyncOperation(OWNER_A,sent.operationId,event.id,"upsert",1,null))
+      .toBe("not-pending");
+    expect(db.rebaseManualCalendarSyncOperation(OWNER_A,event.id,"upsert",1,null)).toBe("superseded");
+    expect(db.listManualCalendarSyncOutbox(OWNER_A)).toMatchObject([
+      {operationId:newer.operationId,baseVersion:1},
+    ]);
+  });
+
+  it("creates a compensating calendar delete if an event is removed during its first upload",()=>{
+    const db=calendar();
+    const event=db.create({title:"Delete during push",day:"2026-11-12",startMinute:540,
+      durationMinutes:60,weeks:1},now)[0];
+    db.setManualEventSyncEnabled(event.id,true,OWNER_A,now);
+    const sent=db.listManualCalendarSyncOutbox(OWNER_A)[0];
+    expect(db.delete(event.id)).toBe(true);
+    expect(db.listManualCalendarSyncOutbox(OWNER_A)).toEqual([]);
+    expect(db.acknowledgeManualCalendarSyncOperation(OWNER_A,sent.operationId,event.id,"upsert",1,null))
+      .toBe("not-pending");
+    expect(db.rebaseManualCalendarSyncOperation(OWNER_A,event.id,"upsert",1,null))
+      .toBe("deleted-during-upload");
+    expect(db.listManualCalendarSyncOutbox(OWNER_A)).toMatchObject([
+      {entityId:event.id,action:"delete",baseVersion:1,payload:null},
+    ]);
+  });
+
   it("does not enroll imported ICS records and retains remote delete tombstones",()=>{
     const db=calendar();
     db.import([{title:"ICS",day:"2026-11-12",startMinute:540,durationMinutes:60,sourceUid:"ics-uid"}],now);
@@ -382,7 +468,7 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     const manual=db.create({title:"手动",day:"2026-11-13",startMinute:540,durationMinutes:60,weeks:1},now)[0];
     db.setManualEventSyncEnabled(manual.id,true,OWNER_A,now);
     const create=db.listManualCalendarSyncOutbox(OWNER_A)[0];
-    db.acknowledgeManualCalendarSyncOperation(OWNER_A,create.operationId,8);
+    db.acknowledgeManualCalendarSyncOperation(OWNER_A,create.operationId,manual.id,"upsert",8,null);
     expect(db.delete(manual.id)).toBe(true);
     expect(db.listManualCalendarSyncOutbox(OWNER_A)).toMatchObject([{entityId:manual.id,action:"delete",baseVersion:8,payload:null}]);
   });
@@ -403,8 +489,8 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
       db.setManualEventSyncEnabled(group[index].id,true,OWNER_B,now);
       const operationA=db.listManualCalendarSyncOutbox(OWNER_A).find(x=>x.entityId===group[index].id)!;
       const operationB=db.listManualCalendarSyncOutbox(OWNER_B).find(x=>x.entityId===group[index].id)!;
-      db.acknowledgeManualCalendarSyncOperation(OWNER_A,operationA.operationId,10+index);
-      db.acknowledgeManualCalendarSyncOperation(OWNER_B,operationB.operationId,20+index);
+      db.acknowledgeManualCalendarSyncOperation(OWNER_A,operationA.operationId,group[index].id,"upsert",10+index,null);
+      db.acknowledgeManualCalendarSyncOperation(OWNER_B,operationB.operationId,group[index].id,"upsert",20+index,null);
     }
     expect(db.deleteSeries(group[0].id)).toBe(2);
     expect(db.list()).toHaveLength(0);
