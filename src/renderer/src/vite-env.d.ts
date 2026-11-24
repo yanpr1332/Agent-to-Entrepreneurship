@@ -15,6 +15,7 @@ import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } fr
 import type {
   CloudCredentials, CloudProjectConfig, CloudSessionStatus,
   SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
+  SharedWorkspaceSnapshot, WorkspaceLiveUpdate,
 } from "../../shared/cloud-model";
 import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncRunResult,
@@ -83,6 +84,10 @@ declare global {
         members: (workspaceId: string) => Promise<SharedMember[]>;
         messages: (workspaceId: string) => Promise<SharedMessage[]>;
         sendMessage: (workspaceId: string, body: string) => Promise<SharedMessage>;
+        workspaceSnapshot: (workspaceId:string) => Promise<SharedWorkspaceSnapshot>;
+        watchWorkspace: (workspaceId:string) => Promise<WorkspaceLiveUpdate>;
+        stopWorkspaceWatch: () => Promise<{stopped:true}>;
+        onWorkspaceLiveUpdated: (listener:(state:WorkspaceLiveUpdate)=>void) => () => void;
         tasks: (workspaceId: string) => Promise<SharedTask[]>;
         createTask: (workspaceId: string, input: SharedTaskInput) => Promise<SharedTask>;
         markTask: (workspaceId: string, taskId: string, completed: boolean) => Promise<SharedTask>;
