@@ -213,6 +213,49 @@ export function parsePersonalSyncResolutionRequest(value:unknown):PersonalSyncRe
     choice:row.choice,
   };
 }
+/** Old ownerless rows have NO trustworthy owner, and are never a source of
+ * automatic upload. A displayed old payload/version is not an upload source. */
+export interface PersonalSyncLegacyItem {
+  legacyStore:"task-database"|"calendar-database";
+  entityType:PersonalSyncEntity;
+  entityId:string;
+  operationId:string|null;
+  action:"upsert"|"delete"|"enrolled";
+  title:string|null;
+  createdAt:string;
+  canReauthorize:boolean;
+}
+export interface PersonalSyncLegacyReview {
+  items:PersonalSyncLegacyItem[];
+  taskLimitReached:boolean;
+  calendarLimitReached:boolean;
+}
+export interface PersonalSyncLegacyAdoptionRequest {
+  entityType:PersonalSyncEntity;
+  entityId:string;
+  expectedAction:"upsert"|"enrolled";
+  expectedOperationId:string|null;
+  confirmation:true;
+}
+/** Renderer cannot choose an account, reuse an old server version, or submit a
+ * historical payload. The Main process obtains owner identity from its session. */
+export function parsePersonalSyncLegacyAdoptionRequest(value:unknown):PersonalSyncLegacyAdoptionRequest{
+  const row=record(value);
+  exactKeys(row,["entityType","entityId","expectedAction","expectedOperationId","confirmation"]);
+  if(row.entityType!=="personal-task"&&row.entityType!=="manual-calendar-event")
+    throw Error("Unsupported legacy personal sync entity");
+  if(row.confirmation!==true)throw Error("Explicit legacy sync confirmation is required");
+  if(row.expectedAction!=="upsert"&&row.expectedAction!=="enrolled")
+    throw Error("Historical deletion cannot be automatically re-authorized");
+  const expectedOperationId=row.expectedAction==="upsert"
+    ?requireUuid(row.expectedOperationId)
+    :row.expectedOperationId===null?null:(()=>{throw Error("Unexpected legacy operation id");})();
+  return {
+    entityType:row.entityType,entityId:requireUuid(row.entityId),
+    expectedAction:row.expectedAction,expectedOperationId,confirmation:true,
+  };
+}
+
 export interface PersonalSyncCandidate {
   entityType:PersonalSyncEntity;
   entityId:string;

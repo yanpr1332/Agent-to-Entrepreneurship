@@ -99,3 +99,8 @@ npm run build
 ```
 
 CI 通过只能证明迁移与 store 层代码测试通过，不证明真实 Supabase RLS、网络上传或多设备同步已经可用。
+
+
+## 后续 legacy UI 进度（2026-11-24）
+
+[34 旧数据隔离区审查](34_ALPHA_SYNC_002E_LEGACY_REVIEW.md) 在现有 store-level adoption API 上增加只读审查、Main 的登录 owner 约束及两次交互确认。不会自动归属旧记录；旧删除墓碑依旧隔离。原 002C 的迁移代码/验收历史保持不变。

@@ -18,7 +18,7 @@ import type {
 } from "../shared/cloud-model";
 import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncRunResult,
-  PersonalSyncResolutionRequest,
+  PersonalSyncResolutionRequest, PersonalSyncLegacyReview, PersonalSyncLegacyAdoptionRequest,
 } from "../shared/personal-sync-contract";
 
 import type {
@@ -116,6 +116,10 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.cloudSetManualEventSync,{id,enabled}) as Promise<{saved:true}>,
     personalSyncConflicts: () =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudPersonalSyncConflicts) as Promise<PersonalSyncConflictRecord[]>,
+    personalSyncLegacyReview:() =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudPersonalSyncLegacyReview) as Promise<PersonalSyncLegacyReview>,
+    adoptPersonalSyncLegacy:(input:PersonalSyncLegacyAdoptionRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudAdoptPersonalSyncLegacy,input) as Promise<{saved:true}>,
     resolvePersonalSyncConflict:(input:PersonalSyncResolutionRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudResolvePersonalSyncConflict,input) as Promise<{resolved:true;choice:"keep-local"|"use-remote"}>,
   }),

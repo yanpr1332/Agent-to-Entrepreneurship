@@ -46,11 +46,12 @@ W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全�
 - PR #36 已合并：个人云端表/RLS、设备注册/撤销、版本检查、幂等回执、增量 Cursor RPC。
 - PR #37 已合并：owner-scoped 本地 enrollment/Outbox、旧 ownerless 数据隔离和明确重新授权；任务库 schema v8、日历库 v5。
 - PR #38 已合并：Main 进程手动 push/ack + pull/SQLite 应用、逐条授权 UI、冲突保留与状态展示；任务库 schema v9 增加冲突记录表。
-- 当前开发轮 ALPHA-SYNC-002E：对有本地 pending 的任务/手动日历冲突进行版本校验后的“保留本机/采用云端”二次确认；未解决冲突阻止继续上传/覆写。设备撤销、Cursor 恢复、旧数据 quarantine 审查仍待后续。
+- PR #39 已合并：本地/云端冲突二次确认、owner/版本/operationId 校验；未解决冲突阻止继续上传/覆写。
+- 当前开发轮 ALPHA-SYNC-002E 续篇：旧 ownerless 同步记录的只读审查与逐条二次确认重新授权；历史删除墓碑继续隔离。设备撤销、Cursor 恢复仍待后续。
 
-详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 、[32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md) 与 [33 冲突解决](docs/w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md)。
+详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 、[32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md) 、[33 冲突解决](docs/w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md) 与 [34 旧数据审查](docs/w5/34_ALPHA_SYNC_002E_LEGACY_REVIEW.md)。
 
-**重要边界：目前只提供用户手动触发的同步，不会后台自动上传；002E 只允许对本地待发送操作与云端变更冲突选择一方，来源冲突、学习计划占用、容量问题仍需人工处理。Supabase 迁移未部署，真实 RLS/双设备验收尚未完成。** Canvas、ICS、邮件、知识库、专注记录、学习计划和 legacy ownerless 队列均不会自动上传。
+**重要边界：目前只提供用户手动触发的同步，不会后台自动上传；002E 只允许对本地待发送操作与云端变更冲突选择一方，来源冲突、学习计划占用、容量问题仍需人工处理。旧 ownerless 记录只有逐条明确确认才生成新的待发送意图，不会直接上传历史内容；旧删除墓碑不会变成远端删除。Supabase 迁移未部署，真实 RLS/双设备验收尚未完成。** Canvas、ICS、邮件、知识库、专注记录、学习计划和 legacy ownerless 队列均不会自动上传。
 
 ## Windows / macOS 本地 Alpha 验收指南
 
@@ -186,11 +187,11 @@ npm run build
 
 ~~~sh
 npm run typecheck
-node node_modules/vitest/vitest.mjs run src/main/personal-sync.test.ts src/main/local-store.test.ts src/main/fixed-calendar-store.test.ts src/main/local-backup.test.ts src/main/mail-candidates.test.ts src/shared/personal-sync-contract.test.ts src/shared/ipc-channels.test.ts
+node node_modules/vitest/vitest.mjs run src/main/personal-sync.test.ts src/main/personal-sync-legacy.test.ts src/main/local-store.test.ts src/main/fixed-calendar-store.test.ts src/main/local-backup.test.ts src/main/mail-candidates.test.ts src/shared/personal-sync-contract.test.ts src/shared/ipc-channels.test.ts
 npm run test:sync-rls
 ~~~
 
-这些定向测试使用内存 SQLite、临时 SQLite 文件和 Mock 云端响应，不需要真实 Supabase、Canvas、学校邮箱或 API Key。覆盖内容包括：逐条授权、任务/手动课程 Push/Pull、冲突保留、跨账号隔离、在途编辑/删除、撤销尚未发送条目的授权、退出时保留待确认操作，以及 v8→v9 迁移备份。
+这些定向测试使用内存 SQLite、临时 SQLite 文件和 Mock 云端响应，不需要真实 Supabase、Canvas、学校邮箱或 API Key。包括旧 ownerless 隔离区的只读列表、重新授权的双重确认、拒绝历史删除墓碑和防止过期认领。覆盖内容包括：逐条授权、任务/手动课程 Push/Pull、冲突保留、跨账号隔离、在途编辑/删除、撤销尚未发送条目的授权、退出时保留待确认操作，以及 v8→v9 迁移备份。
 
 完整验收仍需运行 `npm test`。它会执行全部 Vitest 测试，并运行 `scripts/sync-rls-acceptance.node.mjs` 静态验收；`npm run build` 会再次执行类型检查和完整测试后才构建桌面 bundle。
 

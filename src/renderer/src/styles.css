@@ -508,3 +508,14 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
   padding:12px;min-width:0}
 .cloud-sync-confirm p{font-size:12px;line-height:1.65}
 .cloud-sync-resolution .button-row{flex-wrap:wrap}
+
+/* ALPHA-SYNC-002E: ownerless legacy data review. Read-only by default. */
+.cloud-sync-legacy{display:grid;gap:10px;border-top:1px solid var(--line);padding-top:12px;min-width:0}
+.cloud-sync-legacy h3{margin:0;font-size:13px}
+.cloud-sync-legacy-list{display:grid;gap:8px;min-width:0}
+.cloud-sync-legacy-item{display:grid;gap:7px;border:1px solid var(--line);
+  border-radius:8px;padding:10px;min-width:0}
+.cloud-sync-legacy-item>strong{font-size:12px;overflow-wrap:anywhere}
+.cloud-sync-legacy-item>small{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.cloud-sync-legacy-item>.secondary-button{justify-self:start}
+.cloud-sync-legacy-item .cloud-sync-confirm{margin-top:4px}
