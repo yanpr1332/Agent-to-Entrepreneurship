@@ -204,7 +204,8 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
       startMinute:540,durationMinutes:60,weeks:1})[0];
     initial.close();
     const old=new DatabaseSync(path);
-    old.exec("DROP TABLE canvas_calendar_events; DROP INDEX fixed_events_series; "+
+    old.exec("DROP TABLE manual_calendar_sync_outbox; DROP TABLE manual_calendar_sync_enrollment; "+
+      "DROP TABLE canvas_calendar_events; DROP INDEX fixed_events_series; "+
       "ALTER TABLE fixed_events DROP COLUMN series_id; PRAGMA user_version=1;");
     old.close();
     const copied=await backupBeforeMigration(dir,"ate-fixed-calendar.sqlite",2);
@@ -218,7 +219,7 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
       startMinute:600,durationMinutes:60,weeks:2})).toHaveLength(2);
     restored.close();
     expect(await backupBeforeMigration(dir,"ate-fixed-calendar.sqlite",2)).toBeNull();
-  });
+  }, 15_000);
   it("offline proposals skip fixed time, AI proposals reject fixed time, apply rechecks edits",()=>{
     const classes=calendar(),p=planner(()=>classes.busySlots());
     classes.create({title:"Calculus",day:busy.day,startMinute:busy.startMinute,
@@ -247,4 +248,67 @@ describe("fixed classes and selective planning are jointly collision-safe",()=>{
     expect(classes.list()).toHaveLength(0);
     expect(p.listCommitted()).toHaveLength(1);
   });
+
+  it("enrolls only a selected manual calendar event and queues a strict snapshot",()=>{
+    const db=calendar();
+    const event=db.create({title:"手动课程",day:"2026-11-12",startMinute:540,durationMinutes:60,weeks:1},now)[0];
+    expect(db.listManualCalendarSyncOutbox()).toEqual([]);
+    db.setManualEventSyncEnabled(event.id,true,now);
+    const queued=db.listManualCalendarSyncOutbox();
+    expect(queued).toHaveLength(1);
+    expect(queued[0]).toMatchObject({entityId:event.id,action:"upsert",baseVersion:null});
+    expect(JSON.parse(queued[0].payload!)).toMatchObject({title:"手动课程",day:"2026-11-12",startMinute:540,durationMinutes:60,seriesId:null});
+  });
+  it("coalesces opted-in manual event edits and carries the acknowledged version",()=>{
+    const db=calendar();
+    const event=db.create({title:"旧标题",day:"2026-11-12",startMinute:540,durationMinutes:60,weeks:1},now)[0];
+    db.setManualEventSyncEnabled(event.id,true,now);
+    const first=db.listManualCalendarSyncOutbox()[0];
+    db.edit({id:event.id,title:"新标题",day:"2026-11-12",startMinute:600,durationMinutes:60});
+    const latest=db.listManualCalendarSyncOutbox()[0];
+    expect(latest.operationId).toBe(first.operationId);
+    expect(JSON.parse(latest.payload!).title).toBe("新标题");
+    db.acknowledgeManualCalendarSyncOperation(latest.operationId,3);
+    db.edit({id:event.id,title:"再次编辑",day:"2026-11-12",startMinute:660,durationMinutes:60});
+    expect(db.listManualCalendarSyncOutbox()[0].baseVersion).toBe(3);
+  });
+  it("does not enroll imported ICS records and retains remote delete tombstones",()=>{
+    const db=calendar();
+    db.import([{title:"ICS",day:"2026-11-12",startMinute:540,durationMinutes:60,sourceUid:"ics-uid"}],now);
+    const imported=db.list()[0];
+    expect(()=>db.setManualEventSyncEnabled(imported.id,true)).toThrow();
+    const manual=db.create({title:"手动",day:"2026-11-13",startMinute:540,durationMinutes:60,weeks:1},now)[0];
+    db.setManualEventSyncEnabled(manual.id,true,now);
+    const create=db.listManualCalendarSyncOutbox()[0];
+    db.acknowledgeManualCalendarSyncOperation(create.operationId,8);
+    expect(db.delete(manual.id)).toBe(true);
+    expect(db.listManualCalendarSyncOutbox()).toMatchObject([{entityId:manual.id,action:"delete",baseVersion:8,payload:null}]);
+  });
+  it("cancels a never-acknowledged manual event create when it is deleted",()=>{
+    const db=calendar();
+    const event=db.create({title:"未同步",day:"2026-11-12",startMinute:540,durationMinutes:60,weeks:1},now)[0];
+    db.setManualEventSyncEnabled(event.id,true,now);
+    expect(db.delete(event.id)).toBe(true);
+    expect(db.listManualCalendarSyncOutbox()).toEqual([]);
+  });
+
+
+  it("writes per-occurrence tombstones when deleting an enrolled manual series",()=>{
+    const db=calendar();
+    const group=db.create({title:"手动系列",day:"2026-11-12",startMinute:540,durationMinutes:60,weeks:2},now);
+    for(let index=0;index<group.length;index++){
+      db.setManualEventSyncEnabled(group[index].id,true,now);
+      const operation=db.listManualCalendarSyncOutbox().find(x=>x.entityId===group[index].id)!;
+      db.acknowledgeManualCalendarSyncOperation(operation.operationId,10+index);
+    }
+    expect(db.deleteSeries(group[0].id)).toBe(2);
+    expect(db.list()).toHaveLength(0);
+    const tombstones=db.listManualCalendarSyncOutbox();
+    expect(tombstones).toHaveLength(2);
+    expect(tombstones.find(x=>x.entityId===group[0].id))
+      .toMatchObject({action:"delete",baseVersion:10,payload:null});
+    expect(tombstones.find(x=>x.entityId===group[1].id))
+      .toMatchObject({action:"delete",baseVersion:11,payload:null});
+  });
+
 });

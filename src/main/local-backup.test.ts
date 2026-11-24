@@ -42,7 +42,7 @@ describe("verified online SQLite snapshots",()=>{
     db.createTask({title:"Original before schema upgrade"});
     db.close();
     const older=new DatabaseSync(path);
-    older.exec("DROP TABLE mail_candidate_reviews; PRAGMA user_version=3");
+    older.exec("DROP TABLE mail_candidate_reviews; DROP TABLE personal_sync_outbox; DROP TABLE personal_task_sync_enrollment; PRAGMA user_version=3");
     older.close();
     const snapshot=await backupBeforeMigration(dir,"ate-local.sqlite",4);
     expect(snapshot).toBeTruthy();
