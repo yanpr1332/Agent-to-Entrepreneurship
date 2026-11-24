@@ -127,7 +127,87 @@ export default function KnowledgeGraph({onOpenSource}:{
     {error&&<div className="error-banner" role="alert">{error}
       <button onClick={()=>setError("")}>关闭</button></div>}
     {notice&&<div className="connector-notice" role="status">{notice}</div>}
-    <div className="kg-layout">
+    <section className="panel kg-map-panel">
+      <div className="panel-heading">
+        <div><div className="eyebrow">LOCAL KNOWLEDGE MAP</div>
+          <h2>知识图谱 · {graph.nodes.length} 个节点 / {graph.edges.length} 条关系</h2></div>
+        <button className="secondary-button" disabled={busy} onClick={()=>void run(refresh)}>刷新图谱</button>
+      </div>
+      {visible.length===0?<p className="empty-state">尚无图谱节点。选一段原文创建第一个节点。</p>:
+      <div className="kg-map-scroll">
+        <svg viewBox="0 0 840 550" role="group" aria-label="个人知识节点与关系图" className="kg-map">
+          {shownEdges.map(edge=>{
+            const a=coords.get(edge.sourceId)!,b=coords.get(edge.targetId)!;
+            const stale=graph.nodes.some(n=>(n.id===edge.sourceId||n.id===edge.targetId)&&n.needsReview);
+            return <line key={edge.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+              className={stale?"kg-edge-stale":edge.status==="pending"?"kg-edge-pending":"kg-edge-confirmed"}/>;
+          })}
+          {visible.map(node=>{
+            const p=coords.get(node.id)!;
+            return <g key={node.id} className={`${node.needsReview?"kg-node-stale":"kg-node-current"}${node.id===selectedId?" kg-node-selected":""}`}
+              role="button" tabIndex={0} aria-pressed={node.id===selectedId} aria-label={`查看知识节点 ${node.title} 的来源${node.needsReview?"，旧版证据待核验":""}`}
+              onClick={()=>selectNode(node)}
+              onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();selectNode(node);}}}>
+              <title>{node.title} · {node.documentTitle}{node.needsReview?" · 旧版证据待核验":""}</title>
+              <circle cx={p.x} cy={p.y} r={40}/>
+              {node.needsReview&&<text x={p.x+30} y={p.y-27} className="kg-node-warning">!</text>}
+              <text x={p.x} y={p.y-3} textAnchor="middle">{node.title.slice(0,8)}</text>
+              <text x={p.x} y={p.y+15} textAnchor="middle" className="kg-node-sub">{node.documentTitle.slice(0,9)}</text>
+            </g>;
+          })}
+        </svg>
+      </div>}
+      {graph.nodes.length>24&&<p className="privacy-note">图中仅显示最近的 24 个节点，下面的完整节点列表仍可操作。</p>}
+      <div className="kg-legend" aria-label="图谱图例"><span className="kg-key-confirmed">实线：人工确认关系</span><span className="kg-key-pending">长虚线：AI 待核验（预留）</span><span className="kg-key-stale">短虚线 / !：来源已变化</span></div>
+      {visible.length>0&&<p className="kg-map-hint">选择图中节点，可在下方查看原文证据与人工注释。</p>}
+    </section>
+    <div className="kg-layout kg-detail-layout">
+      <section className="panel">
+        <div className="eyebrow">SOURCE & EVIDENCE</div><h2>节点与证据</h2>
+        {graph.nodes.length===0&&<p className="empty-state">暂无节点，请在下方创建带原文证据的节点。</p>}
+        {graph.nodes.length>0&&!selected&&<p className="kg-map-hint">请选择一个节点查看证据。</p>}
+        <ul className="kb-document-list">{graph.nodes.map(node=><li key={node.id}>
+          <button className={node.id===selectedId?"kb-doc-active":"kb-doc"}
+            aria-pressed={node.id===selectedId} onClick={()=>selectNode(node)}>
+            {node.title} {node.needsReview&&<span className="kg-review-label">旧版证据待核验</span>}
+          </button>
+          <small>{node.documentTitle} · {node.sourcePage?`PDF 第 ${node.sourcePage} 页 · `:""}片段 #{node.sourceOrdinal+1} · 来源 v{node.sourceRevision}</small>
+        </li>)}</ul>
+        {selected&&<div className="kg-selection" aria-label="当前节点证据">
+          <div className="kg-selected-heading"><strong>{selected.title}</strong><small>{selected.documentTitle} · 片段 #{selected.sourceOrdinal+1} · 来源 v{selected.sourceRevision}</small></div>
+          {selected.needsReview&&<p className="retention-warning">该资料已重新导入，证据来自旧版。请与当前原文比对；若有变化，删除并重建节点。</p>}
+          <div className="kg-evidence"><strong>创建节点时保存的原文证据</strong><p>{selected.evidence}</p></div>
+          <form className="kb-card-form" onSubmit={event=>void updateNode(event)}>
+            <label>名称<input required maxLength={120} disabled={busy} value={editTitle}
+              onChange={e=>setEditTitle(e.target.value)}/></label>
+            <label>注释<textarea rows={2} maxLength={600} disabled={busy} value={editNote}
+              onChange={e=>setEditNote(e.target.value)}/></label>
+            <button type="submit" className="secondary-button" disabled={busy}>保存人工注释</button>
+          </form>
+          <div className="button-row">
+            <button className="secondary-button" disabled={busy}
+              onClick={()=>void onOpenSource(selected.documentId,selected.sourceOrdinal)}>在资料中查看当前原文</button>
+            <button className="text-button" disabled={busy} onClick={()=>void deleteNode(selected)}>删除节点</button>
+          </div>
+        </div>}
+      </section>
+      <section className="panel">
+        <div className="eyebrow">RELATIONSHIPS</div><h2>全部关系</h2>
+        {graph.edges.length===0?<p className="empty-state">尚未建立关系，可以选两份文档中的不同节点进行关联。</p>:
+        <ul className="kb-document-list">{graph.edges.map(edge=>{
+          const a=graph.nodes.find(n=>n.id===edge.sourceId),b=graph.nodes.find(n=>n.id===edge.targetId);
+          return <li key={edge.id}>
+            <strong>{a?.title} — {relationText[edge.relation]} — {b?.title}</strong>
+            <small>{a?.documentTitle} ↔ {b?.documentTitle} · {edge.status==="confirmed"?"人工已确认":"待核验"}
+              {a?.needsReview||b?.needsReview?" · 原文已改变":""}</small>
+            {edge.note&&<p>{edge.note}</p>}
+            <button className="text-button" disabled={busy}
+              onClick={()=>void deleteEdge(edge.id)}>删除关系</button>
+          </li>;
+        })}</ul>}
+      </section>
+    </div>
+    <div className="kg-layout kg-create-layout">
       <section className="panel">
         <div className="eyebrow">SOURCE-ANCHORED NODES</div>
         <h2>从原文创建知识节点</h2>
@@ -183,80 +263,6 @@ export default function KnowledgeGraph({onOpenSource}:{
           </button>
         </form>
         <p className="privacy-note">来源文档不同也可关联，点击图谱节点可查看两侧来源。手工建立的关系为「已确认」，不是 AI 自动发现。</p>
-      </section>
-    </div>
-    <section className="panel">
-      <div className="panel-heading">
-        <div><div className="eyebrow">LOCAL KNOWLEDGE MAP</div>
-          <h2>知识图谱 · {graph.nodes.length} 个节点 / {graph.edges.length} 条关系</h2></div>
-        <button className="secondary-button" disabled={busy} onClick={()=>void run(refresh)}>刷新图谱</button>
-      </div>
-      {visible.length===0?<p className="empty-state">尚无图谱节点。选一段原文创建第一个节点。</p>:
-      <div className="kg-map-scroll">
-        <svg viewBox="0 0 840 550" role="img" aria-label="个人知识节点与关系图" className="kg-map">
-          {shownEdges.map(edge=>{
-            const a=coords.get(edge.sourceId)!,b=coords.get(edge.targetId)!;
-            const stale=graph.nodes.some(n=>(n.id===edge.sourceId||n.id===edge.targetId)&&n.needsReview);
-            return <line key={edge.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-              className={stale?"kg-edge-stale":edge.status==="pending"?"kg-edge-pending":"kg-edge-confirmed"}/>;
-          })}
-          {visible.map(node=>{
-            const p=coords.get(node.id)!;
-            return <g key={node.id} className={node.needsReview?"kg-node-stale":"kg-node-current"}
-              role="button" tabIndex={0} aria-label={`查看知识节点 ${node.title} 的来源`}
-              onClick={()=>selectNode(node)}
-              onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();selectNode(node);}}}>
-              <circle cx={p.x} cy={p.y} r={40}/>
-              <text x={p.x} y={p.y-3} textAnchor="middle">{node.title.slice(0,8)}</text>
-              <text x={p.x} y={p.y+15} textAnchor="middle" className="kg-node-sub">{node.documentTitle.slice(0,9)}</text>
-            </g>;
-          })}
-        </svg>
-      </div>}
-      {graph.nodes.length>24&&<p className="privacy-note">图中仅显示最近的 24 个节点，下面的完整节点列表仍可操作。</p>}
-      <div className="kg-legend"><span>实线：人工确认关系</span><span>虚线：AI 待核验（预留）</span><span>警示色：来源已变化</span></div>
-    </section>
-    <div className="kg-layout">
-      <section className="panel">
-        <h2>节点与证据</h2>
-        <ul className="kb-document-list">{graph.nodes.map(node=><li key={node.id}>
-          <button className={node.id===selectedId?"kb-doc-active":"kb-doc"}
-            onClick={()=>selectNode(node)}>
-            {node.title} {node.needsReview?"⚠️ 旧版证据待核验":""}
-          </button>
-          <small>{node.documentTitle} · {node.sourcePage?`PDF 第 ${node.sourcePage} 页 · `:""}片段 #{node.sourceOrdinal+1} · 来源 v{node.sourceRevision}</small>
-        </li>)}</ul>
-        {selected&&<div className="kg-selection">
-          {selected.needsReview&&<p className="retention-warning">该资料已重新导入，证据来自旧版。请与当前原文比对；若有变化，删除并重建节点。</p>}
-          <div className="kg-evidence"><strong>创建节点时保存的原文证据</strong><p>{selected.evidence}</p></div>
-          <form className="kb-card-form" onSubmit={event=>void updateNode(event)}>
-            <label>名称<input required maxLength={120} disabled={busy} value={editTitle}
-              onChange={e=>setEditTitle(e.target.value)}/></label>
-            <label>注释<textarea rows={2} maxLength={600} disabled={busy} value={editNote}
-              onChange={e=>setEditNote(e.target.value)}/></label>
-            <button type="submit" className="secondary-button" disabled={busy}>保存人工注释</button>
-          </form>
-          <div className="button-row">
-            <button className="secondary-button" disabled={busy}
-              onClick={()=>void onOpenSource(selected.documentId,selected.sourceOrdinal)}>在资料中查看当前原文</button>
-            <button className="text-button" disabled={busy} onClick={()=>void deleteNode(selected)}>删除节点</button>
-          </div>
-        </div>}
-      </section>
-      <section className="panel">
-        <h2>全部关系</h2>
-        {graph.edges.length===0?<p className="empty-state">尚未建立关系，可以选两份文档中的不同节点进行关联。</p>:
-        <ul className="kb-document-list">{graph.edges.map(edge=>{
-          const a=graph.nodes.find(n=>n.id===edge.sourceId),b=graph.nodes.find(n=>n.id===edge.targetId);
-          return <li key={edge.id}>
-            <strong>{a?.title} — {relationText[edge.relation]} — {b?.title}</strong>
-            <small>{a?.documentTitle} ↔ {b?.documentTitle} · {edge.status==="confirmed"?"人工已确认":"待核验"}
-              {a?.needsReview||b?.needsReview?" · 原文已改变":""}</small>
-            {edge.note&&<p>{edge.note}</p>}
-            <button className="text-button" disabled={busy}
-              onClick={()=>void deleteEdge(edge.id)}>删除关系</button>
-          </li>;
-        })}</ul>}
       </section>
     </div>
   </section>;
