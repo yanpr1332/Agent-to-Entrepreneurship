@@ -14,6 +14,28 @@ export interface WorkspaceHistoryPage {
   serverCursor:string;
   hasMore:boolean;
 }
+/** A server-declared cursor expiry is NOT an HTTP error and never authorizes
+ * resetting the local cursor until a fully validated baseline is committed. */
+export interface WorkspaceHistoryExpired {
+  status:"expired";
+  checkpointCursor:string;
+  serverCursor:string;
+  totalItems:string;
+}
+export interface WorkspaceCheckpointItem {
+  ordinal:string;
+  kind:WorkspaceHistoryKind;
+  entityId:string;
+  record:SharedMessage|SharedTask;
+}
+export interface WorkspaceCheckpointPage {
+  checkpointCursor:string;
+  totalItems:string;
+  items:WorkspaceCheckpointItem[];
+  nextOrdinal:string;
+  hasMore:boolean;
+}
+export type WorkspaceHistoryPullResult=WorkspaceHistoryPage|WorkspaceHistoryExpired;
 export interface WorkspaceHistoryMarker {createdAt:string;id:string;}
 export interface WorkspaceHistoryItems<T> {
   items:T[];
@@ -27,6 +49,8 @@ export interface WorkspaceHistoryStatus {
   hasMore:boolean;
   totalMessages:number|null;
   totalTasks:number|null;
+  rebuilding?:boolean;
+  checkpointCursor?:string|null;
 }
 
 function obj(value:unknown):Record<string,unknown>{
@@ -116,4 +140,60 @@ export function parseWorkspaceHistoryMarker(value:unknown):WorkspaceHistoryMarke
   const row=obj(value);
   exact(row,["createdAt","id"]);
   return {createdAt:iso(row.createdAt),id:requireUuid(row.id)};
+}
+
+/** An expiry must identify the SAME workspace's immutable checkpoint via
+ * the authenticated RPC; we never synthesize or guess a recovery cursor. */
+export function parseWorkspaceHistoryPull(value:unknown,workspaceInput:unknown,
+  fromInput:unknown):WorkspaceHistoryPullResult{
+  const raw=obj(value),from=workspaceCursor(fromInput);
+  if(!Object.hasOwn(raw,"status"))return parseWorkspaceHistoryPage(raw,workspaceInput,from);
+  exact(raw,["status","checkpointCursor","serverCursor","totalItems"]);
+  if(raw.status!=="expired")throw Error("Unknown workspace history recovery status");
+  const checkpointCursor=workspaceCursor(raw.checkpointCursor);
+  const serverCursor=workspaceCursor(raw.serverCursor);
+  const totalItems=workspaceCursor(raw.totalItems);
+  if(BigInt(checkpointCursor)<=BigInt(from)||BigInt(checkpointCursor)>BigInt(serverCursor))
+    throw Error("Inconsistent expired workspace history checkpoint");
+  return {status:"expired",checkpointCursor,serverCursor,totalItems};
+}
+
+/** Validate every snapshot row and ordinal BEFORE it enters the SQLite stage.
+ * No tombstones here: a complete baseline is the authoritative live set.
+ * Snapshot pages are pinned to an immutable checkpoint generation. */
+export function parseWorkspaceCheckpointPage(value:unknown,workspaceInput:unknown,
+  checkpointInput:unknown,fromInput:unknown,totalInput:unknown):WorkspaceCheckpointPage{
+  const workspace=requireUuid(workspaceInput);
+  const checkpoint=workspaceCursor(checkpointInput);
+  const from=workspaceCursor(fromInput),total=workspaceCursor(totalInput);
+  if(checkpoint==="0"||BigInt(from)>BigInt(total))
+    throw Error("Malformed workspace checkpoint request");
+  const row=obj(value);
+  exact(row,["checkpointCursor","totalItems","items","nextOrdinal","hasMore"]);
+  if(workspaceCursor(row.checkpointCursor)!==checkpoint||
+     workspaceCursor(row.totalItems)!==total)
+    throw Error("Workspace checkpoint generation or total changed");
+  if(!Array.isArray(row.items)||row.items.length>MAX_WORKSPACE_HISTORY_PAGE||
+     typeof row.hasMore!=="boolean")
+    throw Error("Malformed workspace checkpoint page");
+  let ordinal=BigInt(from);
+  const items:WorkspaceCheckpointItem[]=row.items.map(item=>{
+    const candidate=obj(item);
+    exact(candidate,["ordinal","kind","entityId","record"]);
+    const current=BigInt(workspaceCursor(candidate.ordinal));
+    if(current!==ordinal+1n)throw Error("Workspace checkpoint ordinal gap or duplicate");
+    ordinal=current;
+    if(candidate.kind!=="message"&&candidate.kind!=="task")
+      throw Error("Unknown workspace checkpoint entity");
+    const entityId=requireUuid(candidate.entityId);
+    const record=parseRecord(candidate.record,candidate.kind,workspace,entityId);
+    return {ordinal:current.toString(),kind:candidate.kind,entityId,record};
+  });
+  const nextOrdinal=workspaceCursor(row.nextOrdinal);
+  if(nextOrdinal!==ordinal.toString()||BigInt(nextOrdinal)>BigInt(total)||
+     row.hasMore!==(BigInt(nextOrdinal)<BigInt(total))||
+     (row.hasMore&&items.length===0))
+    throw Error("Inconsistent workspace checkpoint page boundary");
+  return {checkpointCursor:checkpoint,totalItems:total,items,nextOrdinal,
+    hasMore:row.hasMore};
 }
