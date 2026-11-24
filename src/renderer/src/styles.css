@@ -760,3 +760,37 @@ input:hover:not(:disabled),textarea:hover:not(:disabled),select:hover:not(:disab
 .task-editor input,.task-editor select,.task-editor textarea{padding:10px 12px}
 @media(max-width:1200px){.calendar-layout{grid-template-columns:1fr}.task-editor{position:static}}
 @media(max-width:720px){.calendar-panel{padding:16px}.calendar-day{min-height:56px;padding-top:9px}.calendar-header{align-items:flex-start}.calendar-view-tabs,.filter-tabs{width:100%}.calendar-view-tabs .chip,.filter-tabs .chip{flex:1}}
+
+
+/* FOCUS UI · calm, distraction-light session space */
+.focus-layout{grid-template-columns:minmax(0,1.5fr) minmax(300px,.8fr);gap:18px;align-items:start}
+.focus-side{gap:16px}
+.focus-layout>.timer-panel{min-height:620px;padding:36px 38px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.timer-panel:before{content:"";position:absolute;inset:0 0 auto;height:4px;background:linear-gradient(90deg,var(--accent),transparent)}
+.timer-panel>.eyebrow{letter-spacing:1.6px}
+.timer-panel h2{font-size:24px;letter-spacing:-.5px;margin:12px 0}
+.timer-panel>.help-text{max-width:480px;line-height:1.75;text-align:center;margin:0 auto}
+.focus-title-field{max-width:460px;margin:26px auto 0;gap:8px}
+.focus-title-field input{border-radius:11px;padding:13px 15px;text-align:center;font-size:13px}
+.timer-display{font-size:clamp(74px,9vw,112px);letter-spacing:-5px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums;margin:37px 0 26px;color:var(--ink)}
+.timer-presets{gap:7px;margin-bottom:20px}
+.timer-presets .chip{padding:9px 14px;border-radius:9px}
+.focus-duration-field{margin:0 auto 22px;gap:7px}
+.focus-duration-field input{border-radius:9px;padding:11px 13px;font-size:13px}
+.timer-panel .button-row{gap:9px}
+.timer-panel .primary-button,.timer-panel .secondary-button,.timer-panel .ghost-button{padding:12px 20px;border-radius:9px}
+.focus-side>.panel{padding:21px 22px}
+.focus-side>.panel h2{font-size:17px;margin:7px 0 14px}
+.focus-summary{gap:7px}
+.focus-summary>div{padding:13px 6px;border:1px solid var(--line);border-radius:9px;background:var(--canvas)}
+.focus-summary strong{font-size:22px;letter-spacing:-.5px}
+.focus-summary span{font-size:10px}
+.history-list{margin-top:12px}
+.history-list li{padding:13px 0;gap:11px}
+.history-copy{gap:6px}
+.history-copy strong{font-size:12px;line-height:1.5}
+.history-copy small{line-height:1.55}
+.history-copy>.small-button{padding:6px 9px;border-radius:7px}
+.focus-side .history-list>li>span{background:var(--tint);border-radius:8px;padding:6px 8px;color:var(--accent);font-size:11px;font-weight:650;white-space:nowrap}
+@media(max-width:1200px){.focus-layout{grid-template-columns:1fr}.focus-layout>.timer-panel{min-height:unset;padding:30px 20px}.focus-side{grid-template-columns:1fr 1fr}}
+@media(max-width:760px){.focus-side{grid-template-columns:1fr}.timer-display{font-size:80px}.timer-panel h2{font-size:20px}}
