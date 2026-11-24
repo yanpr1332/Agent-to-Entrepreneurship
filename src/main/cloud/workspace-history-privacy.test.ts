@@ -142,7 +142,7 @@ describe("ALPHA-SYNC-003D protected and revocable local team history",()=>{
     store.beginCheckpoint(A,W,{status:"expired",checkpointCursor:"5",
       serverCursor:"5",totalItems:"0"});
     const cleared=store.purgeOwner(A);
-    expect(cleared.workspaces).toBe(2); // one live cursor and one staged generation
+    expect(cleared.workspaces).toBe(1); // one workspace, despite live + staged generations
     expect(typeof cleared.checkpointed).toBe("boolean");
     expect(store.getCursor(A,W)).toBe("0");
     expect(store.getCheckpoint(A,W)).toBeNull();
