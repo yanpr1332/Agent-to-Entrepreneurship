@@ -90,8 +90,8 @@ export class LocalStore {
 
   private migrate(): void {
     const version = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (version > 6) throw new Error("Database created by a newer application; refusing to downgrade");
-    if (version === 6) return;
+    if (version > 7) throw new Error("Database created by a newer application; refusing to downgrade");
+    if (version === 7) return;
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -204,7 +204,19 @@ export class LocalStore {
           CREATE INDEX personal_sync_outbox_created ON personal_sync_outbox(created_at);
         `);
       }
-      this.db.exec("PRAGMA user_version = 6");
+      if (version <= 6) {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS personal_sync_devices (
+            owner_id TEXT PRIMARY KEY,
+            device_id TEXT NOT NULL UNIQUE,
+            cursor TEXT NOT NULL DEFAULT '0',
+            created_at TEXT NOT NULL,
+            last_sync_at TEXT
+          );
+          CREATE INDEX IF NOT EXISTS personal_sync_devices_created ON personal_sync_devices(created_at);
+        `);
+      }
+      this.db.exec("PRAGMA user_version = 7");
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -218,6 +230,50 @@ export class LocalStore {
 
   async backupTo(path: string): Promise<number> {
     return backup(this.db,path);
+  }
+
+  /** A stable device identity and cursor are scoped to the authenticated owner. */
+  getOrCreatePersonalSyncDevice(ownerId: string, now = new Date()): {deviceId:string;cursor:string} {
+    if (typeof ownerId !== "string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerId))
+      throw new Error("Invalid personal sync owner");
+    const existing = this.db.prepare(
+      "SELECT device_id,cursor FROM personal_sync_devices WHERE owner_id=?"
+    ).get(ownerId) as {device_id:string;cursor:string}|undefined;
+    if (existing) return {deviceId:existing.device_id,cursor:existing.cursor};
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      this.db.prepare(
+        "INSERT INTO personal_sync_devices(owner_id,device_id,cursor,created_at) VALUES(?,?, '0', ?) " +
+        "ON CONFLICT(owner_id) DO NOTHING"
+      ).run(ownerId,randomUUID(),now.toISOString());
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+    const created=this.db.prepare(
+      "SELECT device_id,cursor FROM personal_sync_devices WHERE owner_id=?"
+    ).get(ownerId) as {device_id:string;cursor:string}|undefined;
+    if (!created) throw new Error("Personal sync device could not be initialized");
+    return {deviceId:created.device_id,cursor:created.cursor};
+  }
+
+  /** Advance only after a complete page has been durably applied locally. */
+  advancePersonalSyncCursor(ownerId:string,cursor:string):void {
+    if (typeof ownerId!=="string" ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerId) ||
+        typeof cursor!=="string" || !/^(0|[1-9][0-9]{0,18})$/.test(cursor))
+      throw new Error("Invalid personal sync cursor");
+    const current=this.db.prepare(
+      "SELECT cursor FROM personal_sync_devices WHERE owner_id=?"
+    ).get(ownerId) as {cursor:string}|undefined;
+    if (!current) throw new Error("Personal sync device is not registered locally");
+    const next=BigInt(cursor);
+    if(next>9223372036854775807n)throw new Error("Personal sync cursor exceeds server bounds");
+    if (next<BigInt(current.cursor)) throw new Error("Personal sync cursor cannot move backwards");
+    this.db.prepare("UPDATE personal_sync_devices SET cursor=? WHERE owner_id=?")
+      .run(cursor,ownerId);
   }
 
   private readonly taskSelect = `SELECT t.*, l.instance_origin, l.account_id, l.course_id,

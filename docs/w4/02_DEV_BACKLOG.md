@@ -49,7 +49,7 @@
 | ALPHA-KB-003 | 本地 HTML/LaTeX 导入、Markdown/HTML/TeX 受限安全预览、离线容错检索见 PR #31；完整 TeX 与 AI 语义检索未实现 | PR 已合并，GUI 待验收 |
 | ALPHA-KB-004 | 精确/容错混合结果、用户明确授权的 AI 单段原文解释，见 PR #32；全库 embedding/多文档语义检索未实现 | PR #32 已合并；仍待核对最新 CI 与 GUI 验收 |
 | ALPHA-KB-005A/B/C | **后续**精确 + 模糊 + 本地向量语义检索：小型中英 embedding 模型 PoC → 离线增量索引 → 三路融合/跨平台验收；[可行性评估](../w5/26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md) | 后续规划，**未开发**；同步核心门槛之后先做 PoC |
-| ALPHA-SYNC-001/002/003 | **近期优先**：同步协议与 Supabase RLS 真实验收准备 → 个人任务/手动日历增量同步 MVP → 团队 Realtime/多账号联机；见 [27](../w5/27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)、[28](../w5/28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)、[29](../w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md) | **001 已合并（真实云端五账号验收仍待授权）；002 本地逐条授权/Outbox 第一阶段开发中，尚无网络传输；003 尚未开发** |
+| ALPHA-SYNC-001/002/003 | **近期优先**：协议/RLS → 个人任务/手动日历增量同步 MVP → 团队 Realtime/多账号联机；见 [27](../w5/27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)、[28](../w5/28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)、[29](../w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30](../w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md) | **001 已合并（真实五账号验收待授权）；002 第一阶段 PR #35 已合并，当前 002B 服务端协议/设备游标基础开发中，尚未连接 Outbox 上传与本地 pull 应用；003 尚未开发** |
 | ALPHA-TEAM-004 | 自愿加入的小组积分排名、隐私及反刷分 | 未开发 |
 | ALPHA-APP-005 | libpng 警告来源、安装/备份恢复/安全验收 | 待排查 |
 

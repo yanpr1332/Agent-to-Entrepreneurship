@@ -183,3 +183,10 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 ## ALPHA-SYNC-002 本地 Outbox 第一阶段
 
 [29 本地 Outbox 实施说明](29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)：个人任务与手动日历的逐条授权、持久待发送意图、版本基线与删除墓碑。此阶段仍完全本地，不含网络同步；真实跨设备能力须等待服务端/RLS、可信设备身份、增量拉取与冲突处理。
+
+
+## ALPHA-SYNC-002B 个人云端协议基础（2026-11-24）
+
+当前开发轮增加个人同步服务端 SQL/RLS、owner 认证的设备注册/撤销、幂等 apply、版本冲突回执、增量 Cursor pull RPC，以及本机 per-owner deviceId/cursor 持久化。详细边界、数据表、RPC 与未完成项见 [30](30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)。
+
+此阶段不自动部署 Supabase，不发起真实账号请求，不自动上传本地 Outbox；RPC 的单测与静态 SQL 检查不是 RLS 真实验收。

@@ -18,6 +18,37 @@ afterEach(() => {
 });
 
 describe("local-first SQLite store", () => {
+  it("persists a distinct device identity and cursor for each authenticated owner", () => {
+    const db=memory();
+    const first=db.getOrCreatePersonalSyncDevice("aae9ac05-b37d-4898-aee4-5848fa28e01b");
+    expect(first.cursor).toBe("0");
+    expect(db.getOrCreatePersonalSyncDevice("aae9ac05-b37d-4898-aee4-5848fa28e01b")).toEqual(first);
+    const second=db.getOrCreatePersonalSyncDevice("9db8a5cb-1d6c-4e93-807e-e18be4b482a1");
+    expect(second.deviceId).not.toBe(first.deviceId);
+    db.advancePersonalSyncCursor("aae9ac05-b37d-4898-aee4-5848fa28e01b","12");
+    expect(db.getOrCreatePersonalSyncDevice("aae9ac05-b37d-4898-aee4-5848fa28e01b").cursor).toBe("12");
+    expect(()=>db.advancePersonalSyncCursor("aae9ac05-b37d-4898-aee4-5848fa28e01b","11")).toThrow("backwards");
+    expect(()=>db.advancePersonalSyncCursor("aae9ac05-b37d-4898-aee4-5848fa28e01b","12x")).toThrow("cursor");
+    expect(()=>db.getOrCreatePersonalSyncDevice("not-a-user")).toThrow("owner");
+  });
+
+  it("migrates schema v6 by adding per-account device and cursor storage without changing tasks",()=>{
+    const directory=mkdtempSync(join(tmpdir(),"ate-sync-device-v6-"));
+    const file=join(directory,"local.sqlite");
+    try{
+      const initial=new LocalStore(file);
+      const task=initial.createTask({title:"Keep during sync metadata migration"});
+      initial.close();
+      const raw=new DatabaseSync(file);
+      raw.exec("DROP TABLE personal_sync_devices; PRAGMA user_version=6");
+      raw.close();
+      const upgraded=new LocalStore(file);
+      expect(upgraded.listTasks()).toMatchObject([{id:task.id,title:task.title}]);
+      expect(upgraded.getOrCreatePersonalSyncDevice("aae9ac05-b37d-4898-aee4-5848fa28e01b").cursor).toBe("0");
+      upgraded.close();
+    }finally{rmSync(directory,{recursive:true,force:true});}
+  });
+
   it("enrolls only one explicitly selected personal task and persists its outbox intent", () => {
     const db = memory();
     const task = db.createTask({title:"跨设备任务", description:"用户主动选择"});

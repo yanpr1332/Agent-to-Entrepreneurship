@@ -144,6 +144,57 @@ export function parseSyncOperationResult(value: unknown): SyncOperationResult {
     serverVersion, cursor: row.cursor as string | null };
 }
 
+export interface PersonalSyncChange {
+  cursor:string;
+  entityType:PersonalSyncEntity;
+  entityId:string;
+  version:number;
+  payload:PersonalTaskSnapshot|ManualCalendarSnapshot|null;
+  deleted:boolean;
+  updatedAt:string;
+}
+export interface PersonalSyncPullPage {
+  changes:PersonalSyncChange[];
+  nextCursor:string;
+  hasMore:boolean;
+}
+
+/** Parse a bounded, ordered page before any local database mutation. */
+export function parsePersonalSyncPullPage(value:unknown):PersonalSyncPullPage {
+  const row=record(value);
+  exactKeys(row,["changes","nextCursor","hasMore"]);
+  if(!Array.isArray(row.changes)||row.changes.length>500||typeof row.hasMore!=="boolean"||
+    (row.hasMore&&row.changes.length===0))
+    throw Error("Invalid personal sync page");
+  if(typeof row.nextCursor!=="string"||!/^(0|[1-9][0-9]{0,18})$/.test(row.nextCursor))
+    throw Error("Invalid personal sync cursor");
+  const changes=row.changes.map((input):PersonalSyncChange=>{
+    const change=record(input);
+    exactKeys(change,["cursor","entityType","entityId","version","payload","deleted","updatedAt"]);
+    if(typeof change.cursor!=="string"||!/^[1-9][0-9]{0,18}$/.test(change.cursor))
+      throw Error("Invalid personal sync change cursor");
+    if(change.entityType!=="personal-task"&&change.entityType!=="manual-calendar-event")
+      throw Error("Unsupported personal sync change");
+    if(typeof change.deleted!=="boolean")throw Error("Invalid personal sync deletion marker");
+    const version=parseVersion(change.version);
+    if(version===null||version<1)throw Error("Invalid personal sync change version");
+    const payload=change.deleted
+      ? (change.payload===null?null:(()=>{throw Error("Deleted sync change cannot contain a payload");})())
+      : change.entityType==="personal-task"?taskPayload(change.payload):eventPayload(change.payload);
+    return {
+      cursor:change.cursor,entityType:change.entityType,entityId:requireUuid(change.entityId),
+      version,payload,deleted:change.deleted,updatedAt:parseTimestamp(change.updatedAt),
+    };
+  });
+  for(let i=1;i<changes.length;i++){
+    if(BigInt(changes[i].cursor)<=BigInt(changes[i-1].cursor))
+      throw Error("Personal sync changes are not strictly ordered");
+  }
+  if(changes.length&&row.nextCursor!==changes[changes.length-1].cursor)
+    throw Error("Personal sync page cursor must equal its last change");
+  return {changes,nextCursor:row.nextCursor,hasMore:row.hasMore};
+}
+
 /** This is a projection only. No network or side effects. */
 export function projectPersonalTask(task: LocalTask, explicitlyEnabled: boolean): PersonalTaskSnapshot | null {
   // Consent must be supplied by the future per-account/scope preference flow.

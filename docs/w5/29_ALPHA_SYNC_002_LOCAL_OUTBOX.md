@@ -51,3 +51,10 @@ npm run build
 ```
 
 Vitest 覆盖：默认不入队、显式单条授权、更新合并与 operation ID 稳定、服务器版本继承、已确认删除墓碑、未上传创建的本地撤销、关闭同步保留本地数据、拒绝 ICS 来源。真实云端同步尚未实现，因此不需要 Supabase 凭据，也不得运行 RLS 写入脚本来代替本轮本地验收。
+
+
+## 6. 后续阶段记录（2026-11-24）
+
+PR #35 已合并，完成本文件第 1–5 节所述的本地第一阶段。随后开发的 002B 服务端协议基础另见 [30](30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)：owner-scoped 设备、记录、operation receipt 与 change log 表；RLS 默认拒绝直接表访问；通过 authenticated JWT RPC 注册/撤销设备、幂等 apply、按 owner cursor 分页 pull；本机 schema v7 按 owner 保存 deviceId/cursor。
+
+**尚未完成**：本地 Outbox owner 隔离和网络上传/ack、pull 后本地应用、冲突副本与人工解决、逐条授权 UI、真实 Supabase 迁移部署和双设备验收。当前不能宣称个人跨设备同步已可用。
