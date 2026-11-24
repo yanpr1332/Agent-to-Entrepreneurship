@@ -5,6 +5,7 @@ import {
   type CloudSessionStatus, type SharedMember, type SharedMessage,
   type SharedTask, type SharedWorkspace, type CloudProjectConfig, type SharedWorkspaceSnapshot,
 } from "../../shared/cloud-model";
+import {workspaceCursor} from "../../shared/workspace-history-contract";
 import {
   parsePersonalSyncOperation, parsePersonalSyncPullPage, parseSyncOperationResult,
   parsePersonalSyncDeviceInspection, parsePersonalSyncReceiptLookup,
@@ -146,6 +147,11 @@ export class SharedCloudClient {
   currentUserId():string {
     return this.userId();
   }
+  /** Validated public project origin, used only to partition local team cache. */
+  currentProjectUrl():string{
+    if(!this.project)throw Error("Configure a Supabase test project first");
+    return this.project.projectUrl;
+  }
 
   async registerPersonalSyncDevice(deviceIdInput:unknown,labelInput:unknown):Promise<{
     ownerId:string;deviceId:string;createdAt:string;lastSeenAt:string;
@@ -247,6 +253,16 @@ export class SharedCloudClient {
       p_token:requireInvite(token),p_display_name:requireDisplayName(displayName),
     });
     return requireUuid(id);
+  }
+
+  /** Authenticated, scoped journal pull. Never creates or edits cloud rows. */
+  async pullWorkspaceHistory(workspaceInput:unknown,cursorInput:unknown,limit=100):Promise<unknown>{
+    const workspace=requireUuid(workspaceInput);
+    const cursor=workspaceCursor(cursorInput);
+    if(!Number.isInteger(limit)||limit<1||limit>100)throw Error("Invalid team history page limit");
+    return this.rpc("ate_workspace_history_pull",{
+      p_workspace_id:workspace,p_after:cursor,p_limit:limit,
+    });
   }
 
   async listMembers(workspaceId:unknown):Promise<SharedMember[]>{

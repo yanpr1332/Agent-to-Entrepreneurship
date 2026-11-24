@@ -3,6 +3,7 @@ import type {
   CloudSessionStatus, SharedMember, SharedMessage, SharedTask, SharedWorkspace,
   WorkspaceLiveUpdate,
 } from "../../shared/cloud-model";
+import type {WorkspaceHistoryStatus,WorkspaceHistoryMarker} from "../../shared/workspace-history-contract";
 import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncConflictReason, PersonalSyncRunResult,
   PersonalSyncResolutionRequest, PersonalSyncLegacyReview, PersonalSyncLegacyAdoptionRequest,
@@ -66,6 +67,10 @@ export default function CloudWorkspace() {
   const [members,setMembers]=useState<SharedMember[]>([]);
   const [messages,setMessages]=useState<SharedMessage[]>([]);
   const [tasks,setTasks]=useState<SharedTask[]>([]);
+  const [olderMessages,setOlderMessages]=useState<SharedMessage[]>([]);
+  const [olderTasks,setOlderTasks]=useState<SharedTask[]>([]);
+  const [historyStatus,setHistoryStatus]=useState<WorkspaceHistoryStatus|null>(null);
+  const [historyLoading,setHistoryLoading]=useState(false);
   const [text,setText]=useState("");
   const [taskTitle,setTaskTitle]=useState("");
   const [taskDue,setTaskDue]=useState("");
@@ -112,6 +117,7 @@ export default function CloudWorkspace() {
     selectedRef.current=null;
     workspaceFetchSeq.current++;
     setSelected(null);setMembers([]);setMessages([]);setTasks([]);setInvite("");
+    setOlderMessages([]);setOlderTasks([]);setHistoryStatus(null);
     setWorkspaceLivePhase("revoked");
     setNotice("小组成员权限可能已撤销，已清除当前界面中的共享数据。请重新登录或确认小组成员资格。");
     void window.desktop.cloud.workspaces().then(setWorkspaces).catch(()=>setWorkspaces([]));
@@ -125,6 +131,12 @@ export default function CloudWorkspace() {
       setMembers(snapshot.members);
       setMessages(snapshot.messages);
       setTasks(snapshot.tasks);
+      setHistoryStatus(snapshot.history??null);
+      if((snapshot.history?.applied??0)>0){
+        // An immutable journal page may contain tombstones for older items.
+        // Drop historical UI pages so deleted records cannot remain visible.
+        setOlderMessages([]);setOlderTasks([]);
+      }
     }catch(error){
       if(selectedRef.current===workspaceId&&isWorkspaceAccessDenied(error))
         clearSelectedWorkspace();
@@ -204,6 +216,7 @@ export default function CloudWorkspace() {
       selectedRef.current=null;workspaceFetchSeq.current++;setSelected(null);
       setMembers([]);setMessages([]);setTasks([]);setWorkspaceLivePhase("stopped");
       setStatus(next);
+      setOlderMessages([]);setOlderTasks([]);setHistoryStatus(null);
       setPublishableKey("");
       setNotice("已使用公开的测试项目配置。登录账号后才能读取共享内容。");
     });
@@ -233,6 +246,7 @@ export default function CloudWorkspace() {
       const next=await window.desktop.cloud.logout();
       selectedRef.current=null;workspaceFetchSeq.current++;setWorkspaceLivePhase("stopped");
       setStatus(next);setWorkspaces([]);setSelected(null);
+      setOlderMessages([]);setOlderTasks([]);setHistoryStatus(null);
       setMembers([]);setMessages([]);setTasks([]);setInvite("");
       setPersonalCandidates([]);setPersonalConflicts([]);setPersonalSyncResult(null);
       setLegacyReview({items:[],taskLimitReached:false,calendarLimitReached:false});
@@ -246,6 +260,7 @@ export default function CloudWorkspace() {
     await run(async()=>{
       selectedRef.current=id;workspaceFetchSeq.current++;setSelected(id);setInvite("");
       setMembers([]);setMessages([]);setTasks([]);
+      setOlderMessages([]);setOlderTasks([]);setHistoryStatus(null);
       await refreshSelected(id);
     });
   }
@@ -396,6 +411,38 @@ export default function CloudWorkspace() {
     });
   }
 
+  async function loadOlder(kind:"message"|"task"):Promise<void>{
+    if(!selected||historyStatus?.mode!=="durable"||historyLoading)return;
+    const workspace=selected;
+    // A newer RLS catch-up can apply a tombstone while this history page is
+    // loading. Never append an older result over that newer verified snapshot.
+    const fetchGeneration=workspaceFetchSeq.current;
+    const current=kind==="message"?[...messages,...olderMessages]:[...tasks,...olderTasks];
+    const sorted=[...current].sort((a,b)=>
+      b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id));
+    const oldest=sorted.at(-1);
+    if(!oldest)return;
+    const marker:WorkspaceHistoryMarker={createdAt:oldest.created_at,id:oldest.id};
+    setHistoryLoading(true);
+    try{
+      const result=await window.desktop.cloud.workspaceHistoryOlder(workspace,kind,marker);
+      if(selectedRef.current!==workspace||workspaceFetchSeq.current!==fetchGeneration)return;
+      if(kind==="message"){
+        const existing=new Set([...messages,...olderMessages].map(x=>x.id));
+        setOlderMessages(previous=>[...previous,...result.items.filter(
+          (item):item is SharedMessage=>"body" in item&&!existing.has(item.id))]);
+      }else{
+        const existing=new Set([...tasks,...olderTasks].map(x=>x.id));
+        setOlderTasks(previous=>[...previous,...result.items.filter(
+          (item):item is SharedTask=>"title" in item&&!existing.has(item.id))]);
+      }
+    }catch(error){
+      if(selectedRef.current===workspace&&isWorkspaceAccessDenied(error))
+        clearSelectedWorkspace();
+      else setError(issue(error));
+    }finally{setHistoryLoading(false);}
+  }
+
   async function sendMessage(event:FormEvent<HTMLFormElement>):Promise<void>{
     event.preventDefault();
     if(!selected)return;
@@ -425,6 +472,17 @@ export default function CloudWorkspace() {
       await refreshSelected(selected);
     });
   }
+
+  const visibleMessages=[...messages,...olderMessages.filter(old=>
+    !messages.some(item=>item.id===old.id))].sort((a,b)=>
+      b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id));
+  const visibleTasks=[...tasks,...olderTasks.filter(old=>
+    !tasks.some(item=>item.id===old.id))].sort((a,b)=>
+      b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id));
+  const messagesMore=historyStatus?.mode==="durable"&&
+    (historyStatus.totalMessages??0)>visibleMessages.length;
+  const tasksMore=historyStatus?.mode==="durable"&&
+    (historyStatus.totalTasks??0)>visibleTasks.length;
 
   const active=workspaces.find(item=>item.id===selected);
   const owner=members.some(member=>member.user_id===status.userId && member.role==="owner");
@@ -717,11 +775,25 @@ export default function CloudWorkspace() {
             <section className="panel cloud-chat">
               <div className="eyebrow">TEAM MESSAGES</div><h2>小组消息 · 实时提醒与安全补拉</h2>
               <p className="privacy-note" role="status">{liveLabels[workspaceLivePhase]}</p>
-              <ul className="cloud-message-list">{[...messages].reverse().map(item=><li key={item.id}>
+              <p className="privacy-note" role="status">
+                {historyStatus?.mode==="durable"
+                  ? "已启用持久补拉 · 当前工作空间变更位点 "+historyStatus.cursor+
+                    (historyStatus.hasMore?" · 历史仍在分批补拉":" · 已追上本次服务端位点")
+                  : "持久历史暂不可用（服务端未部署或本机缓存不可用）：仅显示服务端最近 100 条窗口。"}
+              </p>
+              {historyStatus?.mode==="durable"&&<p className="privacy-note">
+                本机已保存本小组已同步的消息与任务历史（SQLite 明文缓存，未额外加密）。
+                使用共享设备时请注意本机磁盘访问权限；退出登录不会自动清空历史文件。
+              </p>}
+              <ul className="cloud-message-list">{[...visibleMessages].reverse().map(item=><li key={item.id}>
                 <div><strong>{members.find(m=>m.user_id===item.author_id)?.display_name??"成员"}</strong>
                   <small>{timestamp(item.created_at)}</small></div>
                 <p>{item.body}</p></li>)}</ul>
-              {!messages.length && <p className="empty-state">暂无消息，发送第一条小组消息。</p>}
+              {!visibleMessages.length && <p className="empty-state">暂无消息，发送第一条小组消息。</p>}
+              {messagesMore&&<button type="button" className="secondary-button"
+                disabled={busy||historyLoading} onClick={()=>void loadOlder("message")}>
+                {historyLoading?"正在读取历史…":"加载更早消息（每次最多 100 条）"}
+              </button>}
               <form className="cloud-message-form" onSubmit={event=>void sendMessage(event)}>
                 <textarea rows={3} required maxLength={2000} placeholder="输入小组消息（最多 2000 字）"
                   value={text} onChange={event=>setText(event.target.value)} />
@@ -730,12 +802,16 @@ export default function CloudWorkspace() {
             </section>
             <section className="panel cloud-shared-tasks">
               <div className="eyebrow">SHARED TASKS</div><h2>小组共享任务</h2>
-              {tasks.length ? <ul className="cloud-task-list">{tasks.map(item=><li key={item.id}>
+              {visibleTasks.length ? <ul className="cloud-task-list">{visibleTasks.map(item=><li key={item.id}>
                 <input type="checkbox" checked={item.completed} disabled={busy}
                   onChange={()=>void toggleTask(item)} aria-label={`完成共享任务：${item.title}`} />
                 <div><strong className={item.completed?"done":""}>{item.title}</strong>
                   <small>{item.due_date??"未设置截止日期"} · {members.find(m=>m.user_id===item.assigned_to)?.display_name??"未分配"}</small></div>
               </li>)}</ul> : <p className="empty-state">暂无共享任务；个人日历任务不会自动复制到这里。</p>}
+              {tasksMore&&<button type="button" className="secondary-button"
+                disabled={busy||historyLoading} onClick={()=>void loadOlder("task")}>
+                {historyLoading?"正在读取历史…":"加载更多历史任务（每次最多 100 条）"}
+              </button>}
               <form className="cloud-form" onSubmit={event=>void createTask(event)}>
                 <label>共享任务标题<input value={taskTitle} required maxLength={120}
                   onChange={event=>setTaskTitle(event.target.value)} /></label>

@@ -31,6 +31,8 @@ export interface SharedWorkspaceSnapshot {
   members:SharedMember[];
   messages:SharedMessage[];
   tasks:SharedTask[];
+  /** Optional 003B journal support: missing migration safely falls back to 003A. */
+  history?:import("./workspace-history-contract").WorkspaceHistoryStatus;
 }
 
 export interface SharedTaskInput {

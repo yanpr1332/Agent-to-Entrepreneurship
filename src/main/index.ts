@@ -16,6 +16,8 @@ import { CanvasCredentialVault } from "./connectors/canvas-credentials";
 import { CanvasSyncService } from "./connectors/canvas-sync";
 import { SharedCloudClient } from "./cloud/supabase-client";
 import { WorkspaceRealtimeBridge } from "./cloud/workspace-realtime";
+import {WorkspaceHistoryStore} from "./cloud/workspace-history-store";
+import {WorkspaceHistoryService} from "./cloud/workspace-history-service";
 import { PersonalSyncService } from "./personal-sync";
 import {
   parsePersonalSyncResolutionRequest,parsePersonalSyncLegacyAdoptionRequest,
@@ -116,6 +118,12 @@ function campusMail(): CampusMailService {
 }
 const CANVAS_SYNC_UPDATED = "canvas:sync-updated";
 const sharedCloud = new SharedCloudClient();
+let workspaceHistoryStore:WorkspaceHistoryStore|null=null;
+let workspaceHistoryService:WorkspaceHistoryService|null=null;
+function teamHistory():WorkspaceHistoryService{
+  if(!workspaceHistoryService)throw Error("Team history database is unavailable");
+  return workspaceHistoryService;
+}
 const workspaceRealtime=new WorkspaceRealtimeBridge(sharedCloud,update=>{
   for(const window of BrowserWindow.getAllWindows()){
     if(!window.isDestroyed())window.webContents.send(IPC_CHANNELS.cloudWorkspaceLiveUpdated,update);
@@ -624,11 +632,13 @@ function registerIpcHandlers(): void {
   handle(IPC_CHANNELS.cloudConfigure, (event, input: unknown) => {
     requireTrustedSender(event);
     workspaceRealtime.stop();
+    workspaceHistoryService?.cancel();
     return sharedCloud.configure(input);
   });
   handle(IPC_CHANNELS.cloudLogin, (event, input: unknown) => {
     requireTrustedSender(event);
     workspaceRealtime.stop();
+    workspaceHistoryService?.cancel();
     return sharedCloud.login(input);
   });
   handle(IPC_CHANNELS.cloudSignup, (event, input: unknown) => {
@@ -638,6 +648,7 @@ function registerIpcHandlers(): void {
   handle(IPC_CHANNELS.cloudLogout, (event) => {
     requireTrustedSender(event);
     workspaceRealtime.stop();
+    workspaceHistoryService?.cancel();
     sharedCloud.signOut();
     return sharedCloud.status();
   });
@@ -667,7 +678,14 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.cloudWorkspaceSnapshot, (event, workspaceId:unknown) => {
     requireTrustedSender(event);
-    return sharedCloud.workspaceSnapshot(workspaceId);
+    return workspaceHistoryService
+      ? workspaceHistoryService.snapshot(workspaceId)
+      : sharedCloud.workspaceSnapshot(workspaceId);
+  });
+  handle(IPC_CHANNELS.cloudWorkspaceHistoryOlder, (event,workspaceId:unknown,
+    kind:"message"|"task",before:unknown) => {
+    requireTrustedSender(event);
+    return teamHistory().older(workspaceId,kind,before);
   });
   handle(IPC_CHANNELS.cloudWatchWorkspace, (event, workspaceId:unknown) => {
     requireTrustedSender(event);
@@ -846,6 +864,18 @@ app.whenReady().then(async () => {
       ()=>canvasSync?.scope()??null,
     );
     personalSync = new PersonalSyncService(sharedCloud,localStore(),fixedCalendar());
+    // The optional cloud history cache must never make offline tasks,
+    // calendar, mail or knowledge unavailable if its file is damaged.
+    try{
+      workspaceHistoryStore=new WorkspaceHistoryStore(
+        join(app.getPath("userData"),"ate-shared-history.sqlite"));
+      workspaceHistoryService=new WorkspaceHistoryService(sharedCloud,workspaceHistoryStore);
+    }catch{
+      workspaceHistoryStore=null;workspaceHistoryService=null;
+      report("STORAGE_OPEN_FAILED","storage");
+      // Keep the file untouched. Cloud UI continues with RLS-backed 003A
+      // latest-window refresh; old history pages remain disabled.
+    }
     planningStore = new PlanningStore(join(app.getPath("userData"), "ate-plans.sqlite"),
       ()=>fixedCalendar().busySlots());
     aiLedger = new AIUsageLedger(join(app.getPath("userData"), "ate-ai-usage.sqlite"));
@@ -922,6 +952,9 @@ app.on("before-quit", (event) => {
     return;
   }
   workspaceRealtime.stop();
+  workspaceHistoryService?.cancel();
+  workspaceHistoryService=null;
+  workspaceHistoryStore?.close();workspaceHistoryStore=null;
   mailService?.cancel();
   mailService?.stop();
   mailService = null;

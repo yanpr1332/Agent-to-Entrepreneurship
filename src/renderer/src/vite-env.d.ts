@@ -12,6 +12,7 @@ import type {
 } from "../../shared/mail-model";
 import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } from "../../shared/mail-candidates";
 
+import type {WorkspaceHistoryItems,WorkspaceHistoryMarker} from "../../shared/workspace-history-contract";
 import type {
   CloudCredentials, CloudProjectConfig, CloudSessionStatus,
   SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
@@ -85,6 +86,7 @@ declare global {
         messages: (workspaceId: string) => Promise<SharedMessage[]>;
         sendMessage: (workspaceId: string, body: string) => Promise<SharedMessage>;
         workspaceSnapshot: (workspaceId:string) => Promise<SharedWorkspaceSnapshot>;
+        workspaceHistoryOlder: (workspaceId:string,kind:"message"|"task",before:WorkspaceHistoryMarker|null) => Promise<WorkspaceHistoryItems<SharedMessage|SharedTask>>;
         watchWorkspace: (workspaceId:string) => Promise<WorkspaceLiveUpdate>;
         stopWorkspaceWatch: (workspaceId:string) => Promise<{stopped:true}>;
         onWorkspaceLiveUpdated: (listener:(state:WorkspaceLiveUpdate)=>void) => () => void;

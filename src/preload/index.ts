@@ -12,6 +12,7 @@ import type {
 } from "../shared/mail-model";
 import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } from "../shared/mail-candidates";
 
+import type {WorkspaceHistoryItems,WorkspaceHistoryMarker} from "../shared/workspace-history-contract";
 import type {
   CloudCredentials, CloudProjectConfig, CloudSessionStatus,
   SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
@@ -102,6 +103,9 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.cloudMembers, workspaceId) as Promise<SharedMember[]>,
     messages: (workspaceId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudMessages, workspaceId) as Promise<SharedMessage[]>,
+    workspaceHistoryOlder:(workspaceId:string,kind:"message"|"task",
+      before:WorkspaceHistoryMarker|null) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudWorkspaceHistoryOlder,workspaceId,kind,before) as Promise<WorkspaceHistoryItems<SharedMessage|SharedTask>>,
     workspaceSnapshot: (workspaceId:string) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudWorkspaceSnapshot,workspaceId) as Promise<SharedWorkspaceSnapshot>,
     watchWorkspace: (workspaceId:string) =>

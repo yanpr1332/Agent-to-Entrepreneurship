@@ -52,7 +52,8 @@ W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全�
 - PR #42 已合并：只在任务/日历 Outbox 与冲突均为空时，经二次确认撤销旧设备、轮换本机 UUID 并保留 Cursor；Cursor 0 也需要上传前只读预检。
 - PR #43 已合并：任务库 schema v10 新增持久 Pull 页检查点；两库中断时下次手动同步优先重放，损坏检查点阻断上传。
 - PR #44 已合并：当前账号只读设备/Cursor 健康诊断，及人工预览、二次确认后严格匹配的 operationId 回执核销；新只读 RPC 未在真实项目部署。
-- 当前 ALPHA-SYNC-003A：团队消息/共享任务增加用户 JWT 保护的 Main-only Realtime 提示、成员复核、断线回退、最新 100 条 REST/RLS 补拉和撤权时清理旧内容。Realtime SQL publication 仅保存在仓库，需隔离项目人工授权；完整持久历史游标及五账号真机验收未完成。
+- PR #45 已合并：团队消息/任务获得 Main-only Realtime 提醒、成员验证与最近 100 条 REST/RLS 兼容补拉；对应 SQL publication 未在隔离项目部署。
+- 当前 ALPHA-SYNC-003B：服务端按工作空间事务提交顺序记录消息/任务不可变日志与删除墓碑；Main 校验每页 Cursor 后原子应用到隔离的 SQLite 历史缓存，支持跨重启继续补拉和更早消息/任务分页。仍须人工审核部署新迁移；真实五账号 RLS、安装包和数据加密/保留策略未验收。
 
 详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 、[32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md) 、[33 冲突解决](docs/w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md) 、[34 旧数据审查](docs/w5/34_ALPHA_SYNC_002E_LEGACY_REVIEW.md) 、[35 Cursor 预检](docs/w5/35_ALPHA_SYNC_002F_CURSOR_PREFLIGHT.md) 、[36 设备安全更换](docs/w5/36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md) 、[37 崩溃安全拉取](docs/w5/37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md) 与 [38 同步诊断和回执对账](docs/w5/38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
 
@@ -93,6 +94,18 @@ npm run build
 ```
 
 如需在**用户单独批准的隔离 Supabase 项目**验证实时订阅，请先审查并运行既有 `20261110_ate_workspace_poc.sql`，再审查 `supabase/migrations/20261124_ate_workspace_realtime_hints.sql`；本仓库 CI **不部署云端**。未完成五账号 RLS 反向测试、30 秒安全补拉 GUI 与历史游标验收之前，不视为完整 Realtime 发布。详见 [39 团队实时提示验收](docs/w5/39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
+
+### ALPHA-SYNC-003B 持久团队历史增量与重启恢复
+
+```sh
+npm ci
+npm run typecheck
+node node_modules/vitest/vitest.mjs run src/shared/workspace-history-contract.test.ts src/main/cloud/workspace-history-store.test.ts src/main/cloud/workspace-history-service.test.ts src/main/cloud/workspace-history-sql.test.ts src/main/cloud/workspace-realtime.test.ts src/shared/ipc-channels.test.ts
+npm test
+npm run build
+```
+
+测试会以真实本地 SQLite 文件关闭/重开模拟客户端重启，验证百条以上分页、删除墓碑和 Cursor 原子回滚。新的本地文件 `ate-shared-history.sqlite` **保存明文团队消息/任务缓存**，首次使用前须按 [40 持久历史验收和隐私约束](docs/w5/40_ALPHA_SYNC_003B_DURABLE_HISTORY.md) 评估本机留存；不能将其当作加密存储。新增缓存数据库打开失败时仍保留其文件并降级当前 JWT 的 REST 刷新，不阻止其他本地模块启动。新增云端迁移 `supabase/migrations/20261124_ate_workspace_durable_history.sql` **不会通过 CI 自动部署**，需要独立审核、用户授权与隔离项目测试。
 
 ## Windows / macOS 本地 Alpha 验收指南
 

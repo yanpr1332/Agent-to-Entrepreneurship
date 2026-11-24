@@ -237,3 +237,8 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 ## ALPHA-SYNC-003A：团队消息/任务实时提示与成员复核（开发中，2026-11-24）
 
 [39 Realtime 提示及断线回补验收](39_ALPHA_SYNC_003A_REALTIME_HINTS.md)：Electron Main 使用用户 JWT 订阅当前已授权工作空间消息和任务，Realtime 帧仅作信号，Renderer 必须经 REST/RLS 重拉最新窗口；断网时降级轮询、成员权限丢失则清空当前共享状态。SQL publication 需要授权人工部署，持久消息历史游标、真实五账号联机未完成。
+
+
+## ALPHA-SYNC-003B：持久团队日志、历史分页和重启恢复（开发中，2026-11-24）
+
+[40 历史日志 Cursor/SQLite 恢复及隐私验收](40_ALPHA_SYNC_003B_DURABLE_HISTORY.md)：服务端按 workspace 行锁序列化变更 Cursor 并回填已有任务/消息；本机每页严格验证后在独立 SQLite 中同时提交记录和 Cursor。支持超过 100 条历史和更早消息/任务分页；撤权后清理该工作空间缓存。迁移须单独审核部署，SQLite 明文留存、真正五账号/RLS 及两平台安装包仍待验收。

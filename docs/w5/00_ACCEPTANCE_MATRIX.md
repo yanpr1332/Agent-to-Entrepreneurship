@@ -134,8 +134,9 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - **002F 续篇：PR #42 已合并，真实云端验收未做**。当前登录账号无任务/日历 pending 和未解决冲突时，二次确认后使用当前 JWT 撤销旧设备，Main 一次性令牌 + owner/device/cursor CAS 更换本机设备 ID，保留 Cursor/本地数据，不自动上传；零 Cursor 且有 pending 时也先只读预检。损坏 Cursor 重建、待发送操作跨设备迁移、跨库崩溃恢复及真实 RLS/双设备仍是阻塞。详见 [36](36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md)。
 - **002G：PR #43 已合并，真实云端/跨设备验收未做**。任务库 v10 持久拉取页检查点，在两库/冲突记录处理中断时下次手动同步先重放并原子推进 Cursor；数据损坏或账号/设备不符时失败关闭，恢复当轮先不上传本地 Outbox。仍无跨库全局事务或损坏 Cursor 自动重建。详见 [37](37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md)。
 - **002H：PR #44 已合并，隔离项目 RPC 未部署，真实验收未做**。当前账号只读设备状态/Cursor 查询，损坏本地状态/待恢复 Pull 检查点先阻断；精确 operationId + 完整请求匹配的云端回执查验，仅已接受项目本地 ACK，未知/冲突/不匹配不清空；额外后端 SQL 需明确授权人工部署。无自动 Cursor 重建/数据回写。详见 [38](38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
-- **003A：开发中（真实 Supabase 未验收）**。Main 用户 JWT WebSocket 仅推送消息/任务刷新提示；重新成员验证、REST/RLS 每 10/30 秒补拉最新 100 条、切换 workspace 防交叉、撤权时清空共享 UI；publication SQL 未部署，持久游标/历史窗口外补拉和五账号联机仍阻塞。详见 [39](39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
+- **003A：PR #45 已合并（真实 Supabase 未验收）**。Main 用户 JWT WebSocket 仅推送消息/任务刷新提示；重新成员验证、REST/RLS 每 10/30 秒补拉最新 100 条、切换 workspace 防交叉、撤权时清空共享 UI；publication SQL 未部署，持久游标/历史窗口外补拉和五账号联机仍阻塞。详见 [39](39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
 - **Embedding：未开发**。ALPHA-KB-005 继续保留，待同步核心门槛后先做离线 PoC；不将 PR #32 的 AI 单段解释误算为本地 embedding。
+- **003B：开发中（真实 Supabase 未部署/未验收）**。新增事务提交顺序的 workspace 日志、历史既有行回填、消息/任务变更及删除墓碑、严格协议 Cursor 校验、独立 owner+project SQLite 原子补拉及本机历史分页。每轮最多 20×100 条；缺新 RPC（404）退回 003A 窗口。新增 SQLite **明文缓存敏感团队内容**，须评估磁盘留存与撤权清理；SQL 与 RLS 真机正反向尚无证据。详见 [40](40_ALPHA_SYNC_003B_DURABLE_HISTORY.md)。
 - 2026-11-25 内部 Alpha 以真实授权测试账号、RLS 反向测试、最小跨设备增量场景及已知风险记录为条件性目标；未验证项应明确阻塞，不能冒充完成。详见 [27 同步优先实施计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。
 
 ## 4. 未验证项清单（按风险排序）

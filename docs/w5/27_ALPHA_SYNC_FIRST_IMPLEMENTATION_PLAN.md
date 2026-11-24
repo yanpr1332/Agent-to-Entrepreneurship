@@ -135,3 +135,8 @@ PR #42 已合并。本轮集中解决前述“task DB 已应用、calendar DB �
 ## 16. ALPHA-SYNC-003A：团队 Realtime 提示与最近窗口补拉（2026-11-24）
 
 PR #44 已合并，开始团队实时工作流：Electron Main 用当前用户 JWT 连接 Supabase Realtime 的 `ate_workspace_messages`/`ate_workspace_tasks` 变更、加 workspace 过滤，仅推送没有原始行内容的 hint 到 Renderer；UI 仍经当前 JWT REST/RLS 验成员并抓取消息/任务，Realtime 可用时 30 秒安全补拉，掉线/订阅失败时 10 秒轮询+指数退避重连。切换工作空间、登出、成员撤权后关闭旧订阅并清空共享 UI。publication 迁移只保存在仓库，真实 Supabase/RLS 不曾部署验证。当前 REST 最近 100 条窗口还不满足持久游标与超过窗口历史补拉，003B/003C 仍待开发。详见 [39](39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
+
+
+## 17. ALPHA-SYNC-003B：可靠历史变更日志与持久增量（2026-11-24）
+
+PR #45 已合并，当前开发 003B：新增 workspace-scoped 事务提交顺序 Cursor、已有消息/任务回填、UPDATE/DELETE 变更日志、只读成员鉴权 RPC，客户端按页严格校验连续 Cursor、在独立 SQLite 中 CAS 原子提交。重启从已持久 Cursor 继续，历史消息/任务可本机键集分页，单次最多 2000 事件防止大同步独占 UI。当前队列涉及 **本地明文历史缓存**，需明确隐私与数据留存要求；新 SQL 尚未部署。服务器压缩/裁剪的安全恢复、真实五账号撤权 RLS 与平台 GUI 仍待 003C。见 [40](40_ALPHA_SYNC_003B_DURABLE_HISTORY.md)。
