@@ -155,6 +155,69 @@ describe("Supabase candidate: individual JWT + RLS REST boundaries",()=>{
     expect(calls).toEqual(["register","apply","pull","revoke"]);
   });
 
+  it("inspects current-owner device and exact operation receipt using only user JWT",async()=>{
+    const deviceId="6da6f704-5b0c-4e5a-a7dd-dc8db5b4c665";
+    const op={
+      operationId:"ca9c6544-371b-41f2-b621-a956b088c7fb",
+      deviceId,actorId:userId,ownerId:userId,entityId:"3babcb78-c10d-4f4e-ab3e-f47f6ad72447",
+      entityType:"personal-task",action:"upsert",baseVersion:null,
+      clientTimestamp:"2026-11-19T15:30:00.000Z",
+      payload:{title:"Pending",description:"",dueDate:null,priority:"normal",completed:false},
+    };
+    const calls:string[]=[];
+    const fetcher=vi.fn(async(url:string,init:RequestInit)=>{
+      if(url.includes("/auth/v1/"))return new Response(JSON.stringify({
+        access_token:"jwt",refresh_token:"refresh",expires_in:3600,
+        user:{id:userId,email:"owner@example.edu"},
+      }));
+      expect((init.headers as Record<string,string>).Authorization).toBe("Bearer jwt");
+      if(url.endsWith("ate_personal_sync_inspect_device")){
+        calls.push("inspect");
+        expect(JSON.parse(init.body as string)).toEqual({p_device_id:deviceId});
+        return new Response(JSON.stringify({deviceStatus:"revoked",serverCursor:"5"}));
+      }
+      if(url.endsWith("ate_personal_sync_lookup_receipt")){
+        calls.push("receipt");
+        expect(JSON.parse(init.body as string)).toEqual({p_operation:op});
+        return new Response(JSON.stringify({status:"matched",response:{
+          status:"accepted",serverVersion:1,cursor:"1",
+        }}));
+      }
+      throw Error("unexpected RPC");
+    });
+    const cloud=new SharedCloudClient(fetcher);
+    cloud.configure({projectUrl,publishableKey});
+    await cloud.login({email:"owner@example.edu",password:"strong-password"});
+    expect(await cloud.inspectPersonalSyncDevice(deviceId))
+      .toEqual({deviceStatus:"revoked",serverCursor:"5"});
+    expect(await cloud.lookupPersonalSyncReceipt(op))
+      .toMatchObject({status:"matched",response:{status:"accepted",serverVersion:1}});
+    const foreign={...op,ownerId:memberId,actorId:memberId};
+    await expect(cloud.lookupPersonalSyncReceipt(foreign)).rejects.toThrow("another cloud account");
+    expect(calls).toEqual(["inspect","receipt"]);
+  });
+
+  it("rejects malformed inspection and receipt RPC results without using them as acknowledgements",async()=>{
+    const deviceId="6da6f704-5b0c-4e5a-a7dd-dc8db5b4c665";
+    const cloud=new SharedCloudClient(async(url,init)=>{
+      if(url.includes("/auth/v1/"))return new Response(JSON.stringify({
+        access_token:"jwt",refresh_token:"refresh",expires_in:3600,
+        user:{id:userId,email:"owner@example.edu"},
+      }));
+      if(url.endsWith("ate_personal_sync_inspect_device"))
+        return new Response(JSON.stringify({deviceStatus:"active",serverCursor:"99999999999999999999"}));
+      return new Response(JSON.stringify({status:"matched",response:null}));
+    });
+    cloud.configure({projectUrl,publishableKey});
+    await cloud.login({email:"owner@example.edu",password:"strong-password"});
+    await expect(cloud.inspectPersonalSyncDevice(deviceId)).rejects.toThrow("cursor");
+    const op={operationId:"ca9c6544-371b-41f2-b621-a956b088c7fb",deviceId,
+      actorId:userId,ownerId:userId,entityId:"3babcb78-c10d-4f4e-ab3e-f47f6ad72447",
+      entityType:"personal-task",action:"delete",baseVersion:1,
+      clientTimestamp:"2026-11-19T15:30:00.000Z",payload:null};
+    await expect(cloud.lookupPersonalSyncReceipt(op)).rejects.toThrow();
+  });
+
   it("rejects operations for a different authenticated account before sending them",async()=>{
     const fetcher=vi.fn(async(_url:string,_init:RequestInit)=>new Response("{}"));
     const cloud=new SharedCloudClient(async(url,init)=>{
