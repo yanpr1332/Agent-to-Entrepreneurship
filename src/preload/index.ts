@@ -92,6 +92,8 @@ const desktopApi = Object.freeze({
     signup: (input: CloudCredentials) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudSignup, input) as Promise<{emailVerificationRequired:true}>,
     logout: () => ipcRenderer.invoke(IPC_CHANNELS.cloudLogout) as Promise<CloudSessionStatus>,
+    clearTeamHistory: (confirmation:"ERASE_CURRENT_TEAM_CACHE") =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudClearTeamHistory,confirmation) as Promise<{workspaces:number;checkpointed:boolean}>,
     workspaces: () => ipcRenderer.invoke(IPC_CHANNELS.cloudWorkspaces) as Promise<SharedWorkspace[]>,
     createWorkspace: (name: string, displayName: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudCreateWorkspace, name, displayName) as Promise<string>,
