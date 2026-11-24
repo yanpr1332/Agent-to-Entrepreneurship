@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type {
   CloudSessionStatus, SharedMember, SharedMessage, SharedTask, SharedWorkspace,
+  type WorkspaceLiveUpdate,
 } from "../../shared/cloud-model";
 import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncConflictReason, PersonalSyncRunResult,
@@ -11,6 +12,18 @@ import type {
 
 const empty:CloudSessionStatus={configured:false,authenticated:false,userId:null,email:null};
 const POLL_MS=10_000;
+const LIVE_SAFETY_POLL_MS=30_000;
+function isWorkspaceAccessDenied(error:unknown):boolean{
+  const message=error instanceof Error?error.message:"";
+  return /membership|permission|access denied|authorization failed|not found or permission/i.test(message);
+}
+const liveLabels:Record<WorkspaceLiveUpdate["phase"],string>={
+  connecting:"正在连接实时提醒；定时补拉仍启用",
+  live:"实时提醒已连接 · 每 30 秒安全补拉",
+  fallback:"实时连接不可用 · 每 10 秒定时补拉",
+  revoked:"成员权限已撤销 · 已停止共享数据刷新",
+  stopped:"未订阅实时提醒",
+};
 const conflictReason:Record<PersonalSyncConflictReason,string>={
   "remote-change-while-local-pending":"本地修改尚未上传，云端也有新修改",
   "remote-delete-while-local-pending":"本地修改尚未上传，但云端已删除",
@@ -73,6 +86,9 @@ export default function CloudWorkspace() {
   const [recoveryHealth,setRecoveryHealth]=useState<PersonalSyncRecoveryHealth|null>(null);
   const [receiptReconciliation,setReceiptReconciliation]=useState<PersonalSyncReceiptReconcileResult|null>(null);
   const [receiptReview,setReceiptReview]=useState<PersonalSyncReceiptReview|null>(null);
+  const [workspaceLivePhase,setWorkspaceLivePhase]=useState<WorkspaceLiveUpdate["phase"]>("stopped");
+  const selectedRef=useRef<string|null>(null);
+  const workspaceFetchSeq=useRef(0);
 
   useEffect(()=>{
     let active=true;
@@ -92,16 +108,29 @@ export default function CloudWorkspace() {
     setLegacyReview(legacy);
   },[]);
 
-  const refreshSelected=useCallback(async (workspaceId:string)=>{
-    const [remoteMembers,remoteMessages,remoteTasks]=await Promise.all([
-      window.desktop.cloud.members(workspaceId),
-      window.desktop.cloud.messages(workspaceId),
-      window.desktop.cloud.tasks(workspaceId),
-    ]);
-    setMembers(remoteMembers);
-    setMessages(remoteMessages);
-    setTasks(remoteTasks);
+  const clearSelectedWorkspace=useCallback(()=>{
+    selectedRef.current=null;
+    workspaceFetchSeq.current++;
+    setSelected(null);setMembers([]);setMessages([]);setTasks([]);setInvite("");
+    setWorkspaceLivePhase("revoked");
+    setNotice("小组成员权限可能已撤销，已清除当前界面中的共享数据。请重新登录或确认小组成员资格。");
+    void window.desktop.cloud.workspaces().then(setWorkspaces).catch(()=>setWorkspaces([]));
   },[]);
+
+  const refreshSelected=useCallback(async(workspaceId:string)=>{
+    const seq=++workspaceFetchSeq.current;
+    try{
+      const snapshot=await window.desktop.cloud.workspaceSnapshot(workspaceId);
+      if(selectedRef.current!==workspaceId||workspaceFetchSeq.current!==seq)return;
+      setMembers(snapshot.members);
+      setMessages(snapshot.messages);
+      setTasks(snapshot.tasks);
+    }catch(error){
+      if(selectedRef.current===workspaceId&&isWorkspaceAccessDenied(error))
+        clearSelectedWorkspace();
+      throw error;
+    }
+  },[clearSelectedWorkspace]);
 
   useEffect(()=>{
     if(!status.authenticated){
@@ -121,18 +150,47 @@ export default function CloudWorkspace() {
   },[status.authenticated,refreshPersonalSync]);
 
   useEffect(()=>{
-    if(!status.authenticated || !selected)return;
-    let active=true;
-    const poll=()=>{
-      void Promise.all([
-        window.desktop.cloud.messages(selected),
-        window.desktop.cloud.tasks(selected),
-      ]).then(([msg,t])=>{if(active){setMessages(msg);setTasks(t);}})
-        .catch(()=>{}); // Poll failures do not erase existing shared state.
+    if(!status.authenticated||!selected)return;
+    let active=true,inFlight=false,queued=false,lastPull=0;
+    let phase:WorkspaceLiveUpdate["phase"]="connecting";
+    selectedRef.current=selected;
+    setWorkspaceLivePhase("connecting");
+    const pull=()=>{
+      if(!active||selectedRef.current!==selected)return;
+      if(inFlight){queued=true;return;}
+      inFlight=true;
+      lastPull=Date.now();
+      void refreshSelected(selected).catch(()=>{/* offline: keep existing data, next poll retries */})
+        .finally(()=>{
+          inFlight=false;
+          if(queued&&active){queued=false;pull();}
+        });
     };
-    const timer=setInterval(poll,POLL_MS);
-    return()=>{active=false;clearInterval(timer);};
-  },[status.authenticated,selected]);
+    const unsubscribe=window.desktop.cloud.onWorkspaceLiveUpdated(update=>{
+      if(!active||update.workspaceId!==selected)return;
+      phase=update.phase;
+      setWorkspaceLivePhase(phase);
+      if(phase==="revoked"){clearSelectedWorkspace();return;}
+      if(update.hint)pull(); // Re-fetch under REST RLS; ignore websocket row content.
+    });
+    pull(); // Always catch up immediately, regardless of socket availability.
+    void window.desktop.cloud.watchWorkspace(selected).then(update=>{
+      if(!active||selectedRef.current!==selected)return;
+      phase=update.phase;setWorkspaceLivePhase(phase);
+    }).catch(error=>{
+      if(!active)return;
+      if(isWorkspaceAccessDenied(error))clearSelectedWorkspace();
+      else{phase="fallback";setWorkspaceLivePhase("fallback");}
+    });
+    const timer=setInterval(()=>{
+      if(!active)return;
+      if(phase!=="live"||Date.now()-lastPull>=LIVE_SAFETY_POLL_MS)pull();
+    },POLL_MS);
+    return()=>{
+      active=false;clearInterval(timer);unsubscribe();
+      void window.desktop.cloud.stopWorkspaceWatch(selected).catch(()=>{});
+    };
+  },[status.authenticated,selected,refreshSelected,clearSelectedWorkspace]);
 
   async function run(operation:()=>Promise<void>):Promise<void>{
     if(busy)return;
@@ -146,6 +204,8 @@ export default function CloudWorkspace() {
     event.preventDefault();
     await run(async()=>{
       const next=await window.desktop.cloud.configure({projectUrl,publishableKey});
+      selectedRef.current=null;workspaceFetchSeq.current++;setSelected(null);
+      setMembers([]);setMessages([]);setTasks([]);setWorkspaceLivePhase("stopped");
       setStatus(next);
       setPublishableKey("");
       setNotice("已使用公开的测试项目配置。登录账号后才能读取共享内容。");
@@ -174,6 +234,7 @@ export default function CloudWorkspace() {
   async function logout():Promise<void>{
     await run(async()=>{
       const next=await window.desktop.cloud.logout();
+      selectedRef.current=null;workspaceFetchSeq.current++;setWorkspaceLivePhase("stopped");
       setStatus(next);setWorkspaces([]);setSelected(null);
       setMembers([]);setMessages([]);setTasks([]);setInvite("");
       setPersonalCandidates([]);setPersonalConflicts([]);setPersonalSyncResult(null);
@@ -186,7 +247,8 @@ export default function CloudWorkspace() {
 
   async function enterWorkspace(id:string):Promise<void>{
     await run(async()=>{
-      setSelected(id);setInvite("");
+      selectedRef.current=id;workspaceFetchSeq.current++;setSelected(id);setInvite("");
+      setMembers([]);setMessages([]);setTasks([]);
       await refreshSelected(id);
     });
   }
@@ -196,7 +258,8 @@ export default function CloudWorkspace() {
     await run(async()=>{
       const id=await window.desktop.cloud.createWorkspace(workspaceName,displayName);
       setWorkspaces(await window.desktop.cloud.workspaces());
-      setSelected(id);setWorkspaceName("");
+      selectedRef.current=id;workspaceFetchSeq.current++;setSelected(id);setWorkspaceName("");
+      setMembers([]);setMessages([]);setTasks([]);
       await refreshSelected(id);
       setNotice("测试工作空间已创建。你可以生成一次性显示的邀请码邀请其他独立账号。");
     });
@@ -207,7 +270,8 @@ export default function CloudWorkspace() {
     await run(async()=>{
       const id=await window.desktop.cloud.joinWorkspace(joinCode.trim(),displayName);
       setWorkspaces(await window.desktop.cloud.workspaces());
-      setSelected(id);setJoinCode("");
+      selectedRef.current=id;workspaceFetchSeq.current++;setSelected(id);setJoinCode("");
+      setMembers([]);setMessages([]);setTasks([]);
       await refreshSelected(id);
       setNotice("已加入工作空间，服务端将按成员身份判断数据访问权限。");
     });
@@ -654,7 +718,8 @@ export default function CloudWorkspace() {
               </div>}
             </section>
             <section className="panel cloud-chat">
-              <div className="eyebrow">TEAM MESSAGES</div><h2>小组消息 · 每 10 秒刷新</h2>
+              <div className="eyebrow">TEAM MESSAGES</div><h2>小组消息 · 实时提醒与安全补拉</h2>
+              <p className="privacy-note" role="status">{liveLabels[workspaceLivePhase]}</p>
               <ul className="cloud-message-list">{[...messages].reverse().map(item=><li key={item.id}>
                 <div><strong>{members.find(m=>m.user_id===item.author_id)?.display_name??"成员"}</strong>
                   <small>{timestamp(item.created_at)}</small></div>
