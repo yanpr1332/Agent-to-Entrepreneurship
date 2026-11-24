@@ -86,7 +86,7 @@ declare global {
         sendMessage: (workspaceId: string, body: string) => Promise<SharedMessage>;
         workspaceSnapshot: (workspaceId:string) => Promise<SharedWorkspaceSnapshot>;
         watchWorkspace: (workspaceId:string) => Promise<WorkspaceLiveUpdate>;
-        stopWorkspaceWatch: () => Promise<{stopped:true}>;
+        stopWorkspaceWatch: (workspaceId:string) => Promise<{stopped:true}>;
         onWorkspaceLiveUpdated: (listener:(state:WorkspaceLiveUpdate)=>void) => () => void;
         tasks: (workspaceId: string) => Promise<SharedTask[]>;
         createTask: (workspaceId: string, input: SharedTaskInput) => Promise<SharedTask>;
