@@ -105,7 +105,7 @@ npm test
 npm run build
 ```
 
-测试会以真实本地 SQLite 文件关闭/重开模拟客户端重启，验证百条以上分页、删除墓碑和 Cursor 原子回滚。新的本地文件 `ate-shared-history.sqlite` **保存明文团队消息/任务缓存**，首次使用前须按 [40 持久历史验收和隐私约束](docs/w5/40_ALPHA_SYNC_003B_DURABLE_HISTORY.md) 评估本机留存；不能将其当作加密存储。新增云端迁移 `supabase/migrations/20261124_ate_workspace_durable_history.sql` **不会通过 CI 自动部署**，需要独立审核、用户授权与隔离项目测试。
+测试会以真实本地 SQLite 文件关闭/重开模拟客户端重启，验证百条以上分页、删除墓碑和 Cursor 原子回滚。新的本地文件 `ate-shared-history.sqlite` **保存明文团队消息/任务缓存**，首次使用前须按 [40 持久历史验收和隐私约束](docs/w5/40_ALPHA_SYNC_003B_DURABLE_HISTORY.md) 评估本机留存；不能将其当作加密存储。新增缓存数据库打开失败时仍保留其文件并降级当前 JWT 的 REST 刷新，不阻止其他本地模块启动。新增云端迁移 `supabase/migrations/20261124_ate_workspace_durable_history.sql` **不会通过 CI 自动部署**，需要独立审核、用户授权与隔离项目测试。
 
 ## Windows / macOS 本地 Alpha 验收指南
 
