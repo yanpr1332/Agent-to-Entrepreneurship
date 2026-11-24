@@ -252,7 +252,27 @@ export default function CloudWorkspace() {
       setLegacyReview({items:[],taskLimitReached:false,calendarLimitReached:false});
       setLegacySelection(null);setResolutionReview(null);setDeviceReplacement(null);
       setRecoveryHealth(null);setReceiptReconciliation(null);setReceiptReview(null);
-      setNotice("已退出云端账号；个人本地任务与其他连接器不受影响。");
+      setNotice("已退出云端账号，程序会尽力清理当前账号的本机团队历史缓存。个人任务与其他连接器不受影响；旧数据库备份可能仍留存。");
+    });
+  }
+
+  async function eraseTeamHistory():Promise<void>{
+    const confirmed=window.confirm(
+      "清除当前账号在当前云项目下，本设备保存的全部团队消息/任务历史及未完成的快照？"+
+      "这不会删除云端记录，也不会影响本地个人任务和日历。重新进入小组将重新下载数据。"+
+      "旧备份、磁盘历史块等可能仍保留旧内容，不能保证物理安全擦除。"
+    );
+    if(!confirmed)return;
+    await run(async()=>{
+      const result=await window.desktop.cloud.clearTeamHistory("ERASE_CURRENT_TEAM_CACHE");
+      // Prevent an older UI request from reviving just-cleared content.
+      selectedRef.current=null;workspaceFetchSeq.current++;
+      setSelected(null);setMembers([]);setMessages([]);setTasks([]);
+      setOlderMessages([]);setOlderTasks([]);setHistoryStatus(null);
+      setWorkspaceLivePhase("stopped");setInvite("");
+      setNotice("已清除当前账号本机团队历史分区（正式记录及暂存快照），涉及 "+
+        result.workspaces+" 个历史分区。云端资料未删除；需要时重新选择小组补拉。"+
+        (result.checkpointed?"":" 当前磁盘日志未确认完全截断，请检查设备及备份留存。"));
     });
   }
 
@@ -537,6 +557,8 @@ export default function CloudWorkspace() {
     {status.authenticated && <>
       <div className="cloud-session-row">
         <span>当前登录：{status.email}</span>
+        <button type="button" className="secondary-button" disabled={busy}
+          onClick={()=>void eraseTeamHistory()}>清除此设备的团队历史</button>
         <button className="secondary-button" disabled={busy} onClick={()=>void logout()}>退出云端账号</button>
       </div>
       <section className="panel cloud-personal-sync">
@@ -786,8 +808,9 @@ export default function CloudWorkspace() {
                   : "持久历史暂不可用（服务端未部署或本机缓存不可用）：仅显示服务端最近 100 条窗口。"}
               </p>
               {historyStatus?.mode==="durable"&&<p className="privacy-note">
-                本机已保存本小组已同步的消息与任务历史（SQLite 明文缓存，未额外加密）。
-                使用共享设备时请注意本机磁盘访问权限；退出登录不会自动清空历史文件。
+                本机已保存加密的团队消息/任务正文（依赖操作系统安全存储）。
+                工作空间 ID、时间索引和同步位点等元数据仍可见；升级前的明文数据库、迁移备份、磁盘旧页面和旧 WAL 可能仍保留历史内容。
+                退出账号时会尝试清理当前账号的缓存；需要时可以主动清除此设备的团队历史。
               </p>}
               <ul className="cloud-message-list">{[...visibleMessages].reverse().map(item=><li key={item.id}>
                 <div><strong>{members.find(m=>m.user_id===item.author_id)?.display_name??"成员"}</strong>
