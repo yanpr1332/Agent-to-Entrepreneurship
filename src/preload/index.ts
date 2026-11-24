@@ -125,6 +125,8 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.cloudInspectPersonalSyncRecovery) as Promise<PersonalSyncRecoveryHealth>,
     reviewPersonalSyncReceipts: () =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudReviewPersonalSyncReceipts) as Promise<PersonalSyncReceiptReview>,
+    discardPersonalSyncReceiptReview: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudDiscardPersonalSyncReceiptReview) as Promise<{cancelled:true}>,
     reconcilePersonalSyncReceipts: (input:PersonalSyncReceiptConfirmation) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudReconcilePersonalSyncReceipts,input) as Promise<PersonalSyncReceiptReconcileResult>,
     personalSyncConflicts: () =>
