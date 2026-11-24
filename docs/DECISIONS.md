@@ -4,9 +4,11 @@
 
 ## 已确定
 
+> 2026-11-24 更新：用户将 GitHub 仓库更名为 `study-anchor`，并进一步要求将安装包名称、Electron appId 及本机数据文件名也同步迁移到 Study Anchor。迁移代码保留旧数据原件、遇冲突拒绝覆盖；真实安装升级与系统凭据解密仍须 Windows/macOS 验收。见 [完整品牌与数据迁移](w4/09_REPOSITORY_RENAME_STUDY_ANCHOR.md)。
+
 | 主题 | 决策 |
 | --- | --- |
-| 项目仓库名 | `Agent-to-Entrepreneurship` |
+| 项目仓库名 | `study-anchor`（2026-11-24 由 `Agent-to-Entrepreneurship` 更名） |
 | 仓库公开性 | Public |
 | 开源许可证 | MPL-2.0 |
 | 用户群体 | 大学生 |
@@ -57,7 +59,7 @@
 
 下一阶段的步骤与完成门槛详见 [PROJECT_WORKFLOW.md](PROJECT_WORKFLOW.md)。
 
-1. 正式对外显示的产品名称和品牌。
+1. 对外品牌的商标、域名、代码签名，以及新旧 Windows/macOS 安装包和本机数据目录迁移的真实验收；**Study Anchor** 的仓库名、展示名及应用标识已决定。
 2. 开发团队规模、人员分工、仓库所有者和分支保护策略。
 3. 是否所有客户端与服务端代码都采用同一个 MPL-2.0 许可证，以及第三方贡献协议。
 4. W2 的选型与交互已归档；用户对详细原型做最后体验签收，并记录必要视觉/可用性修订。

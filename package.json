@@ -1,5 +1,5 @@
 {
-  "name": "agent-to-entrepreneurship",
+  "name": "study-anchor",
   "version": "0.1.0",
   "private": true,
   "description": "Local-first student workspace desktop application",
@@ -39,8 +39,8 @@
     "vitest": "5.1.0"
   },
   "build": {
-    "appId": "org.agenttoentrepreneurship.desktop",
-    "productName": "Agent to Entrepreneurship",
+    "appId": "org.studyanchor.desktop",
+    "productName": "Study Anchor",
     "directories": {
       "output": "release"
     },

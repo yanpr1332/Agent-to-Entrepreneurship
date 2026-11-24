@@ -470,7 +470,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><div className="brand-mark">A</div><div><strong>AtE Workspace</strong><span>个人学习与协作空间</span></div></div>
+        <div className="brand"><div className="brand-mark">S</div><div><strong>Study Anchor</strong><span>个人学习与协作空间</span></div></div>
         <div className="workspace-switch"><span className="workspace-dot" />个人工作空间 <span className="chevron">⌄</span></div>
         <div className="nav-label">工作空间</div>
         <nav aria-label="应用导航">
@@ -677,7 +677,7 @@ export default function App() {
           {!selectedModule.ready && (
             <div className="placeholder-panel"><span className="placeholder-icon">{selectedModule.icon}</span><div className="eyebrow">NEXT DEVELOPMENT SLICE</div><h1>{selectedModule.label}</h1><p>该模块属于 V0.1 开发范围，但本次工程切片尚未实现真实功能。这里不会使用模拟数据冒充已接入。</p><div className="placeholder-actions"><button className="primary-button" onClick={() => setPage("overview")}>返回工作台</button><button className="secondary-button" onClick={() => setPage("calendar")}>使用任务管理</button></div></div>
           )}
-          <footer>Agent-to-Entrepreneurship · Local-first by design · 内部开发原型</footer>
+          <footer>Study Anchor · Local-first by design · 内部开发原型</footer>
         </div>
       </main>
     </div>

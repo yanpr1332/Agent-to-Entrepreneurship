@@ -16,7 +16,7 @@
 
 在本次提案前，`main` 的基线提交为：
 `98377ad9a62baf0de16a8b6246e17c74859d419d`。
-该基线公开提供的版本带有 [MPL-2.0 LICENSE](https://github.com/yanpr1332/Agent-to-Entrepreneurship/blob/98377ad9a62baf0de16a8b6246e17c74859d419d/LICENSE)。保留 Git 历史以便核查原授权，不应改写旧提交或隐瞒其存在。
+该基线公开提供的版本带有 [MPL-2.0 LICENSE](https://github.com/yanpr1332/study-anchor/blob/98377ad9a62baf0de16a8b6246e17c74859d419d/LICENSE)。保留 Git 历史以便核查原授权，不应改写旧提交或隐瞒其存在。
 
 ## 必须完成的版权授权核对（合并前）
 

@@ -34,7 +34,7 @@ export type DiagnosticEntry={
   operation:string;
 };
 
-export const DIAGNOSTIC_FILE="ate-diagnostics.jsonl";
+export const DIAGNOSTIC_FILE="study-anchor-diagnostics.jsonl";
 export const MAX_DIAGNOSTIC_BYTES=128*1024;
 
 function safeOperation(operation:unknown):string{

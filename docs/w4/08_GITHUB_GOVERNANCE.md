@@ -29,7 +29,7 @@ main 始终通过 PR 接收变更。持有相应修改授权的成员和 AI Agen
 4. 不通过伪造第二个审批账号来规避 GitHub 审计。
 
 ## 4. GitHub 配置入口
-https://github.com/yanpr1332/Agent-to-Entrepreneurship/settings/branches
+https://github.com/yanpr1332/study-anchor/settings/branches
 
 本仓库已在本 PR 分支新增 `.github/CODEOWNERS`，内容将全仓库指定给 `@yanpr1332`。**这不等于分支保护已开启**：必须由仓库管理员在 Settings 中创建针对 `main` 的 Branch protection rule 或 Ruleset，并启用以上规则。
 

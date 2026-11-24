@@ -55,7 +55,13 @@ export async function createLocalBackup(
 export async function backupBeforeMigration(
   userData:string, filename:string, expectedVersion:number,
 ):Promise<string|null>{
-  if(!["ate-local.sqlite","ate-knowledge.sqlite","ate-fixed-calendar.sqlite","ate-plans.sqlite"].includes(filename))
+  // The startup path uses ONLY Study Anchor filenames; retain a restricted
+  // legacy allowlist for historical pre-schema backups and restore tests.
+  if(![
+    "study-anchor-tasks.sqlite","study-anchor-knowledge.sqlite",
+    "study-anchor-calendar.sqlite","study-anchor-planning.sqlite",
+    "ate-local.sqlite","ate-knowledge.sqlite","ate-fixed-calendar.sqlite","ate-plans.sqlite",
+  ].includes(filename))
     throw Error("Unapproved migration backup source");
   const sourcePath=join(userData,filename);
   if(!existsSync(sourcePath))return null;
