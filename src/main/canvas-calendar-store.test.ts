@@ -94,7 +94,7 @@ describe("Canvas calendar cache is private, durable and user-controlled",()=>{
       startMinute:700,durationMinutes:60,weeks:1})[0];
     first.close();
     const old=new DatabaseSync(path);
-    old.exec("DROP INDEX canvas_calendar_scope; DROP TABLE canvas_calendar_events; PRAGMA user_version=2;");
+    old.exec("DROP TABLE manual_calendar_sync_outbox; DROP TABLE manual_calendar_sync_enrollment; DROP INDEX canvas_calendar_scope; DROP TABLE canvas_calendar_events; PRAGMA user_version=2;");
     old.close();
     const backupFolder=await backupBeforeMigration(folder,"ate-fixed-calendar.sqlite",3);
     expect(backupFolder).toBeTruthy();
