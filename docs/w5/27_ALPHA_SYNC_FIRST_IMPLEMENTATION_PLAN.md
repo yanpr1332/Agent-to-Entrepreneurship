@@ -130,3 +130,8 @@ PR #42 已合并。本轮集中解决前述“task DB 已应用、calendar DB �
 ## 15. ALPHA-SYNC-002H：只读健康诊断与已发送回执对账（2026-11-24）
 
 在 PR #43 崩溃恢复检查点已合并的基础上，本轮实现供用户主动触发的恢复诊断：Main 读取当前 owner 设备/Cursor 和两个 Outbox、冲突/检查点，不创建本地设备；新增只读 RPC 根据 JWT owner 判断设备 active/revoked/unregistered 和云端 Cursor，标记超前但不自动回退。另一个只读 RPC 仅在 operationId 和**原完整操作请求**与服务端幂等回执完全一致时返回历史响应；客户端在所有返回通过校验后才对 accepted/duplicate 执行本地 ACK/CAS rebase，其他状态保持不变。无任何自动推送/云端变更；新 RPC 的迁移只留于仓库、须隔离项目额外安全审查。完整边界和验收见 [38](38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
+
+
+## 16. ALPHA-SYNC-003A：团队 Realtime 提示与最近窗口补拉（2026-11-24）
+
+PR #44 已合并，开始团队实时工作流：Electron Main 用当前用户 JWT 连接 Supabase Realtime 的 `ate_workspace_messages`/`ate_workspace_tasks` 变更、加 workspace 过滤，仅推送没有原始行内容的 hint 到 Renderer；UI 仍经当前 JWT REST/RLS 验成员并抓取消息/任务，Realtime 可用时 30 秒安全补拉，掉线/订阅失败时 10 秒轮询+指数退避重连。切换工作空间、登出、成员撤权后关闭旧订阅并清空共享 UI。publication 迁移只保存在仓库，真实 Supabase/RLS 不曾部署验证。当前 REST 最近 100 条窗口还不满足持久游标与超过窗口历史补拉，003B/003C 仍待开发。详见 [39](39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。

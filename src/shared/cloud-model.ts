@@ -20,6 +20,19 @@ export interface SharedTask {
   due_date:string|null;assigned_to:string|null;completed:boolean;
   created_at:string;updated_at:string;
 }
+/** Main emits *only* a scoped refresh hint, never a Realtime row or JWT. */
+export interface WorkspaceLiveUpdate {
+  workspaceId:string;
+  phase:"connecting"|"live"|"fallback"|"revoked"|"stopped";
+  hint:boolean;
+}
+export interface SharedWorkspaceSnapshot {
+  workspaceId:string;
+  members:SharedMember[];
+  messages:SharedMessage[];
+  tasks:SharedTask[];
+}
+
 export interface SharedTaskInput {
   title:string;dueDate?:string|null;assignedTo?:string|null;
 }

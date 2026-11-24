@@ -232,3 +232,8 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 ## ALPHA-SYNC-002H：同步状态诊断和发送回执核对（开发中，2026-11-24）
 
 [38 同步恢复诊断与安全验收](38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md) 增加 owner-scoped、只读服务端设备/Cursor 状态与完整操作请求的幂等回执检查。用户明确触发核对后只对云端已确认成功的本地待发送操作做 CAS ACK；未知回执不自动上传或清空。本轮无云端自动部署、无 Cursor 自动清零，真实 RLS/双设备验收仍未执行。
+
+
+## ALPHA-SYNC-003A：团队消息/任务实时提示与成员复核（开发中，2026-11-24）
+
+[39 Realtime 提示及断线回补验收](39_ALPHA_SYNC_003A_REALTIME_HINTS.md)：Electron Main 使用用户 JWT 订阅当前已授权工作空间消息和任务，Realtime 帧仅作信号，Renderer 必须经 REST/RLS 重拉最新窗口；断网时降级轮询、成员权限丢失则清空当前共享状态。SQL publication 需要授权人工部署，持久消息历史游标、真实五账号联机未完成。

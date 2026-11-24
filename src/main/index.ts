@@ -15,6 +15,7 @@ import { CanvasApi } from "./connectors/canvas-api";
 import { CanvasCredentialVault } from "./connectors/canvas-credentials";
 import { CanvasSyncService } from "./connectors/canvas-sync";
 import { SharedCloudClient } from "./cloud/supabase-client";
+import { WorkspaceRealtimeBridge } from "./cloud/workspace-realtime";
 import { PersonalSyncService } from "./personal-sync";
 import {
   parsePersonalSyncResolutionRequest,parsePersonalSyncLegacyAdoptionRequest,
@@ -115,6 +116,11 @@ function campusMail(): CampusMailService {
 }
 const CANVAS_SYNC_UPDATED = "canvas:sync-updated";
 const sharedCloud = new SharedCloudClient();
+const workspaceRealtime=new WorkspaceRealtimeBridge(sharedCloud,update=>{
+  for(const window of BrowserWindow.getAllWindows()){
+    if(!window.isDestroyed())window.webContents.send(IPC_CHANNELS.cloudWorkspaceLiveUpdated,update);
+  }
+});
 let personalSync:PersonalSyncService|null=null;
 function personalSyncService():PersonalSyncService{
   if(!personalSync)throw new Error("Personal synchronization is not initialized");
@@ -617,10 +623,12 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.cloudConfigure, (event, input: unknown) => {
     requireTrustedSender(event);
+    workspaceRealtime.stop();
     return sharedCloud.configure(input);
   });
   handle(IPC_CHANNELS.cloudLogin, (event, input: unknown) => {
     requireTrustedSender(event);
+    workspaceRealtime.stop();
     return sharedCloud.login(input);
   });
   handle(IPC_CHANNELS.cloudSignup, (event, input: unknown) => {
@@ -629,6 +637,7 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.cloudLogout, (event) => {
     requireTrustedSender(event);
+    workspaceRealtime.stop();
     sharedCloud.signOut();
     return sharedCloud.status();
   });
@@ -655,6 +664,18 @@ function registerIpcHandlers(): void {
   handle(IPC_CHANNELS.cloudMessages, (event, workspaceId: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.listMessages(workspaceId);
+  });
+  handle(IPC_CHANNELS.cloudWorkspaceSnapshot, (event, workspaceId:unknown) => {
+    requireTrustedSender(event);
+    return sharedCloud.workspaceSnapshot(workspaceId);
+  });
+  handle(IPC_CHANNELS.cloudWatchWorkspace, (event, workspaceId:unknown) => {
+    requireTrustedSender(event);
+    return workspaceRealtime.watch(workspaceId);
+  });
+  handle(IPC_CHANNELS.cloudStopWorkspaceWatch, (event, workspaceId:unknown) => {
+    requireTrustedSender(event);
+    return workspaceRealtime.stopWatching(workspaceId);
   });
   handle(IPC_CHANNELS.cloudSendMessage, (event, workspaceId: unknown, body: unknown) => {
     requireTrustedSender(event);
@@ -900,6 +921,7 @@ app.on("before-quit", (event) => {
     }
     return;
   }
+  workspaceRealtime.stop();
   mailService?.cancel();
   mailService?.stop();
   mailService = null;

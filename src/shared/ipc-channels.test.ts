@@ -67,6 +67,10 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "cloud:signup",
       "cloud:status",
       "cloud:tasks",
+      "cloud:watch-workspace",
+      "cloud:workspace-live-updated",
+      "cloud:workspace-snapshot",
+      "cloud:stop-workspace-watch",
       "cloud:workspaces",
       "focus:finish",
       "focus:list",
@@ -128,7 +132,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
     const all = Object.values(IPC_CHANNELS);
     expect(new Set(all).size).toBe(all.length);
     expect(all.filter((name) => name.startsWith("mail:"))).toHaveLength(10);
-    expect(all.filter((name) => name.startsWith("cloud:"))).toHaveLength(29);
+    expect(all.filter((name) => name.startsWith("cloud:"))).toHaveLength(33);
   });
 
   it("permits only explicit AI status, configuration, approval, cancel and disconnect calls",()=>{
