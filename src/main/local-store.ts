@@ -323,6 +323,15 @@ export class LocalStore {
     return backup(this.db,path);
   }
 
+  /** This inspection never creates a device or modifies SQLite. */
+  peekPersonalSyncDevice(ownerInput:unknown):{deviceId:string;cursor:string}|null{
+    const owner=syncOwnerId(ownerInput);
+    const row=this.db.prepare(
+      "SELECT device_id,cursor FROM personal_sync_devices WHERE owner_id=?"
+    ).get(owner) as {device_id:string;cursor:string}|undefined;
+    return row?checkedPersonalSyncDevice(row):null;
+  }
+
   /** A stable device identity and cursor are scoped to the authenticated owner. */
   getOrCreatePersonalSyncDevice(ownerId: string, now = new Date()): {deviceId:string;cursor:string} {
     const owner=syncOwnerId(ownerId);
