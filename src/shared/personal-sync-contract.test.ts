@@ -3,6 +3,7 @@ import type { FixedEvent } from "./fixed-calendar-model";
 import type { LocalTask } from "./local-model";
 import {
   parsePersonalSyncOperation, parseSyncOperationResult, parsePersonalSyncPullPage,
+  parsePersonalSyncResolutionRequest,
   projectManualCalendarEvent, projectPersonalTask,
 } from "./personal-sync-contract";
 
@@ -133,6 +134,19 @@ describe("ALPHA-SYNC-001 strict wire envelope, without enabling sync", () => {
     expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[0],cursor:"../users"}]})).toThrow();
     expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[0],version:0}]})).toThrow();
     expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[0],updatedAt:"not-a-date"}]})).toThrow();
+  });
+
+  it("only allows an exact conflict choice, reviewed operation and version from the Renderer",()=>{
+    const request={entityType:"personal-task",entityId:operation.entityId,
+      remoteVersion:3,localOperationId:operation.operationId,choice:"keep-local"};
+    expect(parsePersonalSyncResolutionRequest(request)).toEqual(request);
+    expect(parsePersonalSyncResolutionRequest({...request,choice:"use-remote"}).choice)
+      .toBe("use-remote");
+    expect(()=>parsePersonalSyncResolutionRequest({...request,ownerId:owner})).toThrow();
+    expect(()=>parsePersonalSyncResolutionRequest({...request,remoteVersion:0})).toThrow();
+    expect(()=>parsePersonalSyncResolutionRequest({...request,localOperationId:"foo"})).toThrow();
+    expect(()=>parsePersonalSyncResolutionRequest({...request,choice:"overwrite-everything"})).toThrow();
+    expect(()=>parsePersonalSyncResolutionRequest({...request,entityType:"canvas"})).toThrow();
   });
 
   it("only accepts bounded, versioned acknowledgement and opaque cursor", () => {

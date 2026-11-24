@@ -4,6 +4,7 @@ import type {
 } from "../../shared/cloud-model";
 import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncConflictReason, PersonalSyncRunResult,
+  PersonalSyncResolutionRequest,
 } from "../../shared/personal-sync-contract";
 
 const empty:CloudSessionStatus={configured:false,authenticated:false,userId:null,email:null};
@@ -15,6 +16,17 @@ const conflictReason:Record<PersonalSyncConflictReason,string>={
   "remote-overlaps-study-plan":"云端课程与本机已确认学习计划冲突",
   "local-calendar-capacity":"本机日历容量已满",
 };
+
+function syncSnapshotDetail(payload:PersonalSyncConflictRecord["localPayload"]):string {
+  if(!payload)return "无记录内容";
+  if("dueDate" in payload)
+    return "截止："+(payload.dueDate??"未设置")+" · 优先级："+payload.priority+
+      " · "+(payload.completed?"已完成":"未完成")+
+      (payload.description?" · 描述："+payload.description:"");
+  return "日期："+payload.day+" · 开始："+String(Math.floor(payload.startMinute/60)).padStart(2,"0")+
+    ":"+String(payload.startMinute%60).padStart(2,"0")+
+    " · "+payload.durationMinutes+" 分钟";
+}
 
 function issue(error:unknown):string{return error instanceof Error?error.message:"云端操作未完成";}
 function timestamp(value:string):string {
@@ -50,6 +62,7 @@ export default function CloudWorkspace() {
   const [personalCandidates,setPersonalCandidates]=useState<PersonalSyncCandidate[]>([]);
   const [personalConflicts,setPersonalConflicts]=useState<PersonalSyncConflictRecord[]>([]);
   const [personalSyncResult,setPersonalSyncResult]=useState<PersonalSyncRunResult|null>(null);
+  const [resolutionReview,setResolutionReview]=useState<PersonalSyncResolutionRequest|null>(null);
 
   useEffect(()=>{
     let active=true;
@@ -83,6 +96,7 @@ export default function CloudWorkspace() {
       setPersonalCandidates([]);
       setPersonalConflicts([]);
       setPersonalSyncResult(null);
+      setResolutionReview(null);
       return;
     }
     let active=true;
@@ -209,6 +223,20 @@ export default function CloudWorkspace() {
     });
   }
 
+  async function resolvePersonalConflict():Promise<void>{
+    if(!resolutionReview)return;
+    const reviewed=resolutionReview;
+    await run(async()=>{
+      await window.desktop.cloud.resolvePersonalSyncConflict(reviewed);
+      setResolutionReview(null);
+      setPersonalSyncResult(null);
+      await refreshPersonalSync();
+      setNotice(reviewed.choice==="keep-local"
+        ?"已保留本机内容，并将操作基线更新为所审阅的云端版本。请再次手动同步以提交；若云端此时发生新变化，会再次提示冲突。"
+        :"已采用所审阅的云端内容；本机的原待发送操作已取消。");
+    });
+  }
+
   async function sendMessage(event:FormEvent<HTMLFormElement>):Promise<void>{
     event.preventDefault();
     if(!selected)return;
@@ -325,14 +353,55 @@ export default function CloudWorkspace() {
         </div>
         {personalConflicts.length>0 && <div className="cloud-sync-conflicts">
           <h3>需要人工处理的同步冲突（{personalSyncResult?.conflicts??personalConflicts.length}）</h3>
-          <p className="privacy-note">为避免覆盖修改，系统保留本地待发送版本和云端版本，暂不自动选择任何一方。冲突处理界面将在下一阶段完成。
+          <p className="privacy-note">冲突会阻止该条目的自动上传或远端覆盖。请检查两份内容，明确选择一方。
+            “采用云端”可能覆盖或删除本地记录；操作前会再次读取云端增量并校验版本，冲突版本变化时必须重新审阅。
             {personalSyncResult && personalSyncResult.conflicts>personalConflicts.length ? " 当前仅展示最新 100 条。" : ""}</p>
-          {personalConflicts.map(item=><article className="cloud-sync-conflict" key={item.entityType+":"+item.entityId}>
-            <strong>{item.localPayload?.title??item.entityId}</strong>
-            <small>{item.entityType==="personal-task"?"个人任务":"手动课程"} · 云端版本 {item.remoteVersion} · {conflictReason[item.reason]}</small>
-            <p>本机：{item.localAction==="delete"?"已删除":item.localPayload?.title??"本机记录待检查"}</p>
-            <p>云端：{item.remoteDeleted?"已删除":item.remotePayload?.title??"云端内容不可用"}</p>
-          </article>)}
+          {personalConflicts.map(item=>{
+            const canResolve=item.canResolve===true&&Boolean(item.localOperationId);
+            const reviewed=resolutionReview?.entityType===item.entityType&&
+              resolutionReview.entityId===item.entityId&&
+              resolutionReview.remoteVersion===item.remoteVersion&&
+              resolutionReview.localOperationId===item.localOperationId;
+            return <article className="cloud-sync-conflict" key={item.entityType+":"+item.entityId}>
+              <strong>{item.localPayload?.title??item.remotePayload?.title??item.entityId}</strong>
+              <small>{item.entityType==="personal-task"?"个人任务":"手动课程"} · 云端版本 {item.remoteVersion} · {conflictReason[item.reason]}</small>
+              <div className="cloud-sync-version"><strong>本机版本</strong>
+                <p>{item.localAction==="delete"?"已删除":item.localPayload?.title??"本机记录待检查"}</p>
+                <p>{item.localAction==="delete"?"本机提出删除":syncSnapshotDetail(item.localPayload)}</p>
+              </div>
+              <div className="cloud-sync-version"><strong>云端版本</strong>
+                <p>{item.remoteDeleted?"已删除":item.remotePayload?.title??"云端内容不可用"}</p>
+                <p>{item.remoteDeleted?"采用云端将删除本机对应内容":syncSnapshotDetail(item.remotePayload)}</p>
+              </div>
+              {canResolve?<div className="cloud-sync-resolution">
+                <div className="button-row">
+                  <button type="button" className="secondary-button" disabled={busy}
+                    onClick={()=>setResolutionReview({entityType:item.entityType,
+                      entityId:item.entityId,remoteVersion:item.remoteVersion,
+                      localOperationId:item.localOperationId!,choice:"keep-local"})}>保留本机</button>
+                  <button type="button" className="secondary-button" disabled={busy}
+                    onClick={()=>setResolutionReview({entityType:item.entityType,
+                      entityId:item.entityId,remoteVersion:item.remoteVersion,
+                      localOperationId:item.localOperationId!,choice:"use-remote"})}>采用云端</button>
+                </div>
+                {reviewed&&resolutionReview&&<div className="cloud-sync-confirm" role="group"
+                  aria-label="确认同步冲突解决">
+                  <p><strong>待确认：{resolutionReview.choice==="keep-local"?"保留本机":"采用云端"}</strong>
+                    {resolutionReview.choice==="use-remote"
+                      ? "。本机内容可能被覆盖或删除，且此操作不可在本界面撤销。"
+                      : "。将以当前云端版本重新提交本机操作；并非立即完成上传。"}
+                    请再次确认。</p>
+                  <div className="button-row">
+                    <button className="primary-button" disabled={busy}
+                      onClick={()=>void resolvePersonalConflict()}>确认这个选择</button>
+                    <button className="secondary-button" disabled={busy}
+                      onClick={()=>setResolutionReview(null)}>取消</button>
+                  </div>
+                </div>}
+              </div>:<p className="privacy-note">此冲突涉及来源权限、日历容量、学习计划或已变更的授权，暂不可自动裁决；
+                请先检查本机数据或重新同步，不会擅自覆盖。</p>}
+            </article>;
+          })}
         </div>}
       </section>
       <div className="cloud-layout">

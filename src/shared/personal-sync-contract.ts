@@ -184,6 +184,34 @@ export interface PersonalSyncConflict {
 export interface PersonalSyncConflictRecord extends PersonalSyncConflict {
   createdAt:string;
   updatedAt:string;
+  /** Main-derived UI eligibility; never supplied to a resolution request. */
+  canResolve?:boolean;
+}
+
+/** Owner identity is never accepted from Renderer. The version and operation
+ * identity are compare-and-swap guards, not authorization. */
+export type PersonalSyncResolutionChoice="keep-local"|"use-remote";
+export interface PersonalSyncResolutionRequest {
+  entityType:PersonalSyncEntity;
+  entityId:string;
+  remoteVersion:number;
+  localOperationId:string;
+  choice:PersonalSyncResolutionChoice;
+}
+export function parsePersonalSyncResolutionRequest(value:unknown):PersonalSyncResolutionRequest {
+  const row=record(value);
+  exactKeys(row,["entityType","entityId","remoteVersion","localOperationId","choice"]);
+  if(row.entityType!=="personal-task"&&row.entityType!=="manual-calendar-event")
+    throw Error("Unsupported personal sync resolution entity");
+  if(row.choice!=="keep-local"&&row.choice!=="use-remote")
+    throw Error("Unsupported personal sync resolution choice");
+  if(!Number.isSafeInteger(row.remoteVersion)||(row.remoteVersion as number)<1)
+    throw Error("Invalid conflict version");
+  return {
+    entityType:row.entityType,entityId:requireUuid(row.entityId),
+    remoteVersion:row.remoteVersion as number,localOperationId:requireUuid(row.localOperationId),
+    choice:row.choice,
+  };
 }
 export interface PersonalSyncCandidate {
   entityType:PersonalSyncEntity;

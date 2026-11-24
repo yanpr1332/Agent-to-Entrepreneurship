@@ -9,7 +9,7 @@ import type { MailRecord } from "../shared/mail-model";
 import { requireUuid } from "../shared/cloud-model";
 import type {
   PersonalSyncChange, PersonalSyncConflict, PersonalSyncConflictRecord, PersonalSyncCandidate,
-  PersonalTaskSnapshot,
+  PersonalTaskSnapshot, PersonalSyncResolutionRequest,
 } from "../shared/personal-sync-contract";
 import {
   parseCreateTask, parseFocusCompletion, parseFocusTitleUpdate, parseTaskId, parseUpdateTask,
@@ -428,6 +428,42 @@ export class LocalStore {
         action:row.action,baseVersion:row.base_version,payload:row.payload,createdAt:row.created_at}));
   }
 
+  getPersonalSyncPendingIntent(ownerInput:unknown,entityInput:unknown):{
+    operationId:string;action:"upsert"|"delete";payload:string|null;
+  }|null{
+    const ownerId=syncOwnerId(ownerInput),entityId=parseTaskId(entityInput);
+    const row=this.db.prepare(
+      "SELECT operation_id,action,payload FROM personal_sync_outbox "+
+      "WHERE owner_id=? AND entity_type='personal-task' AND entity_id=?"
+    ).get(ownerId,entityId) as {
+      operation_id:string;action:"upsert"|"delete";payload:string|null;
+    }|undefined;
+    return row?{operationId:row.operation_id,action:row.action,payload:row.payload}:null;
+  }
+
+  /** Reconcile a newer local edit into the held conflict so the user can
+   * re-review it. Never change the already reviewed remote version here. */
+  refreshPersonalSyncConflictLocal(ownerInput:unknown,entityType:PersonalSyncConflict["entityType"],
+    entityInput:unknown,pending:{
+      operationId:string;action:"upsert"|"delete";payload:string|null;
+    }):void{
+    const ownerId=syncOwnerId(ownerInput),entityId=requireUuid(entityInput);
+    const operationId=requireUuid(pending.operationId);
+    if(entityType!=="personal-task"&&entityType!=="manual-calendar-event")
+      throw Error("Invalid conflict type");
+    if(pending.action!=="upsert"&&pending.action!=="delete")
+      throw Error("Invalid local conflict action");
+    if((pending.action==="upsert")!== (pending.payload!==null))
+      throw Error("Invalid local conflict snapshot");
+    this.db.prepare(`UPDATE personal_sync_conflicts
+      SET local_operation_id=?,local_action=?,local_payload=?,updated_at=?
+      WHERE owner_id=? AND entity_type=? AND entity_id=?
+        AND reason IN ('remote-change-while-local-pending','remote-delete-while-local-pending')
+        AND (local_operation_id IS NOT ? OR local_action IS NOT ? OR local_payload IS NOT ?)`)
+      .run(operationId,pending.action,pending.payload,new Date().toISOString(),
+        ownerId,entityType,entityId,operationId,pending.action,pending.payload);
+  }
+
   hasPendingPersonalSyncOperation(ownerInput:unknown,operationIdInput:unknown):boolean{
     const ownerId=syncOwnerId(ownerInput),operationId=requireUuid(operationIdInput);
     return Boolean(this.db.prepare(
@@ -671,7 +707,12 @@ export class LocalStore {
         const acceptedMail=this.db.prepare(
           "SELECT 1 AS found FROM mail_candidate_reviews WHERE task_id=? AND decision='accepted'"
         ).get(entityId);
-        if(task&&(!enrollment||task.source!==null||acceptedMail)){
+        // Multiple explicitly enrolled cloud owners share this canonical local
+        // task ID. Never let A's remote snapshot silently change B's local copy.
+        const anotherOwner=task&&Boolean(this.db.prepare(
+          "SELECT 1 FROM personal_task_sync_enrollment WHERE task_id=? AND owner_id<>? LIMIT 1"
+        ).get(entityId,ownerId));
+        if(task&&(!enrollment||task.source!==null||acceptedMail||anotherOwner)){
           const localPayload=task.source===null&&!acceptedMail?{
             title:task.title,description:task.description,dueDate:task.dueDate,
             priority:task.priority,completed:task.completed,
@@ -744,6 +785,7 @@ export class LocalStore {
             local_payload=excluded.local_payload,remote_version=excluded.remote_version,
             remote_payload=excluded.remote_payload,remote_deleted=excluded.remote_deleted,
             remote_updated_at=excluded.remote_updated_at,reason=excluded.reason,updated_at=excluded.updated_at
+          WHERE excluded.remote_version>=personal_sync_conflicts.remote_version
         `).run(ownerId,conflict.entityType,entityId,conflict.localOperationId,conflict.localAction,
           conflict.localPayload===null?null:JSON.stringify(conflict.localPayload),conflict.remoteVersion,
           conflict.remotePayload===null?null:JSON.stringify(conflict.remotePayload),
@@ -751,6 +793,138 @@ export class LocalStore {
       }
       this.db.exec("COMMIT");
     }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+
+
+  /** Read by primary key, not from a capped UI page. All callers provide the authenticated owner. */
+  getPersonalSyncConflict(ownerInput:unknown,entityType:PersonalSyncConflict["entityType"],
+    entityInput:unknown):PersonalSyncConflictRecord|null{
+    const ownerId=syncOwnerId(ownerInput),entityId=requireUuid(entityInput);
+    if(entityType!=="personal-task"&&entityType!=="manual-calendar-event")
+      throw Error("Invalid personal sync conflict type");
+    const row=this.db.prepare(`
+      SELECT entity_type,entity_id,local_operation_id,local_action,local_payload,remote_version,
+        remote_payload,remote_deleted,remote_updated_at,reason,created_at,updated_at
+      FROM personal_sync_conflicts WHERE owner_id=? AND entity_type=? AND entity_id=?
+    `).get(ownerId,entityType,entityId) as {
+      entity_type:PersonalSyncConflict["entityType"];entity_id:string;local_operation_id:string|null;
+      local_action:PersonalSyncConflict["localAction"];local_payload:string|null;remote_version:number;
+      remote_payload:string|null;remote_deleted:number;remote_updated_at:string;
+      reason:PersonalSyncConflict["reason"];created_at:string;updated_at:string;
+    }|undefined;
+    return row?{
+      entityType:row.entity_type,entityId:row.entity_id,localOperationId:row.local_operation_id,
+      localAction:row.local_action,localPayload:row.local_payload?JSON.parse(row.local_payload):null,
+      remoteVersion:row.remote_version,remotePayload:row.remote_payload?JSON.parse(row.remote_payload):null,
+      remoteDeleted:row.remote_deleted===1,remoteUpdatedAt:row.remote_updated_at,reason:row.reason,
+      createdAt:row.created_at,updatedAt:row.updated_at,
+    }:null;
+  }
+
+  /**
+   * Caller must hold the Main-process sync/resolution lock. Performs a strict
+   * compare-and-swap on both the reviewed remote version and current local intent.
+   */
+  resolvePersonalTaskConflict(ownerInput:unknown,input:PersonalSyncResolutionRequest,now=new Date()):void{
+    const ownerId=syncOwnerId(ownerInput),entityId=requireUuid(input.entityId);
+    if(input.entityType!=="personal-task")throw Error("Wrong personal sync conflict entity");
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const conflict=this.getPersonalSyncConflict(ownerId,"personal-task",entityId);
+      if(!conflict||conflict.remoteVersion!==input.remoteVersion||
+        conflict.localOperationId!==input.localOperationId||
+        (conflict.reason!=="remote-change-while-local-pending"&&
+          conflict.reason!=="remote-delete-while-local-pending"))
+        throw Error("Conflict changed; refresh and review the latest versions");
+      const pending=this.db.prepare(
+        "SELECT operation_id,action,payload FROM personal_sync_outbox "+
+        "WHERE owner_id=? AND entity_type='personal-task' AND entity_id=?"
+      ).get(ownerId,entityId) as {operation_id:string;action:"upsert"|"delete";payload:string|null}|undefined;
+      const task=this.findTask(entityId);
+      const mailDerived=Boolean(this.db.prepare(
+        "SELECT 1 FROM mail_candidate_reviews WHERE task_id=? AND decision='accepted'"
+      ).get(entityId));
+      const snapshot=task?JSON.stringify({
+        title:task.title,description:task.description,dueDate:task.dueDate,
+        priority:task.priority,completed:task.completed,
+      }):null;
+      if(!pending||pending.operation_id!==input.localOperationId||
+        pending.action!==conflict.localAction||
+        JSON.stringify(pending.payload?JSON.parse(pending.payload):null)!==
+          JSON.stringify(conflict.localPayload)||
+        (pending.action==="upsert"&&(!task||task.source!==null||mailDerived||snapshot!==pending.payload))||
+        (pending.action==="delete"&&task))
+        throw Error("Local task changed; refresh and review before resolving");
+      if(input.choice==="use-remote"){
+        const otherEnrollment=this.db.prepare(
+          "SELECT 1 FROM personal_task_sync_enrollment WHERE task_id=? AND owner_id<>? LIMIT 1"
+        ).get(entityId,ownerId);
+        const otherPending=this.db.prepare(
+          "SELECT 1 FROM personal_sync_outbox WHERE entity_type='personal-task' AND entity_id=? AND owner_id<>? LIMIT 1"
+        ).get(entityId,ownerId);
+        if(otherEnrollment||otherPending)
+          throw Error("This task is also linked to another account; remote overwrite is blocked");
+        if(conflict.remoteDeleted){
+          this.db.prepare("DELETE FROM tasks WHERE id=?").run(entityId);
+          this.db.prepare("DELETE FROM personal_task_sync_enrollment WHERE owner_id=? AND task_id=?")
+            .run(ownerId,entityId);
+        }else{
+          const remote=conflict.remotePayload as PersonalTaskSnapshot|null;
+          if(!remote||typeof remote.title!=="string")throw Error("Invalid remote task snapshot");
+          if(task){
+            this.db.prepare(`UPDATE tasks
+              SET title=?,description=?,due_date=?,priority=?,completed=?,updated_at=? WHERE id=?`)
+              .run(remote.title,remote.description,remote.dueDate,remote.priority,
+                remote.completed?1:0,conflict.remoteUpdatedAt,entityId);
+          }else{
+            this.db.prepare(`INSERT INTO tasks
+              (id,title,description,due_date,priority,completed,created_at,updated_at)
+              VALUES(?,?,?,?,?,?,?,?)`)
+              .run(entityId,remote.title,remote.description,remote.dueDate,remote.priority,
+                remote.completed?1:0,conflict.remoteUpdatedAt,conflict.remoteUpdatedAt);
+          }
+          this.db.prepare(`INSERT INTO personal_task_sync_enrollment
+            (owner_id,task_id,server_version,enabled_at) VALUES(?,?,?,?)
+            ON CONFLICT(owner_id,task_id) DO UPDATE SET server_version=excluded.server_version`)
+            .run(ownerId,entityId,conflict.remoteVersion,now.toISOString());
+        }
+        this.db.prepare(
+          "DELETE FROM personal_sync_outbox WHERE owner_id=? AND entity_type='personal-task' AND entity_id=?"
+        ).run(ownerId,entityId);
+      }else if(input.choice==="keep-local"){
+        if(pending.action==="delete"&&conflict.remoteDeleted){
+          // The requested deletion is already reflected on the server.
+          this.db.prepare(
+            "DELETE FROM personal_sync_outbox WHERE owner_id=? AND entity_type='personal-task' AND entity_id=?"
+          ).run(ownerId,entityId);
+        }else{
+          this.db.prepare(`UPDATE personal_sync_outbox SET operation_id=?,base_version=?,created_at=?
+            WHERE owner_id=? AND entity_type='personal-task' AND entity_id=?`)
+            .run(randomUUID(),conflict.remoteVersion,now.toISOString(),ownerId,entityId);
+          if(task)this.db.prepare(
+            "UPDATE personal_task_sync_enrollment SET server_version=? WHERE owner_id=? AND task_id=?"
+          ).run(conflict.remoteVersion,ownerId,entityId);
+        }
+      }else throw Error("Invalid conflict resolution choice");
+      const cleared=this.db.prepare(`
+        DELETE FROM personal_sync_conflicts
+        WHERE owner_id=? AND entity_type='personal-task' AND entity_id=?
+          AND remote_version=? AND local_operation_id=?
+      `).run(ownerId,entityId,input.remoteVersion,input.localOperationId);
+      if(cleared.changes!==1)throw Error("Conflict changed during resolution");
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+
+  /** A calendar decision lives in another SQLite file; remove its conflict only
+   * after the calendar decision commits. Compare-and-swap prevents stale clearing. */
+  clearPersonalSyncConflict(ownerInput:unknown,input:PersonalSyncResolutionRequest):void{
+    const ownerId=syncOwnerId(ownerInput),entityId=requireUuid(input.entityId);
+    const cleared=this.db.prepare(`
+      DELETE FROM personal_sync_conflicts WHERE owner_id=? AND entity_type=? AND entity_id=?
+        AND remote_version=? AND local_operation_id=?
+    `).run(ownerId,input.entityType,entityId,input.remoteVersion,input.localOperationId);
+    if(cleared.changes!==1)throw Error("Conflict changed during resolution");
   }
 
   listPersonalSyncConflicts(ownerInput:unknown,limit=100):PersonalSyncConflictRecord[]{

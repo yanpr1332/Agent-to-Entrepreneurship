@@ -126,7 +126,8 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - **002 第一阶段：已合并 PR #35，尚未联机**。个人任务与手动日历逐条显式授权、事务性 Outbox、pending 合并、版本基线及删除墓碑已落地。详见 [29](29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)。
 - **002B：已合并 PR #36，未部署**。owner-scoped 个人同步表/RLS、设备注册与撤销、幂等 apply、版本检查、按 owner 串行 cursor pull RPC，以及本机 per-owner deviceId/cursor 持久化已合并；没有真实 Supabase 项目/多设备验收。详见 [30](30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)。
 - **002C：已合并 PR #37**。任务库 schema v8、手动日历库 schema v5；owner-scoped enrollment/outbox、按 owner ack、跨账号独立删除墓碑；旧 ownerless 数据保留在隔离表，只有明确确认才重新授权存活的个人任务/手动事件。详见 [31](31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md)。
-- **002D：当前开发中**。Main-process 手动 push/ack + pull/SQLite 应用、逐条授权 UI、冲突记录与展示；任务库 schema v9 新增 owner-scoped conflict 表。每轮 push 最多读取 100 个任务和 100 个手动日历操作；pull 每页 200、最多 10 页。普通编辑轮换 operationId，ack 与并发 rebase 分离，上传前再次核验 pending 意图；pull 只有在本地数据和冲突记录完成后才推进 cursor。退出应用时等待/停止在途同步，未确认操作保留供重试。**不自动后台同步；没有冲突解决 UI、legacy 认领 UI、真实 Supabase 部署或双设备验收**。详见 [32](32_ALPHA_SYNC_002D_PUSH_PULL.md)。
+- **002D：已合并 PR #38，未进行真实云端验收**。Main-process 手动 push/ack + pull/SQLite 应用、逐条授权 UI、冲突记录与展示；任务库 schema v9 新增 owner-scoped conflict 表。每轮 push 最多读取 100 个任务和 100 个手动日历操作；pull 每页 200、最多 10 页。普通编辑轮换 operationId，ack 与并发 rebase 分离，上传前再次核验 pending 意图；pull 只有在本地数据和冲突记录完成后才推进 cursor。退出应用时等待/停止在途同步，未确认操作保留供重试。**不自动后台同步；002D 尚无冲突解决 UI、legacy 认领 UI、真实 Supabase 部署或双设备验收**。详见 [32](32_ALPHA_SYNC_002D_PUSH_PULL.md)。
+- **002E：当前开发中**。对个人任务/手动日历的本地 pending 与远端变更冲突提供版本 CAS + 二次确认、“保留本机”操作重基/“采用云端”本地更新；未解决冲突继续阻断上传和覆写，新远端变更仅更新冲突快照。来源不合格、日历容量、已确认学习计划占用仍保持阻塞。**Cursor 恢复、设备重新注册/撤销、legacy quarantine UI、远端 RLS/双设备测试均未完成**。详见 [33](33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md)。
 - **003：未开发**。团队消息仍使用轮询，Realtime + 断线补拉 + 撤权后拒绝 + 五账号联机尚无真实证据。
 - **Embedding：未开发**。ALPHA-KB-005 继续保留，待同步核心门槛后先做离线 PoC；不将 PR #32 的 AI 单段解释误算为本地 embedding。
 - 2026-11-25 内部 Alpha 以真实授权测试账号、RLS 反向测试、最小跨设备增量场景及已知风险记录为条件性目标；未验证项应明确阻塞，不能冒充完成。详见 [27 同步优先实施计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。

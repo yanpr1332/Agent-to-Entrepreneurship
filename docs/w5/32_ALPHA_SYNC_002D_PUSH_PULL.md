@@ -121,3 +121,8 @@ ALPHA-SYNC-002E：冲突解决与恢复 UX：
 5. 完成隔离 Supabase 项目部署审批后，再做真实 RLS、双账号/双设备、断网重连与撤权验收。
 
 完成 002E 前，冲突仍只保留与展示，不应称为完整个人双向同步 MVP。
+
+
+## 10. 后续 ALPHA-SYNC-002E 进度
+
+PR #38 已合并；在其基础上新增 [33 冲突解决实施说明](33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md)。002E 为本地待发送与云端变更冲突提供用户二次确认选择，仍未解决设备撤销/Cursor 恢复、legacy quarantine UI、跨数据库提交原子性和真实 RLS/双设备验收。

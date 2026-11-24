@@ -100,6 +100,90 @@ describe("ALPHA-SYNC-002D manual personal transfer orchestration",()=>{
     ]);
   });
 
+  it("holds pending conflicts from upload, tracks a newer remote version, then rebases only after choice",async()=>{
+    const {tasks,calendar}=setup();
+    const first:PersonalSyncChange={cursor:"1",entityType:"personal-task",entityId:ENTITY,version:1,
+      payload:{title:"Initial",description:"",dueDate:null,priority:"normal",completed:false},
+      deleted:false,updatedAt:"2026-11-24T01:00:00.000Z"};
+    tasks.applyRemotePersonalTaskChanges(OWNER,[first]);
+    tasks.updateTask({id:ENTITY,title:"Local edit"});
+    const pending=tasks.listPersonalSyncOutbox(OWNER)[0];
+    const second:PersonalSyncChange={...first,cursor:"2",version:2,
+      payload:{title:"Other device version 2",description:"",dueDate:null,
+        priority:"high",completed:false},
+      updatedAt:"2026-11-24T01:01:00.000Z"};
+    tasks.recordPersonalSyncConflicts(OWNER,tasks.applyRemotePersonalTaskChanges(OWNER,[second]));
+    const third:PersonalSyncChange={...second,cursor:"3",version:3,
+      payload:{title:"Other device version 3",description:"",dueDate:null,
+        priority:"high",completed:true},
+      updatedAt:"2026-11-24T01:02:00.000Z"};
+    const cloud={
+      currentUserId:vi.fn(()=>OWNER),
+      registerPersonalSyncDevice:vi.fn(async(deviceId:string)=>({ownerId:OWNER,deviceId,
+        createdAt:"2026-11-24T01:00:00.000Z",lastSeenAt:"2026-11-24T01:00:00.000Z"})),
+      applyPersonalSyncOperation:vi.fn(async()=>({status:"accepted" as const,serverVersion:4,cursor:"4"})),
+      pullPersonalSyncChanges:vi.fn(async(_device:string,cursor:string)=>cursor==="0"?
+        {changes:[third],nextCursor:"3",hasMore:false}:
+        {changes:[],nextCursor:cursor,hasMore:false}),
+    } as unknown as SharedCloudClient;
+    const service=new PersonalSyncService(cloud,tasks,calendar);
+    const result=await service.syncNow();
+    expect(cloud.applyPersonalSyncOperation).not.toHaveBeenCalled();
+    expect(result).toMatchObject({pushed:0,pulled:1,pending:1,conflicts:1,cursor:"3"});
+    expect(tasks.listTasks()).toMatchObject([{id:ENTITY,title:"Local edit"}]);
+    expect(tasks.getPersonalSyncConflict(OWNER,"personal-task",ENTITY)).toMatchObject({remoteVersion:3,remotePayload:{title:"Other device version 3"}});
+    expect(()=>service.resolveConflict({entityType:"personal-task",entityId:ENTITY,
+      remoteVersion:2,localOperationId:pending.operationId,choice:"keep-local"})).toThrow("changed");
+    expect(service.resolveConflict({entityType:"personal-task",entityId:ENTITY,
+      remoteVersion:3,localOperationId:pending.operationId,choice:"keep-local"}))
+      .toMatchObject({resolved:true,choice:"keep-local"});
+    expect(tasks.listPersonalSyncOutbox(OWNER)).toMatchObject([{baseVersion:3,action:"upsert"}]);
+    const secondRun=await service.syncNow();
+    expect(secondRun.pushed).toBe(1);
+    expect(cloud.applyPersonalSyncOperation).toHaveBeenCalledOnce();
+    expect(tasks.listPersonalSyncOutbox(OWNER)).toEqual([]);
+  });
+
+  it("refreshes pending edit identity and disables resolution after consent is revoked",async()=>{
+    const {tasks,calendar}=setup();
+    const first:PersonalSyncChange={cursor:"1",entityType:"personal-task",entityId:ENTITY,
+      version:1,payload:{title:"Base",description:"",dueDate:null,priority:"normal",completed:false},
+      deleted:false,updatedAt:"2026-11-24T01:00:00.000Z"};
+    tasks.applyRemotePersonalTaskChanges(OWNER,[first]);
+    tasks.updateTask({id:ENTITY,title:"First local draft"});
+    const change:PersonalSyncChange={...first,cursor:"2",version:2,
+      payload:{title:"Cloud edit",description:"",dueDate:null,priority:"normal",completed:true},
+      updatedAt:"2026-11-24T01:01:00.000Z"};
+    tasks.recordPersonalSyncConflicts(OWNER,tasks.applyRemotePersonalTaskChanges(OWNER,[change]));
+    const old=tasks.listPersonalSyncOutbox(OWNER)[0];
+    tasks.updateTask({id:ENTITY,title:"Revised local draft"});
+    const latest=tasks.listPersonalSyncOutbox(OWNER)[0];
+    expect(latest.operationId).not.toBe(old.operationId);
+    const cloud={
+      currentUserId:vi.fn(()=>OWNER),
+      registerPersonalSyncDevice:vi.fn(async(deviceId:string)=>({ownerId:OWNER,deviceId,
+        createdAt:"2026-11-24T01:00:00.000Z",lastSeenAt:"2026-11-24T01:00:00.000Z"})),
+      applyPersonalSyncOperation:vi.fn(async()=>({status:"accepted" as const,serverVersion:3,cursor:"3"})),
+      pullPersonalSyncChanges:vi.fn(async(_device:string,cursor:string)=>({
+        changes:cursor==="0"?[{...change,cursor:"3",version:3}]:[],
+        nextCursor:cursor==="0"?"3":cursor,hasMore:false,
+      })),
+    } as unknown as SharedCloudClient;
+    const service=new PersonalSyncService(cloud,tasks,calendar);
+    expect(service.listConflicts()).toMatchObject([{
+      localOperationId:latest.operationId,localPayload:{title:"Revised local draft"},
+      remoteVersion:2,canResolve:true,
+    }]);
+    expect(()=>service.resolveConflict({entityType:"personal-task",entityId:ENTITY,
+      remoteVersion:2,localOperationId:old.operationId,choice:"keep-local"})).toThrow("changed");
+    tasks.setTaskSyncEnabled(ENTITY,false,OWNER);
+    expect(service.listConflicts()).toMatchObject([{canResolve:false,remoteVersion:2}]);
+    await service.syncNow();
+    expect(cloud.applyPersonalSyncOperation).not.toHaveBeenCalled();
+    expect(service.listConflicts()).toMatchObject([{canResolve:false,remoteVersion:3}]);
+    expect(tasks.listTasks()).toMatchObject([{id:ENTITY,title:"Revised local draft"}]);
+  });
+
   it("does not upload a later queue item after the user revokes consent during an earlier request",async()=>{
     const {tasks,calendar}=setup();
     const first=tasks.createTask({title:"First queued task"});

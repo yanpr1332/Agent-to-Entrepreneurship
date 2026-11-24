@@ -295,6 +295,125 @@ describe("local-first SQLite store", () => {
     }finally{rmSync(directory,{recursive:true,force:true});}
   });
 
+  it("keeps a local edit only after an explicit version-guarded conflict decision",()=>{
+    const db=memory();
+    const task=db.createTask({title:"Before conflict"});
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    const first=db.listPersonalSyncOutbox(OWNER_A)[0];
+    db.acknowledgePersonalSyncOperation(OWNER_A,first.operationId,task.id,"upsert",1,null);
+    db.updateTask({id:task.id,title:"My local edit"});
+    const pending=db.listPersonalSyncOutbox(OWNER_A)[0];
+    const change:PersonalSyncChange={cursor:"2",entityType:"personal-task",entityId:task.id,
+      version:2,payload:{title:"Remote edit",description:"",dueDate:null,priority:"high",completed:false},
+      deleted:false,updatedAt:"2026-11-24T11:00:00.000Z"};
+    db.recordPersonalSyncConflicts(OWNER_A,db.applyRemotePersonalTaskChanges(OWNER_A,[change]));
+    const request={entityType:"personal-task" as const,entityId:task.id,
+      remoteVersion:2,localOperationId:pending.operationId,choice:"keep-local" as const};
+    expect(db.getPersonalSyncConflict(OWNER_B,"personal-task",task.id)).toBeNull();
+    expect(()=>db.resolvePersonalTaskConflict(OWNER_A,{...request,remoteVersion:3})).toThrow("changed");
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toMatchObject([{operationId:pending.operationId,baseVersion:1}]);
+    db.resolvePersonalTaskConflict(OWNER_A,request);
+    expect(db.listTasks()).toMatchObject([{id:task.id,title:"My local edit"}]);
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toMatchObject([{baseVersion:2,action:"upsert"}]);
+    expect(db.listPersonalSyncOutbox(OWNER_A)[0].operationId).not.toBe(pending.operationId);
+    expect(db.getPersonalSyncConflict(OWNER_A,"personal-task",task.id)).toBeNull();
+  });
+
+  it("adopts a reviewed remote task and cancels its local pending edit",()=>{
+    const db=memory();
+    const task=db.createTask({title:"Original"});
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    const first=db.listPersonalSyncOutbox(OWNER_A)[0];
+    db.acknowledgePersonalSyncOperation(OWNER_A,first.operationId,task.id,"upsert",1,null);
+    db.updateTask({id:task.id,title:"Local draft"});
+    const pending=db.listPersonalSyncOutbox(OWNER_A)[0];
+    const remote:PersonalSyncChange={cursor:"2",entityType:"personal-task",entityId:task.id,
+      version:2,payload:{title:"Remote decision",description:"Updated elsewhere",dueDate:null,
+        priority:"high",completed:true},
+      deleted:false,updatedAt:"2026-11-24T11:00:00.000Z"};
+    db.recordPersonalSyncConflicts(OWNER_A,db.applyRemotePersonalTaskChanges(OWNER_A,[remote]));
+    db.resolvePersonalTaskConflict(OWNER_A,{
+      entityType:"personal-task",entityId:task.id,remoteVersion:2,
+      localOperationId:pending.operationId,choice:"use-remote",
+    });
+    expect(db.listTasks()).toMatchObject([{id:task.id,title:"Remote decision",
+      description:"Updated elsewhere",completed:true}]);
+    expect(db.listPersonalSyncEnrollments(OWNER_A)).toMatchObject([{serverVersion:2}]);
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
+    expect(db.countPersonalSyncConflicts(OWNER_A)).toBe(0);
+  });
+
+  it("blocks a remote update that would mutate another owner's enrolled task",()=>{
+    const db=memory(),task=db.createTask({title:"Shared local copy"});
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    db.setTaskSyncEnabled(task.id,true,OWNER_B);
+    const a=db.listPersonalSyncOutbox(OWNER_A)[0],b=db.listPersonalSyncOutbox(OWNER_B)[0];
+    db.acknowledgePersonalSyncOperation(OWNER_A,a.operationId,task.id,"upsert",1,null);
+    db.acknowledgePersonalSyncOperation(OWNER_B,b.operationId,task.id,"upsert",1,null);
+    const change:PersonalSyncChange={cursor:"2",entityType:"personal-task",entityId:task.id,
+      version:2,payload:{title:"Account A change",description:"",dueDate:null,
+        priority:"normal",completed:true},
+      deleted:false,updatedAt:"2026-11-24T11:00:00.000Z"};
+    expect(db.applyRemotePersonalTaskChanges(OWNER_A,[change])).toMatchObject([
+      {entityId:task.id,reason:"local-entity-not-eligible",remoteVersion:2},
+    ]);
+    expect(db.listTasks()).toMatchObject([{id:task.id,title:"Shared local copy",completed:false}]);
+    expect(db.listPersonalSyncEnrollments(OWNER_B)).toMatchObject([{serverVersion:1}]);
+  });
+
+  it("handles remote deletion decisions without resurrecting data automatically",()=>{
+    const db=memory(),task=db.createTask({title:"Keep my task"});
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    const first=db.listPersonalSyncOutbox(OWNER_A)[0];
+    db.acknowledgePersonalSyncOperation(OWNER_A,first.operationId,task.id,"upsert",1,null);
+    db.updateTask({id:task.id,title:"Keep my task (edited)"});
+    const pending=db.listPersonalSyncOutbox(OWNER_A)[0];
+    const deletion:PersonalSyncChange={cursor:"2",entityType:"personal-task",entityId:task.id,
+      version:2,payload:null,deleted:true,updatedAt:"2026-11-24T11:00:00.000Z"};
+    db.recordPersonalSyncConflicts(OWNER_A,db.applyRemotePersonalTaskChanges(OWNER_A,[deletion]));
+    db.resolvePersonalTaskConflict(OWNER_A,{
+      entityType:"personal-task",entityId:task.id,remoteVersion:2,
+      localOperationId:pending.operationId,choice:"keep-local",
+    });
+    expect(db.listTasks()).toMatchObject([{title:"Keep my task (edited)"}]);
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toMatchObject([{action:"upsert",baseVersion:2}]);
+    const next=db.listPersonalSyncOutbox(OWNER_A)[0];
+    db.recordPersonalSyncConflicts(OWNER_A,[{
+      entityType:"personal-task",entityId:task.id,localOperationId:next.operationId,
+      localAction:"upsert",localPayload:JSON.parse(next.payload!),
+      remoteVersion:3,remotePayload:null,remoteDeleted:true,
+      remoteUpdatedAt:"2026-11-24T11:05:00.000Z",
+      reason:"remote-delete-while-local-pending",
+    }]);
+    db.resolvePersonalTaskConflict(OWNER_A,{
+      entityType:"personal-task",entityId:task.id,remoteVersion:3,
+      localOperationId:next.operationId,choice:"use-remote",
+    });
+    expect(db.listTasks()).toEqual([]);
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
+  });
+
+  it("rejects stale local conflict intents and cross-account destructive adoption",()=>{
+    const db=memory(),task=db.createTask({title:"Shared consent"});
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    db.setTaskSyncEnabled(task.id,true,OWNER_B);
+    const a=db.listPersonalSyncOutbox(OWNER_A)[0],b=db.listPersonalSyncOutbox(OWNER_B)[0];
+    db.acknowledgePersonalSyncOperation(OWNER_A,a.operationId,task.id,"upsert",1,null);
+    db.acknowledgePersonalSyncOperation(OWNER_B,b.operationId,task.id,"upsert",1,null);
+    db.updateTask({id:task.id,title:"A edits"});
+    const pending=db.listPersonalSyncOutbox(OWNER_A)[0];
+    const conflict:PersonalSyncChange={cursor:"2",entityType:"personal-task",entityId:task.id,
+      version:2,payload:{title:"Remote version",description:"",dueDate:null,priority:"normal",completed:false},
+      deleted:false,updatedAt:"2026-11-24T11:00:00.000Z"};
+    db.recordPersonalSyncConflicts(OWNER_A,db.applyRemotePersonalTaskChanges(OWNER_A,[conflict]));
+    const request={entityType:"personal-task" as const,entityId:task.id,
+      remoteVersion:2,localOperationId:pending.operationId,choice:"use-remote" as const};
+    expect(()=>db.resolvePersonalTaskConflict(OWNER_A,request)).toThrow("another account");
+    db.updateTask({id:task.id,title:"Another local edit"});
+    expect(()=>db.resolvePersonalTaskConflict(OWNER_A,request)).toThrow("Local task changed");
+    expect(db.getPersonalSyncConflict(OWNER_A,"personal-task",task.id)?.remoteVersion).toBe(2);
+  });
+
   it("creates, updates and deletes personal tasks", () => {
     const db = memory();
     const task = db.createTask({ title: "  阅读论文 ", dueDate: "2026-11-25", priority: "high" });

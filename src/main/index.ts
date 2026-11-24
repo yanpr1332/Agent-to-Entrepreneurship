@@ -16,6 +16,7 @@ import { CanvasCredentialVault } from "./connectors/canvas-credentials";
 import { CanvasSyncService } from "./connectors/canvas-sync";
 import { SharedCloudClient } from "./cloud/supabase-client";
 import { PersonalSyncService } from "./personal-sync";
+import { parsePersonalSyncResolutionRequest } from "../shared/personal-sync-contract";
 import { parseCanvasCourseId, parseCanvasPersonalTokenInput } from "../shared/canvas-model";
 import { CampusMailStore } from "./connectors/mail-store";
 import { CampusMailVault } from "./connectors/mail-vault";
@@ -702,7 +703,21 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.cloudPersonalSyncConflicts, (event) => {
     requireTrustedSender(event);
-    return localStore().listPersonalSyncConflicts(sharedCloud.currentUserId());
+    return personalSyncService().listConflicts();
+  });
+  handle(IPC_CHANNELS.cloudResolvePersonalSyncConflict, async (event,input:unknown) => {
+    requireTrustedSender(event);
+    const choice=parsePersonalSyncResolutionRequest(input);
+    const ownerId=sharedCloud.currentUserId();
+    const service=personalSyncService();
+    if(service.hasInFlightRun())throw Error("Personal sync is in progress; retry when idle");
+    // Destructive local adoption requires an up-to-date, fully drained remote
+    // pull. Keep-local is also refreshed to avoid rebase on a stale version.
+    const state=await service.syncNow();
+    if(state.hasMore)throw Error("More remote changes remain; sync again before resolving");
+    if(sharedCloud.currentUserId()!==ownerId)
+      throw Error("Cloud account changed during conflict review");
+    return service.resolveConflict(choice);
   });
 }
 
