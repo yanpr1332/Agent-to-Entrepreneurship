@@ -128,8 +128,7 @@ export class WorkspaceHistoryStore {
   counts(ownerInput:unknown,workspaceInput:unknown):{messages:number;tasks:number}{
     const id=owner(ownerInput),workspace=requireUuid(workspaceInput);
     const rows=this.db.prepare(`SELECT kind,count(*) AS count FROM records
-      WHERE owner_id=? AND workspace_id=? GROUP BY kind`).all(id,workspace)
-      as Array<{kind:string;count:number}>;
+      WHERE owner_id=? AND workspace_id=? GROUP BY kind`).all(id,workspace) as Array<{kind:string;count:number}>;
     return {messages:rows.find(x=>x.kind==="message")?.count??0,
       tasks:rows.find(x=>x.kind==="task")?.count??0};
   }
