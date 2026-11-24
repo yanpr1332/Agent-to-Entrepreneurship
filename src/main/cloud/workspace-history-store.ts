@@ -99,6 +99,20 @@ export class WorkspaceHistoryStore {
         this.db.exec("COMMIT");
       }catch(error){this.db.exec("ROLLBACK");this.db.close();throw error;}
     }
+    // A Keychain/DPAPI change can make a previously encrypted database
+    // unreadable. Detect it before any cache pages reach the renderer. Do NOT
+    // silently replace ciphertext with a fresh empty database: Main instead
+    // falls back to authenticated REST and preserves the unreadable original.
+    try{
+      for(const table of ["records","checkpoint_records"] as const){
+        const sample=this.db.prepare(`SELECT json FROM ${table} LIMIT 1`)
+          .get() as {json:string}|undefined;
+        if(sample)JSON.parse(this.cipher.decrypt(sample.json));
+      }
+    }catch{
+      this.db.close();
+      throw Error("Protected team history is not readable with the current OS key");
+    }
   }
 
   getCursor(ownerInput:unknown,workspaceInput:unknown):string{
