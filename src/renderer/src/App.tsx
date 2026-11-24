@@ -504,32 +504,56 @@ export default function App() {
           {error && <div className="error-banner" role="alert"><strong>操作未完成：</strong> {error}<button onClick={() => setError("")}>关闭</button></div>}
 
           {page === "overview" && (
-            <>
-              <div className="welcome-row"><div><div className="eyebrow">YOUR WORKSPACE</div><h1>把重要的事情，<em>一步步做好。</em></h1><p>日程、任务与专注记录已接入本地数据库，重启后可以恢复。</p></div><div className="date-card"><span>当前版本</span><strong>{version}</strong><small>内部开发原型</small></div></div>
-              <div className="status-banner"><div className="status-icon">✦</div><div className="status-copy"><strong>{runtime === "connected" ? "本地工作空间已连接" : "正在检查本地工作空间"}</strong><span>个人任务与专注记录仅存储在本机。Canvas 和邮箱为开发验证版；云端协作 PoC 需配置测试项目并完成真实权限验收。</span></div>
-                <div className="runtime-status"><i className={runtime === "connected" ? "online" : runtime === "unavailable" ? "offline" : ""} />{runtime === "connected" ? "SQLite 已连接" : runtime === "checking" ? "检查中" : "不可用"}</div>
+            <section className="overview-workspace">
+              <div className="overview-intro">
+                <div className="eyebrow">YOUR DAY, YOUR PACE</div>
+                <h1>今天，先做好一件事。</h1>
+                <p>让任务有序，让注意力回到当下。</p>
+                <div className="overview-actions">
+                  <button className="primary-button" onClick={openNewTask}>＋ 添加任务</button>
+                  <button className="secondary-button" onClick={() => setPage("focus")}>◷ 开始专注</button>
+                  <button className="text-button" onClick={() => { setPage("calendar"); setFilter("all"); }}>打开日历 →</button>
+                </div>
               </div>
-              <div className="metric-grid">
-                <div className="metric-card"><span>今日待办</span><strong>{todayTasks.length}</strong><small>今天截止且未完成</small></div>
-                <div className="metric-card"><span>全部待办</span><strong>{pendingTasks.length}</strong><small>未完成的个人任务</small></div>
-                <div className="metric-card"><span>专注分钟</span><strong>{summary.totalMinutes}</strong><small>累计专注记录</small></div>
-                <div className="metric-card"><span>专注积分</span><strong>{summary.points}</strong><small>已完成专注获得</small></div>
-              </div>
-              <div className="section-heading"><div><div className="eyebrow">READY TO USE</div><h2>马上开始</h2></div></div>
-              <div className="quick-grid"><button className="quick-card" onClick={() => setPage("calendar")}><span>▦</span><strong>管理我的任务</strong><small>创建、编辑、完成和查看日历</small></button><button className="quick-card" onClick={() => setPage("focus")}><span>◷</span><strong>开始专注</strong><small>计时、历史和积分</small></button></div>
-              <div className="bottom-grid">
-                <section className="panel"><div className="panel-heading"><div><div className="eyebrow">UP NEXT</div><h2>接下来的任务</h2></div><button className="text-button" onClick={() => { setPage("calendar"); setFilter("all"); }}>查看全部 →</button></div>
-                  {nextTasks.length ? <ul className="compact-task-list">{nextTasks.map((task) => <li key={task.id}><span className="task-dot" /><div><strong>{task.title}</strong><small>{formatDueDate(task.dueDate)}</small></div><button onClick={() => editTask(task)}>编辑</button></li>)}</ul> : <p className="empty-state">暂无待办。创建第一条任务，开始整理今天。</p>}
+
+              <div className="overview-main-grid">
+                <section className="panel overview-today">
+                  <div className="panel-heading">
+                    <div><div className="eyebrow">TODAY · {today}</div><h2>今日待办</h2></div>
+                    <span className="overview-count">{todayTasks.length} 项</span>
+                  </div>
+                  {todayTasks.length ? <ul className="overview-task-list">{todayTasks.slice(0,6).map(task => (
+                    <li key={task.id}>
+                      <span className="overview-task-priority">{task.priority === "high" ? "!" : "·"}</span>
+                      <div className="overview-task-copy"><strong>{task.title}</strong><small>{task.priority === "high" ? "高优先级" : task.priority === "low" ? "低优先级" : "普通任务"}</small></div>
+                      <button className="small-button" onClick={() => editTask(task)}>查看</button>
+                    </li>
+                  ))}</ul> : <div className="overview-empty"><strong>今天暂时没有安排。</strong><p>可以把想完成的事情记下来，或留一点自由时间。</p><button className="text-button" onClick={openNewTask}>创建第一项任务 →</button></div>}
+                  <div className="overview-task-footer"><button className="text-button" onClick={() => {setPage("calendar");setFilter("day");}}>查看今天日历 →</button></div>
                 </section>
-                <section className="panel runtime-panel"><div className="eyebrow">SYSTEM STATUS</div><h2>运行状态</h2>
-                  <div className="runtime-line"><span>Electron / 本地 SQLite</span><strong>{runtime === "connected" ? "可用" : runtime === "checking" ? "检查中" : "异常"}</strong></div>
-                  <div className="runtime-line"><span>个人任务与日历</span><strong>{runtime === "connected" ? "可用" : "未连接"}</strong></div>
-                  <div className="runtime-line"><span>云端协作</span><strong className="not-ready">候选 PoC，需配置测试云</strong></div>
-                  <div className="runtime-line"><span>Canvas 与邮箱</span><strong>开发验证版</strong></div>
-                  <p className="privacy-note">个人任务与专注数据不会自动上传云端。</p>
-                </section>
+
+                <aside className="overview-side-column">
+                  <section className="panel overview-focus-card">
+                    <div className="eyebrow">FOCUS, GENTLY</div>
+                    <h2>专注记录</h2>
+                    <div className="overview-focus-number">{summary.totalMinutes}<span>分钟</span></div>
+                    <p>累计专注时间</p>
+                    <div className="overview-focus-meta"><span>{summary.completedSessions} 次完成</span><span>{summary.points} 积分</span></div>
+                    <button className="primary-button full-width" onClick={() => setPage("focus")}>进入专注计时</button>
+                  </section>
+                  <section className="panel overview-next">
+                    <div className="panel-heading"><div><div className="eyebrow">UP NEXT</div><h2>其他待办</h2></div><button className="text-button" onClick={() => {setPage("calendar");setFilter("all");}}>全部 →</button></div>
+                    {nextTasks.length ? <ul className="overview-next-list">{nextTasks.slice(0,4).map(task => <li key={task.id}><span className="task-dot"/><div><strong>{task.title}</strong><small>{formatDueDate(task.dueDate)}</small></div></li>)}</ul> : <p className="empty-state">目前没有其他待办。</p>}
+                  </section>
+                </aside>
               </div>
-            </>
+
+              <div className="overview-bottom-strip">
+                <div className="overview-status-dot"><i className={runtime === "connected" ? "online" : runtime === "unavailable" ? "offline" : ""}/></div>
+                <div><strong>{runtime === "connected" ? "本地空间运行正常" : runtime === "checking" ? "正在连接本地空间" : "本地空间暂不可用"}</strong><span>任务与专注记录保存在本机 · {runtime === "connected" ? "SQLite 已连接" : runtime === "checking" ? "检查中" : "连接异常"}</span></div>
+                <button className="text-button" onClick={() => setPage("connectors")}>管理数据接入 →</button>
+              </div>
+            </section>
           )}
 
           {page === "calendar" && (
