@@ -95,7 +95,7 @@ describe("source-cited local knowledge graph v3",()=>{
       question:"What is discussed?",answer:"Biology."});
     first.close();
     const old=new DatabaseSync(path);
-    old.exec(`DROP TABLE knowledge_graph_edges; DROP TABLE knowledge_graph_nodes; PRAGMA user_version=2;`);
+    old.exec(`DROP TABLE knowledge_vectors; DROP TABLE knowledge_vector_config; DROP TABLE knowledge_graph_edges; DROP TABLE knowledge_graph_nodes; PRAGMA user_version=2;`);
     old.close();
     const folder=await backupBeforeMigration(dir,"ate-knowledge.sqlite",3);
     expect(folder).toBeTruthy();

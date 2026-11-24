@@ -4,7 +4,7 @@ import SafeKnowledgePreview from "./SafeKnowledgePreview";
 import KnowledgeAIHelper from "./KnowledgeAIHelper";
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage,
+  KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage, KnowledgeEmbeddingStatus,
 } from "../../shared/knowledge-model";
 
 function detail(error:unknown):string{
@@ -19,6 +19,7 @@ export default function KnowledgeBase(){
   const [passage,setPassage]=useState<KnowledgePassage|null>(null);
   const [query,setQuery]=useState("");
   const [results,setResults]=useState<KnowledgeSearchHit[]>([]);
+  const [embeddingStatus,setEmbeddingStatus]=useState<KnowledgeEmbeddingStatus|null>(null);
   const [cards,setCards]=useState<KnowledgeReviewCard[]>([]);
   const [progress,setProgress]=useState<ReviewProgress>(emptyProgress);
   const [sourceOrdinal,setSourceOrdinal]=useState<number|null>(null);
@@ -32,21 +33,21 @@ export default function KnowledgeBase(){
   const [readingMode,setReadingMode]=useState<"preview"|"source">("preview");
 
   async function reload():Promise<void>{
-    const [docs,items,summary]=await Promise.all([
+    const [docs,items,summary,embeddings]=await Promise.all([
       window.desktop.knowledge.documents(),window.desktop.knowledge.cards(),
-      window.desktop.knowledge.progress(),
+      window.desktop.knowledge.progress(),window.desktop.knowledge.embeddingStatus(),
     ]);
-    setDocuments(docs);setCards(items);setProgress(summary);
+    setDocuments(docs);setCards(items);setProgress(summary);setEmbeddingStatus(embeddings);
   }
 
   useEffect(()=>{
     let active=true;
     void Promise.all([
       window.desktop.knowledge.documents(),window.desktop.knowledge.cards(),
-      window.desktop.knowledge.progress(),
-    ]).then(([docs,items,summary])=>{
+      window.desktop.knowledge.progress(),window.desktop.knowledge.embeddingStatus(),
+    ]).then(([docs,items,summary,embeddings])=>{
       if(!active)return;
-      setDocuments(docs);setCards(items);setProgress(summary);
+      setDocuments(docs);setCards(items);setProgress(summary);setEmbeddingStatus(embeddings);
     }).catch(reason=>{if(active)setError(detail(reason));});
     return ()=>{active=false;};
   },[]);
@@ -198,12 +199,18 @@ export default function KnowledgeBase(){
           <button className="secondary-button" disabled={busy} type="submit">本地搜索</button>
         </div>
       </form>
+      <p className="privacy-note" role="status">
+        {embeddingStatus?.model
+          ? "本机向量索引："+embeddingStatus.indexed+"/"+embeddingStatus.total+
+            " 个原文片段。实际模型推理尚未接入，当前搜索仍只使用精确与容错匹配。"
+          : "当前搜索使用本机精确及容错匹配。语义模型尚未安装或启用，不会自动下载模型或上传原文。"}
+      </p>
       {results.length>0&&<section className="panel kb-results">
         <div className="eyebrow">TRACEABLE EXCERPTS</div><h2>搜索结果 · {results.length} 条</h2>
         <ul className="kb-result-list">{results.map(hit=><li
           key={`${hit.documentId}:${hit.ordinal}`}>
           <button className="kb-source-link" disabled={busy}
-            onClick={()=>void openHit(hit)}>{hit.documentTitle} · {hit.matchType==="fuzzy"?"容错匹配 · ":""}{hit.pageNumber?`PDF 第 ${hit.pageNumber} 页 · `:""}原文片段 #{hit.ordinal+1} · v{hit.documentRevision}</button>
+            onClick={()=>void openHit(hit)}>{hit.documentTitle} · {hit.matchType==="fuzzy"?"容错匹配 · ":hit.matchType==="semantic"?"本地语义 · ":""}{hit.pageNumber?`PDF 第 ${hit.pageNumber} 页 · `:""}原文片段 #{hit.ordinal+1} · v{hit.documentRevision}</button>
           <p>{hit.excerpt}</p>
         </li>)}</ul>
       </section>}

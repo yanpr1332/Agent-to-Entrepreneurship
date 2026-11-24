@@ -449,6 +449,10 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return knowledge().deleteDocument(id);
   });
+  handle(IPC_CHANNELS.knowledgeEmbeddingStatus, event => {
+    requireTrustedSender(event);
+    return knowledge().embeddingStatus();
+  });
   handle(IPC_CHANNELS.knowledgeSearch, (event,query:unknown) => {
     requireTrustedSender(event);
     return knowledge().search(query);
@@ -902,7 +906,7 @@ app.whenReady().then(async () => {
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
     await backupBeforeMigration(app.getPath("userData"),"study-anchor-tasks.sqlite",10);
-    await backupBeforeMigration(app.getPath("userData"),"study-anchor-knowledge.sqlite",3);
+    await backupBeforeMigration(app.getPath("userData"),"study-anchor-knowledge.sqlite",4);
     await backupBeforeMigration(app.getPath("userData"),"study-anchor-calendar.sqlite",5);
     await backupBeforeMigration(app.getPath("userData"),"study-anchor-planning.sqlite",2);
     store = new LocalStore(join(app.getPath("userData"), "study-anchor-tasks.sqlite"));

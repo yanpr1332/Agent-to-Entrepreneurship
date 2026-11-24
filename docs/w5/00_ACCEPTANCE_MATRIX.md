@@ -114,10 +114,10 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - 单测与 CI 结果以 PR #32 的**最新提交检查**为准。真人 Windows/macOS GUI 与自愿的真 API 计费验收**尚未执行**。
 - 详细本机测试用例见 [25](25_ALPHA_KB_004_AI_SOURCE_EXPLANATION.md)。
 
-### ALPHA-KB-005 本地三路检索（后续规划，未实现）
+### ALPHA-KB-005 本地三路检索（005A 向量索引基础开发中）
 
 - 用户希望继续演进为**精确搜索 + 模糊搜索 + 本地向量语义搜索**，已记录在 Backlog 与 [26 选型及工程难度评估](26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md)。
-- **当前未安装 embedding 模型、未建立向量索引、未运行 CPU/内存性能测试**。后续分 PoC、增量向量索引、三路结果合并，均须独立 CI 与真实 Windows/macOS GUI 验收。
+- **当前正在建设 SQLite v4 向量索引和三路 RRF 融合底层**，但**没有安装 Embedding 模型，也未运行真实 CPU/内存/跨语言召回测评**。测试中使用合成向量 Provider 仅验证流程。完整范围见 [43](43_ALPHA_KB_005A_VECTOR_FOUNDATION.md)。后续分 PoC、增量向量索引、三路结果合并，均须独立 CI 与真实 Windows/macOS GUI 验收。
 - 不把 PR #32 的可选 OpenAI 单段解释误称为全库本地语义检索。
 
 ### ALPHA-SYNC-001/002/003 同步优先队列（2026-11-24，持续实施）
@@ -135,7 +135,7 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - **002G：PR #43 已合并，真实云端/跨设备验收未做**。任务库 v10 持久拉取页检查点，在两库/冲突记录处理中断时下次手动同步先重放并原子推进 Cursor；数据损坏或账号/设备不符时失败关闭，恢复当轮先不上传本地 Outbox。仍无跨库全局事务或损坏 Cursor 自动重建。详见 [37](37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md)。
 - **002H：PR #44 已合并，隔离项目 RPC 未部署，真实验收未做**。当前账号只读设备状态/Cursor 查询，损坏本地状态/待恢复 Pull 检查点先阻断；精确 operationId + 完整请求匹配的云端回执查验，仅已接受项目本地 ACK，未知/冲突/不匹配不清空；额外后端 SQL 需明确授权人工部署。无自动 Cursor 重建/数据回写。详见 [38](38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
 - **003A：PR #45 已合并（真实 Supabase 未验收）**。Main 用户 JWT WebSocket 仅推送消息/任务刷新提示；重新成员验证、REST/RLS 每 10/30 秒补拉最新 100 条、切换 workspace 防交叉、撤权时清空共享 UI；publication SQL 未部署，持久游标/历史窗口外补拉和五账号联机仍阻塞。详见 [39](39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
-- **Embedding：未开发**。ALPHA-KB-005 继续保留，待同步核心门槛后先做离线 PoC；不将 PR #32 的 AI 单段解释误算为本地 embedding。
+- **Embedding：005A 底层开发中**。已引入版本化向量 SQLite v4 和精确/模糊/语义候选融合、测试专用合成向量；**没有真实 ONNX 权重/运行时/模型安装 UI，正式语义检索不可用**。不把 PR #32 的可选 AI 单段解释冒充本地模型。
 - **003B：PR #46 已合并（真实 Supabase 未部署/未验收）**。新增事务提交顺序的 workspace 日志、历史既有行回填、消息/任务变更及删除墓碑、严格协议 Cursor 校验、独立 owner+project SQLite 原子补拉及本机历史分页。每轮最多 20×100 条；缺新 RPC（404）退回 003A 窗口。新增 SQLite **明文缓存敏感团队内容**，须评估磁盘留存与撤权清理；SQL 与 RLS 真机正反向尚无证据。详见 [40](40_ALPHA_SYNC_003B_DURABLE_HISTORY.md)。
 - **003C：PR #49 已合并（未部署、未做真实五账号验收）**。Owner 显式检查点和服务端有限日志裁剪、成员鉴权分页 RPC、过期 Cursor 严格协议、本机 SQLite v2 暂存与全量原子替换、跨重启续传及撤权删除正式/暂存缓存；没有自动压缩或生产保留策略，明文本机文件不保证安全擦除。详见 [41](41_ALPHA_SYNC_003C_CHECKPOINT_RECOVERY.md)。
 - **003D：独立开发 PR（经用户允许与 PR #48 分开并行；真实 OS Keychain/DPAPI 未验收）**。团队历史 SQLite v3 的正式 JSON/暂存 checkpoint 由 Electron safeStorage 加密；旧 v1/v2 原文事务升级；账号退出/切换与二次确认清理当前云账号的团队缓存并作最佳努力 WAL 截断。旧明文库、迁移备份、旧 WAL/磁盘页及文件系统快照仍可能保存原文，**不构成物理安全擦除**。详见 [42](42_ALPHA_SYNC_003D_LOCAL_HISTORY_PRIVACY.md)。

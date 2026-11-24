@@ -28,7 +28,7 @@ import type {
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage,
+  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus,
 } from "../shared/knowledge-model";
 
 import type {
@@ -244,6 +244,7 @@ const desktopApi = Object.freeze({
     importFile: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeImport) as Promise<{document:KnowledgeDocument;changed:boolean}|null>,
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeDelete,id) as Promise<boolean>,
     search: (query: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeSearch,query) as Promise<KnowledgeSearchHit[]>,
+    embeddingStatus: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeEmbeddingStatus) as Promise<KnowledgeEmbeddingStatus>,
     cards: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCards) as Promise<KnowledgeReviewCard[]>,
     createCard: (input: ReviewCardInput) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCreateCard,input) as Promise<KnowledgeReviewCard>,
     removeCard: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeRemoveCard,id) as Promise<boolean>,

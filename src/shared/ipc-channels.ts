@@ -14,6 +14,7 @@ export const IPC_CHANNELS = {
   knowledgeImport: "knowledge:import",
   knowledgeDelete: "knowledge:delete",
   knowledgeSearch: "knowledge:search",
+  knowledgeEmbeddingStatus: "knowledge:embedding-status",
   knowledgeCards: "knowledge:cards",
   knowledgeCreateCard: "knowledge:create-card",
   knowledgeRemoveCard: "knowledge:remove-card",
