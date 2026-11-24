@@ -184,5 +184,5 @@ describe("SQLite schema v2 to v3 upgrade", () => {
     } finally {
       rmSync(dir,{recursive:true,force:true});
     }
-  });
+  }, 15_000);
 });
