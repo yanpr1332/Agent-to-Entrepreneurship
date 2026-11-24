@@ -97,6 +97,7 @@ export const IPC_CHANNELS = {
   cloudMarkTask: "cloud:mark-task",
   cloudWorkspaceSnapshot: "cloud:workspace-snapshot",
   cloudWorkspaceHistoryOlder: "cloud:workspace-history-older",
+  cloudClearTeamHistory: "cloud:clear-team-history",
   cloudWatchWorkspace: "cloud:watch-workspace",
   cloudStopWorkspaceWatch: "cloud:stop-workspace-watch",
   cloudWorkspaceLiveUpdated: "cloud:workspace-live-updated",
