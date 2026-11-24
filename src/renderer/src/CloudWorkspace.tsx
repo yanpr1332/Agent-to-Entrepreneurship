@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type {
   CloudSessionStatus, SharedMember, SharedMessage, SharedTask, SharedWorkspace,
-  type WorkspaceLiveUpdate,
+  WorkspaceLiveUpdate,
 } from "../../shared/cloud-model";
 import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncConflictReason, PersonalSyncRunResult,
