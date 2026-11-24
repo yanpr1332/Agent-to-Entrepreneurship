@@ -23,7 +23,12 @@ export class WorkspaceHistoryStore {
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=3000");
     if(path!==":memory:")this.db.exec("PRAGMA journal_mode=WAL");
     const version=(this.db.prepare("PRAGMA user_version").get() as {user_version:number}).user_version;
-    if(version>1)throw Error("Workspace history database was created by a newer app");
+    if(version>1){
+      // Windows holds an exclusive file handle until DatabaseSync is closed.
+      // Refusing to downgrade must not strand the file lock.
+      this.db.close();
+      throw Error("Workspace history database was created by a newer app");
+    }
     if(version===0)this.db.exec(`
       BEGIN IMMEDIATE;
       CREATE TABLE progress(
