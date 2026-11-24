@@ -850,3 +850,47 @@ input:hover:not(:disabled),textarea:hover:not(:disabled),select:hover:not(:disab
 .kb-review-list li{padding:12px 0;line-height:1.6}
 @media(max-width:1200px){.kb-layout{grid-template-columns:minmax(0,1fr)}.kb-layout>.kb-library{position:static}}
 @media(max-width:760px){.kb-page>.page-heading{align-items:flex-start;flex-direction:column}.kb-toolbar{align-items:flex-start}.kb-toolbar .button-row{width:100%}.kb-toolbar .button-row button{flex:1}.kb-search-row{flex-direction:column;align-items:stretch}.kb-search-row button{width:100%}.kb-layout>.panel{padding:17px}.kb-review-card{padding:18px}.kb-progress{display:grid;grid-template-columns:1fr 1fr}.kb-progress span:last-child{grid-column:1/-1}}
+
+
+/* PLANNER UI · deliberate scheduling workspace */
+.planner-page{gap:20px}
+.planner-page>.page-heading{align-items:flex-end}
+.planner-page>.page-heading h1{letter-spacing:-1px}
+.planner-page>.page-heading p{line-height:1.75}
+.planner-page>.connector-warning{padding:15px 17px;border-radius:11px;line-height:1.8;font-size:11px}
+.planner-layout{grid-template-columns:minmax(270px,.72fr) minmax(0,1.28fr);gap:16px}
+.planner-layout>.panel{padding:22px;min-width:0}
+.planner-layout>.panel h2{font-size:17px;letter-spacing:-.3px;margin:8px 0 14px}
+.planner-form{gap:14px;margin-top:18px}
+.planner-form label{font-size:11px;gap:7px}
+.planner-form input,.planner-form select,.planner-edit-row input{padding:11px 12px;border-radius:9px}
+.planner-form .full-width{margin-top:3px;padding:12px;border-radius:10px}
+.planner-layout .privacy-note{line-height:1.75}
+.planner-proposal>.panel-heading{align-items:flex-start;gap:12px}
+.planner-proposal>.panel-heading h2{margin-bottom:0}
+.planner-candidates{max-height:650px;margin:14px 0}
+.planner-candidate{padding:16px 0}
+.planner-select{gap:11px;align-items:flex-start}
+.planner-select input{margin-top:3px;width:16px;height:16px}
+.planner-select strong{font-size:13px;line-height:1.6}
+.planner-candidate p{font-size:11px;line-height:1.75;margin:8px 0 12px}
+.planner-edit-row{gap:10px}
+.planner-edit-row label{min-width:120px;gap:7px}
+.planner-edit-row .muted-tag{align-self:center;margin:0}
+.planner-proposal>.primary-button{width:100%;padding:12px;border-radius:10px;margin-top:8px}
+.planner-skipped{padding:12px;border:1px solid var(--line);border-radius:9px;line-height:1.65}
+.planner-skipped summary{padding:2px;cursor:pointer}
+.planner-skipped ul{padding-left:18px}
+.planner-skipped li{padding:6px 0}
+.ai-planning-section{padding:23px;gap:13px}
+.ai-planning-section h2{font-size:18px;letter-spacing:-.4px;margin:5px 0}
+.ai-planning-section>.privacy-note{line-height:1.75}
+.ai-task-picker{max-height:400px;padding:3px 12px;border:1px solid var(--line);border-radius:11px;background:var(--surface)}
+.ai-task-picker>strong{padding:10px 0 4px;line-height:1.6}
+.ai-task-picker label{padding:11px 0;line-height:1.6}
+.ai-task-picker small{line-height:1.5}
+.ai-planning-section>.secondary-button{padding:12px 16px;border-radius:10px}
+.ai-preview{padding:18px;border-radius:11px;gap:13px}
+.ai-question-preview{max-height:350px;padding:15px;border-radius:9px;line-height:1.75}
+@media(max-width:1200px){.planner-layout{grid-template-columns:minmax(0,1fr)}.planner-candidates{max-height:none}}
+@media(max-width:760px){.planner-page>.page-heading{align-items:flex-start;flex-direction:column}.planner-layout>.panel,.ai-planning-section{padding:17px}.planner-edit-row{align-items:stretch}.planner-edit-row label{min-width:100%}.planner-edit-row .muted-tag{align-self:flex-start}.planner-proposal>.primary-button{position:static}.ai-task-picker small{white-space:normal}}
