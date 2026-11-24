@@ -251,4 +251,4 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 
 ## ALPHA-SYNC-003D：团队历史本地加密、账号缓存清理与恢复保护（开发分支）
 
-[42 OS safeStorage/SQLite v3 隐私改造](42_ALPHA_SYNC_003D_LOCAL_HISTORY_PRIVACY.md)：团队消息及任务正文和未完成快照使用 OS 安全存储加密；已有 v1/v2 正式/暂存记录通过单个事务转换，失败不覆盖旧内容。退出/切换账号时取消在途请求并清理该账号的本机团队缓存；UI 提供明确确认的清理按钮。**历史明文备份和 SSD 旧页不保证安全擦除，真实 Keychain/DPAPI 与五账号 RLS 仍待验收。** 暂不开第二个并行 PR。
+[42 OS safeStorage/SQLite v3 隐私改造](42_ALPHA_SYNC_003D_LOCAL_HISTORY_PRIVACY.md)：团队消息及任务正文和未完成快照使用 OS 安全存储加密；已有 v1/v2 正式/暂存记录通过单个事务转换，失败不覆盖旧内容。退出/切换账号时取消在途请求并清理该账号的本机团队缓存；UI 提供明确确认的清理按钮。**历史明文备份和 SSD 旧页不保证安全擦除，真实 Keychain/DPAPI 与五账号 RLS 仍待验收。** 用户已批准与慢进度 UI PR #48 并行，单独提交 003D PR、分开审查。
