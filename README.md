@@ -58,6 +58,7 @@ W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全�
 - PR #44 已合并：当前账号只读设备/Cursor 健康诊断，及人工预览、二次确认后严格匹配的 operationId 回执核销；新只读 RPC 未在真实项目部署。
 - PR #45 已合并：团队消息/任务获得 Main-only Realtime 提醒、成员验证与最近 100 条 REST/RLS 兼容补拉；对应 SQL publication 未在隔离项目部署。
 - PR #46 已合并：团队消息/任务的持久增量日志、SQLite Cursor、删除墓碑及历史分页；003B 云端迁移未进行真实项目部署。\n- 当前 ALPHA-SYNC-003C：Owner 显式压缩旧日志时先生成完整版本化快照；过期 Cursor 会得到服务器明确的恢复协议。客户端分批严格验证并持久暂存、重启续传，全部完成且复核成员资格后原子替换旧数据；**无自动清零、无跳过删除、无默认生产日志裁剪**。仍待隔离项目、五账号 RLS 和真实安装验收。
+- 当前 ALPHA-SYNC-003D：团队历史 SQLite v3 的正文及未完成快照使用 Electron OS safeStorage 加密，原 v1/v2 文件原子转换，切换账号/退出时清理所属团队缓存，UI 可确认清理本设备缓存。**旧明文库和迁移前备份仍可能含原文**，不能保证磁盘安全擦除；PR #48 UI 视觉改版仍由另一贡献者独立推进；经用户明确同意，003D 另提独立 PR，按非重叠文件范围并行开发、分别审查。
 
 详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 、[32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md) 、[33 冲突解决](docs/w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md) 、[34 旧数据审查](docs/w5/34_ALPHA_SYNC_002E_LEGACY_REVIEW.md) 、[35 Cursor 预检](docs/w5/35_ALPHA_SYNC_002F_CURSOR_PREFLIGHT.md) 、[36 设备安全更换](docs/w5/36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md) 、[37 崩溃安全拉取](docs/w5/37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md) 与 [38 同步诊断和回执对账](docs/w5/38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
 
@@ -99,6 +100,18 @@ npm run build
 
 如需在**用户单独批准的隔离 Supabase 项目**验证实时订阅，请先审查并运行既有 `20261110_ate_workspace_poc.sql`，再审查 `supabase/migrations/20261124_ate_workspace_realtime_hints.sql`；本仓库 CI **不部署云端**。未完成五账号 RLS 反向测试、30 秒安全补拉 GUI 与历史游标验收之前，不视为完整 Realtime 发布。详见 [39 团队实时提示验收](docs/w5/39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
 
+### ALPHA-SYNC-003D 团队历史本机加密与清理
+
+```sh
+npm ci
+npm run typecheck
+node node_modules/vitest/vitest.mjs run src/main/cloud/workspace-history-crypto.test.ts src/main/cloud/workspace-history-privacy.test.ts src/main/cloud/workspace-history-store.test.ts src/main/cloud/workspace-checkpoint-store.test.ts src/main/local-backup.test.ts src/shared/ipc-channels.test.ts
+npm test
+npm run build
+```
+
+团队历史 SQLite v3 将消息/任务正文及暂存快照使用本机 OS 安全存储加密，**并非全盘加密**，工作空间 ID/时间/Cursor 可见。已有 v1/v2 原文库在转换前建立经过验证的备份，旧原文页、早期迁移备份、旧安装目录可能仍含明文。退出云端账号时尝试清除此账号的团队缓存，也可通过团队界面二次确认清理；**不删除云端记录或个人任务**。完整边界和验收见 [42 本机团队历史加密与隐私](docs/w5/42_ALPHA_SYNC_003D_LOCAL_HISTORY_PRIVACY.md)。
+
 ### ALPHA-SYNC-003C 历史 Cursor 过期与完整检查点重建
 
 ```sh
@@ -109,7 +122,7 @@ npm test
 npm run build
 ```
 
-003C 新迁移 `supabase/migrations/20261124_ate_workspace_checkpoint_recovery.sql` 需要先安装原 workspace PoC 和 003B 日志 SQL，**不通过 CI 自动部署，也不自动运行 Owner 历史压缩**。完整快照内容会继续留存于服务器和本机的团队 SQLite 明文缓存。旧数据过期时，客户端会先在独立 SQLite 暂存完整快照，验证完成且复核成员资格后才替换旧缓存和 Cursor。详见 [41 检查点与安全恢复](docs/w5/41_ALPHA_SYNC_003C_CHECKPOINT_RECOVERY.md)。
+003C 新迁移 `supabase/migrations/20261124_ate_workspace_checkpoint_recovery.sql` 需要先安装原 workspace PoC 和 003B 日志 SQL，**不通过 CI 自动部署，也不自动运行 Owner 历史压缩**。完整快照内容会继续留存于服务器；本轮本机团队 SQLite 已升级为 OS 保护的正文加密格式，但旧明文备份/页可能仍保留。旧数据过期时，客户端会先在独立 SQLite 暂存完整快照，验证完成且复核成员资格后才替换旧缓存和 Cursor。详见 [41 检查点与安全恢复](docs/w5/41_ALPHA_SYNC_003C_CHECKPOINT_RECOVERY.md)。
 
 ### ALPHA-SYNC-003B 持久团队历史增量与重启恢复
 
@@ -121,7 +134,7 @@ npm test
 npm run build
 ```
 
-测试会以真实本地 SQLite 文件关闭/重开模拟客户端重启，验证百条以上分页、删除墓碑和 Cursor 原子回滚。新的本地文件 `study-anchor-team-history.sqlite` **保存明文团队消息/任务缓存**，首次使用前须按 [40 持久历史验收和隐私约束](docs/w5/40_ALPHA_SYNC_003B_DURABLE_HISTORY.md) 评估本机留存；不能将其当作加密存储。新增缓存数据库打开失败时仍保留其文件并降级当前 JWT 的 REST 刷新，不阻止其他本地模块启动。新增云端迁移 `supabase/migrations/20261124_ate_workspace_durable_history.sql` **不会通过 CI 自动部署**，需要独立审核、用户授权与隔离项目测试。
+测试会以真实本地 SQLite 文件关闭/重开模拟客户端重启，验证百条以上分页、删除墓碑和 Cursor 原子回滚。原 003B 的本地文件 `study-anchor-team-history.sqlite` 曾**保存明文团队消息/任务缓存**（003D 起将正文转换为 OS 加密），首次使用前须按 [40 持久历史验收和隐私约束](docs/w5/40_ALPHA_SYNC_003B_DURABLE_HISTORY.md) 评估本机留存；不能将其当作加密存储。新增缓存数据库打开失败时仍保留其文件并降级当前 JWT 的 REST 刷新，不阻止其他本地模块启动。新增云端迁移 `supabase/migrations/20261124_ate_workspace_durable_history.sql` **不会通过 CI 自动部署**，需要独立审核、用户授权与隔离项目测试。
 
 ### Study Anchor 安装及旧数据目录升级（PR #47）
 

@@ -145,6 +145,17 @@ export class WorkspaceHistoryService {
     return result;
   }
 
+  /** Intentionally removes every cached team/workspace snapshot and pending
+   * checkpoint for the CURRENT signed-in account in this Supabase project.
+   * There is no cloud delete. In-flight network results are invalidated before
+   * the local transaction, so sign-out or account switch cannot repopulate it.
+   */
+  purgeCurrentAccountCache():{workspaces:number;checkpointed:boolean}{
+    const owner=this.currentOwner(),scoped=this.cacheOwner(owner);
+    this.cancel();
+    return this.store.purgeOwner(scoped);
+  }
+
   /** Called on explicit sign out/configuration changes. Already materialized
    * history is owner-isolated and never returned without a new membership check. */
   cancel():void{

@@ -19,6 +19,7 @@ import { CanvasSyncService } from "./connectors/canvas-sync";
 import { SharedCloudClient } from "./cloud/supabase-client";
 import { WorkspaceRealtimeBridge } from "./cloud/workspace-realtime";
 import {WorkspaceHistoryStore} from "./cloud/workspace-history-store";
+import {createTeamHistoryCipher} from "./cloud/workspace-history-crypto";
 import {WorkspaceHistoryService} from "./cloud/workspace-history-service";
 import { PersonalSyncService } from "./personal-sync";
 import {
@@ -139,6 +140,16 @@ let workspaceHistoryService:WorkspaceHistoryService|null=null;
 function teamHistory():WorkspaceHistoryService{
   if(!workspaceHistoryService)throw Error("Team history database is unavailable");
   return workspaceHistoryService;
+}
+/** Session changes purge this account's local TEAM cache only. Sign-out must
+ * still finish if the optional cache is unavailable; diagnostics never log
+ * account IDs, project URLs, messages or crypto error strings. */
+function purgeSignedInTeamHistory():void{
+  workspaceHistoryService?.cancel();
+  if(workspaceHistoryService&&sharedCloud.status().authenticated){
+    try{workspaceHistoryService.purgeCurrentAccountCache();}
+    catch{report("TEAM_HISTORY_CACHE_PURGE_FAILED","storage");}
+  }
 }
 const workspaceRealtime=new WorkspaceRealtimeBridge(sharedCloud,update=>{
   for(const window of BrowserWindow.getAllWindows()){
@@ -648,23 +659,25 @@ function registerIpcHandlers(): void {
   handle(IPC_CHANNELS.cloudConfigure, (event, input: unknown) => {
     requireTrustedSender(event);
     workspaceRealtime.stop();
-    workspaceHistoryService?.cancel();
+    purgeSignedInTeamHistory();
     return sharedCloud.configure(input);
   });
   handle(IPC_CHANNELS.cloudLogin, (event, input: unknown) => {
     requireTrustedSender(event);
     workspaceRealtime.stop();
-    workspaceHistoryService?.cancel();
+    purgeSignedInTeamHistory();
     return sharedCloud.login(input);
   });
   handle(IPC_CHANNELS.cloudSignup, (event, input: unknown) => {
     requireTrustedSender(event);
+    workspaceRealtime.stop();
+    purgeSignedInTeamHistory();
     return sharedCloud.signUp(input);
   });
   handle(IPC_CHANNELS.cloudLogout, (event) => {
     requireTrustedSender(event);
     workspaceRealtime.stop();
-    workspaceHistoryService?.cancel();
+    purgeSignedInTeamHistory();
     sharedCloud.signOut();
     return sharedCloud.status();
   });
@@ -697,6 +710,12 @@ function registerIpcHandlers(): void {
     return workspaceHistoryService
       ? workspaceHistoryService.snapshot(workspaceId)
       : sharedCloud.workspaceSnapshot(workspaceId);
+  });
+  handle(IPC_CHANNELS.cloudClearTeamHistory, (event,confirmation:unknown)=>{
+    requireTrustedSender(event);
+    if(confirmation!=="ERASE_CURRENT_TEAM_CACHE")
+      throw Error("Explicit team cache deletion confirmation required");
+    return teamHistory().purgeCurrentAccountCache();
   });
   handle(IPC_CHANNELS.cloudWorkspaceHistoryOlder, (event,workspaceId:unknown,
     kind:"message"|"task",before:unknown) => {
@@ -897,12 +916,15 @@ app.whenReady().then(async () => {
     // The optional cloud history cache must never make offline tasks,
     // calendar, mail or knowledge unavailable if its file is damaged.
     try{
-      // Preserve a verified v1 snapshot before introducing checkpoint staging
-      // (v2). Failed backup leaves the original optional cache untouched.
+      // OS-backed encryption MUST exist before touching the optional cache.
+      // v1/v2 plaintext records and in-progress snapshots are converted to
+      // encrypted v3 in a single transaction. Prior backup copies can still
+      // contain legacy plaintext and require separately reviewed disposal.
+      const historyCipher=createTeamHistoryCipher(safeStorage);
       await backupBeforeMigration(app.getPath("userData"),
-        "study-anchor-team-history.sqlite",2);
+        "study-anchor-team-history.sqlite",3);
       workspaceHistoryStore=new WorkspaceHistoryStore(
-        join(app.getPath("userData"),"study-anchor-team-history.sqlite"));
+        join(app.getPath("userData"),"study-anchor-team-history.sqlite"),historyCipher);
       workspaceHistoryService=new WorkspaceHistoryService(sharedCloud,workspaceHistoryStore);
     }catch{
       workspaceHistoryStore=null;workspaceHistoryService=null;

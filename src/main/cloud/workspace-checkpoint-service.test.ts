@@ -1,5 +1,6 @@
 import {afterEach,describe,expect,it,vi} from "vitest";
 import {WorkspaceHistoryStore} from "./workspace-history-store";
+import {testHistoryCipher} from "./workspace-history-crypto.test-helper";
 import {WorkspaceHistoryService} from "./workspace-history-service";
 import type {SharedCloudClient} from "./supabase-client";
 import type {SharedMember,SharedMessage,SharedTask} from "../../shared/cloud-model";
@@ -27,7 +28,7 @@ function snapshot(start:number,count:number,total:number,checkpoint="50"){
 const active:WorkspaceHistoryStore[]=[];
 function setup(){
   let owner=OWNER,authorized=true;
-  const store=new WorkspaceHistoryStore(":memory:");active.push(store);
+  const store=new WorkspaceHistoryStore(":memory:",testHistoryCipher);active.push(store);
   const cloud={
     currentUserId:vi.fn(()=>owner),
     currentProjectUrl:vi.fn(()=>"https://test-project.supabase.co"),

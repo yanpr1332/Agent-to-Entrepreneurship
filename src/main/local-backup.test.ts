@@ -7,6 +7,7 @@ import { KnowledgeStore } from "./knowledge-store";
 import { LocalStore } from "./local-store";
 import { PlanningStore } from "./planning-store";
 import { WorkspaceHistoryStore } from "./cloud/workspace-history-store";
+import {testHistoryCipher} from "./cloud/workspace-history-crypto.test-helper";
 import { createLocalBackup, backupBeforeMigration } from "./local-backup";
 
 const directories:string[]=[];
@@ -77,9 +78,9 @@ describe("verified online SQLite snapshots",()=>{
     expect(await backupBeforeMigration(dir,"study-anchor-planning.sqlite",2)).toBeNull();
   });
 
-  it("backs up full team history v1 before opening the checkpoint-capable v2 database",async()=>{
+  it("backs up a plaintext v1 team-history database before the encrypted v3 migration",async()=>{
     const dir=fixture(),path=join(dir,"study-anchor-team-history.sqlite");
-    const history=new WorkspaceHistoryStore(path);
+    const history=new WorkspaceHistoryStore(path,testHistoryCipher);
     const owner="aae9ac05-b37d-4898-aee4-5848fa28e01b";
     const workspace="3babcb78-c10d-4f4e-ab3e-f47f6ad72447";
     const entity="7c2cb69c-8b50-419c-8966-e8a55c397a11";
@@ -91,21 +92,25 @@ describe("verified online SQLite snapshots",()=>{
     });
     history.close();
     const old=new DatabaseSync(path);
+    const stored=old.prepare("SELECT json FROM records").get() as {json:string};
+    old.prepare("UPDATE records SET json=?").run(testHistoryCipher.decrypt(stored.json));
     old.exec("DROP TABLE checkpoint_records; DROP TABLE checkpoint_progress; PRAGMA user_version=1");
     old.close();
-    const backup=await backupBeforeMigration(dir,"study-anchor-team-history.sqlite",2);
+    const backup=await backupBeforeMigration(dir,"study-anchor-team-history.sqlite",3);
     expect(backup).toBeTruthy();
     const saved=new DatabaseSync(join(backup!,"study-anchor-team-history.sqlite"),{readOnly:true});
     expect((saved.prepare("PRAGMA user_version").get() as {user_version:number}).user_version)
       .toBe(1);
     expect((saved.prepare("SELECT count(*) AS n FROM records").get() as {n:number}).n)
       .toBe(1);
+    expect((saved.prepare("SELECT json FROM records").get() as {json:string}).json)
+      .toContain("Durable team message");
     saved.close();
-    const migrated=new WorkspaceHistoryStore(path);
+    const migrated=new WorkspaceHistoryStore(path,testHistoryCipher);
     expect(migrated.getCursor(owner,workspace)).toBe("1");
     expect(migrated.getCheckpoint(owner,workspace)).toBeNull();
     migrated.close();
-    expect(await backupBeforeMigration(dir,"study-anchor-team-history.sqlite",2))
+    expect(await backupBeforeMigration(dir,"study-anchor-team-history.sqlite",3))
       .toBeNull();
   });
 

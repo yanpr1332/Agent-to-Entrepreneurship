@@ -4,6 +4,7 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {DatabaseSync} from "node:sqlite";
 import {WorkspaceHistoryStore} from "./workspace-history-store";
+import {testHistoryCipher} from "./workspace-history-crypto.test-helper";
 import type {WorkspaceHistoryExpired} from "../../shared/workspace-history-contract";
 
 const OWNER="aae9ac05-b37d-4898-aee4-5848fa28e01b";
@@ -17,7 +18,7 @@ function disk(){
   const dir=mkdtempSync(join(tmpdir(),"study-anchor-checkpoint-"));
   dirs.push(dir);
   const file=join(dir,"history.sqlite");
-  const store=new WorkspaceHistoryStore(file);
+  const store=new WorkspaceHistoryStore(file,testHistoryCipher);
   openStores.push(store);
   return {file,store};
 }
@@ -59,7 +60,7 @@ describe("ALPHA-SYNC-003C crash-safe full snapshot replacement",()=>{
     expect(store.list(OWNER,W,"message").items[0]).toMatchObject({body:"Live message 999"});
     store.close();openStores.length=0;
 
-    const resumed=new WorkspaceHistoryStore(file);openStores.push(resumed);
+    const resumed=new WorkspaceHistoryStore(file,testHistoryCipher);openStores.push(resumed);
     expect(resumed.getCheckpoint(OWNER,W)).toMatchObject({
       checkpointCursor:"50",sourceCursor:"1",nextOrdinal:"100",totalItems:"150",
     });
@@ -77,7 +78,7 @@ describe("ALPHA-SYNC-003C crash-safe full snapshot replacement",()=>{
     expect(resumed.list(OWNER,W,"message").items.some(x=>x.id===ident(999))).toBe(false);
 
     resumed.close();openStores.length=0;
-    const again=new WorkspaceHistoryStore(file);openStores.push(again);
+    const again=new WorkspaceHistoryStore(file,testHistoryCipher);openStores.push(again);
     expect(again.getCursor(OWNER,W)).toBe("50");
     expect(again.counts(OWNER,W).messages).toBe(150);
   });
