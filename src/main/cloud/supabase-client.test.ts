@@ -156,7 +156,7 @@ describe("Supabase candidate: individual JWT + RLS REST boundaries",()=>{
   });
 
   it("rejects operations for a different authenticated account before sending them",async()=>{
-    const fetcher=vi.fn(async()=>new Response("{}"));
+    const fetcher=vi.fn(async(_url:string,_init:RequestInit)=>new Response("{}"));
     const cloud=new SharedCloudClient(async(url,init)=>{
       if(url.includes("/auth/v1/"))return new Response(JSON.stringify({
         access_token:"jwt",refresh_token:"refresh",expires_in:3600,
