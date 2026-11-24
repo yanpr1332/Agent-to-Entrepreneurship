@@ -70,6 +70,18 @@ function taskFromRow(row: TaskRow): LocalTask {
 
 function syncOwnerId(input: unknown): string { return requireUuid(input).toLowerCase(); }
 
+function checkedPersonalSyncDevice(row:{device_id:string;cursor:string}):{deviceId:string;cursor:string}{
+  // A restored or edited SQLite file may contain a cursor that is not safe to
+  // pass to the server. Fail closed before registering or uploading anything.
+  if(typeof row.cursor!=="string"||!/^(0|[1-9][0-9]{0,18})$/.test(row.cursor)||
+     BigInt(row.cursor)>9223372036854775807n)
+    throw Error("Saved personal sync cursor is invalid; sync is blocked until the local data is reviewed");
+  if(typeof row.device_id!=="string")
+    throw Error("Saved personal sync device is invalid; sync is blocked until the local data is reviewed");
+  try{return {deviceId:requireUuid(row.device_id),cursor:row.cursor};}
+  catch{throw Error("Saved personal sync device is invalid; sync is blocked until the local data is reviewed");}
+}
+
 function focusFromRow(row: FocusRow): FocusSession {
   return {
     id: row.id, title: row.title, plannedMinutes: row.planned_minutes,
@@ -304,7 +316,7 @@ export class LocalStore {
     const existing = this.db.prepare(
       "SELECT device_id,cursor FROM personal_sync_devices WHERE owner_id=?"
     ).get(owner) as {device_id:string;cursor:string}|undefined;
-    if (existing) return {deviceId:existing.device_id,cursor:existing.cursor};
+    if (existing) return checkedPersonalSyncDevice(existing);
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.db.prepare(
@@ -320,7 +332,7 @@ export class LocalStore {
       "SELECT device_id,cursor FROM personal_sync_devices WHERE owner_id=?"
     ).get(owner) as {device_id:string;cursor:string}|undefined;
     if (!created) throw new Error("Personal sync device could not be initialized");
-    return {deviceId:created.device_id,cursor:created.cursor};
+    return checkedPersonalSyncDevice(created);
   }
 
   /** Advance only after a complete page has been durably applied locally. */
