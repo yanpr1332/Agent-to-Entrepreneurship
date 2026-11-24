@@ -192,6 +192,27 @@ export interface PersonalSyncRecoveryHealth {
   pendingReplay:boolean;
   detail:string;
 }
+/** Read-only preview: no outgoing operation and no local acknowledgement. */
+export interface PersonalSyncReceiptReview {
+  reviewToken:string|null;
+  inspected:number;
+  eligibleToAcknowledge:number;
+  notFound:number;
+  unresolved:number;
+  pending:number;
+  hasMore:boolean;
+}
+export interface PersonalSyncReceiptConfirmation {
+  reviewToken:string;
+  confirmation:true;
+}
+export function parsePersonalSyncReceiptConfirmation(value:unknown):PersonalSyncReceiptConfirmation{
+  const row=record(value);
+  exactKeys(row,["reviewToken","confirmation"]);
+  if(row.confirmation!==true)throw Error("Explicit receipt acknowledgement confirmation is required");
+  return {reviewToken:requireUuid(row.reviewToken),confirmation:true};
+}
+
 export interface PersonalSyncReceiptReconcileResult {
   inspected:number;
   acknowledged:number;
