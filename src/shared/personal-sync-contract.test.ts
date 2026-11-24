@@ -5,6 +5,7 @@ import {
   parsePersonalSyncOperation, parseSyncOperationResult, parsePersonalSyncPullPage,
   parsePersonalSyncResolutionRequest,
   parsePersonalSyncDeviceInspection, parsePersonalSyncReceiptLookup,
+  parsePersonalSyncReceiptConfirmation,
   projectManualCalendarEvent, projectPersonalTask,
 } from "./personal-sync-contract";
 
@@ -137,6 +138,16 @@ describe("ALPHA-SYNC-001 strict wire envelope, without enabling sync", () => {
     expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[0],cursor:"../users"}]})).toThrow();
     expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[0],version:0}]})).toThrow();
     expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[0],updatedAt:"not-a-date"}]})).toThrow();
+  });
+
+  it("allows only an explicit one-time receipt confirmation request with no owner authority",()=>{
+    const reviewToken="6da6f704-5b0c-4e5a-a7dd-dc8db5b4c665";
+    expect(parsePersonalSyncReceiptConfirmation({reviewToken,confirmation:true}))
+      .toEqual({reviewToken,confirmation:true});
+    expect(()=>parsePersonalSyncReceiptConfirmation({reviewToken,confirmation:false})).toThrow();
+    expect(()=>parsePersonalSyncReceiptConfirmation({reviewToken,confirmation:true,ownerId:owner})).toThrow();
+    expect(()=>parsePersonalSyncReceiptConfirmation({reviewToken:"bad",confirmation:true})).toThrow();
+    expect(()=>parsePersonalSyncReceiptConfirmation({confirmation:true})).toThrow();
   });
 
   it("strictly parses owner-safe device status and exact-operation receipts",()=>{
