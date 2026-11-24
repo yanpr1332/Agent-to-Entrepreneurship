@@ -293,6 +293,8 @@ export interface PersonalSyncRunResult {
   retryableFailures:number;
   /** Remote changes were found before upload; this run pulls first, never pushes stale intent. */
   pushDeferred:boolean;
+  /** Number of interrupted durable pull pages resumed before network transfer. */
+  recoveredPages:number;
   pending:number;
   cursor:string;
   hasMore:boolean;
