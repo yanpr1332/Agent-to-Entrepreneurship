@@ -264,6 +264,23 @@ export interface PersonalSyncCandidate {
   enabled:boolean;
   serverVersion:number|null;
 }
+/** A single Main-generated review token, never an owner/device/cursor supplied by Renderer. */
+export interface PersonalSyncDeviceReplacementReview {
+  eligible:boolean;
+  reviewToken:string|null;
+  reason:string|null;
+}
+export interface PersonalSyncDeviceReplacementRequest {
+  reviewToken:string;
+  confirmation:true;
+}
+export function parsePersonalSyncDeviceReplacementRequest(value:unknown):PersonalSyncDeviceReplacementRequest{
+  const row=record(value);
+  exactKeys(row,["reviewToken","confirmation"]);
+  if(row.confirmation!==true)throw Error("Explicit device replacement confirmation is required");
+  return {reviewToken:requireUuid(row.reviewToken),confirmation:true};
+}
+
 export interface PersonalSyncRunResult {
   ownerId:string;
   deviceId:string;
