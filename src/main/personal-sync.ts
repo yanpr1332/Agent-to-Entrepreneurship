@@ -4,7 +4,7 @@ import {
   parsePersonalSyncDeviceReplacementRequest,
   type PersonalSyncChange, type PersonalSyncConflict, type PersonalSyncConflictRecord,
   type PersonalSyncRunResult, type PersonalSyncDeviceReplacementReview, type PersonalSyncPullPage,
-  type PersonalSyncRecoveryHealth, type PersonalSyncReceiptReconcileResult,
+  type PersonalSyncRecoveryHealth, type PersonalSyncReceiptReconcileResult, type PersonalSyncReceiptLookup,
 } from "../shared/personal-sync-contract";
 import type { SharedCloudClient } from "./cloud/supabase-client";
 import type { LocalStore } from "./local-store";
@@ -175,7 +175,7 @@ export class PersonalSyncService{
       .map(item=>({...item,entityType:"manual-calendar-event" as const}));
     const items:PendingOutbox[]=[...tasks,...events].sort((a,b)=>
       a.createdAt.localeCompare(b.createdAt)||a.operationId.localeCompare(b.operationId));
-    const receipts:Array<{item:PendingOutbox;status:"not-found"|"matched";result:null|Awaited<ReturnType<typeof this.cloud.lookupPersonalSyncReceipt>>}> = [];
+    const receipts:Array<{item:PendingOutbox;status:"not-found"|"matched";result:PersonalSyncReceiptLookup|null}> = [];
     for(const item of items){
       this.assertOwner(ownerId);
       const createdAt=new Date(item.createdAt);
