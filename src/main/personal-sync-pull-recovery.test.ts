@@ -111,9 +111,7 @@ describe("ALPHA-SYNC-002G durable cross-SQLite page replay",()=>{
     tasks.setTaskSyncEnabled(local.id,true,OWNER);
     const alternative={...page,changes:[{...page.changes[0],entityId:local.id}],nextCursor:"1"};
     remote.pullPersonalSyncChanges.mockImplementation(async(_device,cursor,limit)=>
-      cursor==="0"&&limit===1
-        ? {changes:[],nextCursor:"0",hasMore:false}
-        :cursor==="0"?alternative:{changes:[],nextCursor:cursor,hasMore:false});
+      cursor==="0"?alternative:{changes:[],nextCursor:cursor,hasMore:false});
     const fail=vi.spyOn(tasks,"recordPersonalSyncConflicts")
       .mockImplementationOnce(()=>{throw Error("Conflict storage interrupted");});
     await expect(new PersonalSyncService(remote as unknown as SharedCloudClient,tasks,calendar).syncNow())
