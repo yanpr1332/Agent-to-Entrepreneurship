@@ -62,7 +62,7 @@ describe("ALPHA-SYNC-002F cursor and device preflight",()=>{
   it("permits a normal upload when preflight confirms no unread remote changes",async()=>{
     const {tasks,calendar,device}=setup();
     const cloud=mockCloud(async(_device,cursor,limit)=>limit===1
-      ?{changes:[],nextCursor:cursor,hasMore:false}
+      ?{changes:[],nextCursor:String(cursor),hasMore:false}
       :{changes:[{...remote,entityId:tasks.listTasks()[0].id}],nextCursor:"6",hasMore:false});
     const result=await new PersonalSyncService(cloud,tasks,calendar).syncNow();
     expect(cloud.pullPersonalSyncChanges).toHaveBeenNthCalledWith(1,device.deviceId,"5",1);
