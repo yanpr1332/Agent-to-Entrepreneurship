@@ -172,8 +172,18 @@ export async function migrateStudyAnchorProfile(
     }finally{rmSync(stage,{recursive:true,force:true});}
   }
 
-  const sources=LEGACY_DEFAULT_NAMES.map(name=>join(appData,name))
+  const candidates=LEGACY_DEFAULT_NAMES.map(name=>join(appData,name))
     .filter(path=>safeRoot(path)!==destination&&hasLegacyData(path));
+  // Windows (and case-insensitive macOS disks) can resolve two casing
+  // variants of the same legacy name to ONE directory. De-duplicate by
+  // actual file identity; do not mistake spelling aliases for two profiles.
+  const seen=new Set<string>();
+  const sources=candidates.filter(path=>{
+    const info=statSync(path);
+    const identity=info.dev+":"+info.ino;
+    if(seen.has(identity))return false;
+    seen.add(identity);return true;
+  });
   if(sources.length>1)throw Error("Multiple old app profiles found; choose the correct one manually");
   if(!sources.length)return existsSync(join(destination,PROFILE_MARKER))
     ?"already-migrated":"fresh";
