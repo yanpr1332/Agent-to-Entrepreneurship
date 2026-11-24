@@ -1,6 +1,10 @@
-# Agent-to-Entrepreneurship
+# Study Anchor
 
 > 面向大学生的跨平台个人学习、时间、知识与协作管理软件。
+
+**GitHub 仓库：** [yanpr1332/study-anchor](https://github.com/yanpr1332/study-anchor)（原 `Agent-to-Entrepreneurship` 已于 2026-11-24 更名）。
+
+> **已有用户数据兼容说明**：本轮仅调整仓库、npm 包名和界面展示名称。Electron 的历史 `build.appId`、`build.productName`、`ATE_USER_DATA_DIR`、各 `ate-*.sqlite` 文件名以及既有 Supabase RPC/表名**暂时不改**，避免旧安装包及数据路径静默改变。正式安装包品牌和数据目录迁移应单独审查，见 [改名兼容记录](docs/w4/09_REPOSITORY_RENAME_STUDY_ANCHOR.md)。
 
 当前产品需求、交互原型和技术架构见 [PRD](docs/PRD.md)、[W2 UI/UX](docs/ui-ux/README.md)、[W3 架构](docs/architecture/README.md) 与 [W4 开发计划](docs/w4/README.md)。
 
@@ -111,7 +115,9 @@ npm run build
 
 以下命令全部在包含 package.json 的**仓库根目录**执行。本指南优先使用隔离测试数据，不需要真实 Canvas、学校邮箱、OpenAI 或 Supabase 凭据。**CI 构建成功不代表完成真实 GUI 验收。**
 
-### 0. 检查开发环境与更新仓库
+### 0. 检查开发环境、Git 远端与更新仓库
+
+仓库重命名**不会自动改变本地文件夹名称**。以下 `cd` 路径只是示例，请替换为电脑上已有的仓库目录；不需要重新克隆或删除本地数据。
 
 - Windows 10/11、macOS；Node.js **24.x**（项目 .nvmrc 固定 **24.18.0**）；npm **11.x**；Git。
 - 先保存本机尚未提交的修改。不要为了验收使用 git reset --hard。
@@ -120,7 +126,9 @@ npm run build
 Windows（PowerShell）：
 
 ~~~powershell
-cd D:\Electives\AgentToEntrepreneurship\Agent-to-Entrepreneurship
+cd "C:\path\to\your\existing-local-repo"   # 示例：请替换为实际本地路径
+git remote set-url origin https://github.com/yanpr1332/study-anchor.git
+git remote -v
 git status --short
 git switch main
 git pull --ff-only
@@ -131,13 +139,17 @@ npm --version                      # 需要 11.x
 macOS（Terminal）：
 
 ~~~bash
-cd /path/to/Agent-to-Entrepreneurship
+cd /path/to/your/existing-local-repo   # 替换为实际本地路径
+git remote set-url origin https://github.com/yanpr1332/study-anchor.git
+git remote -v
 git status --short
 git switch main
 git pull --ff-only
 node --version
 npm --version
 ~~~
+
+上面的 `git remote set-url` 只会修改 Git 远端地址，不会更改本地数据库、旧安装目录或已有提交；确认 `git remote -v` 显示新的 `study-anchor.git`。
 
 **尚未合并的 PR 不在 main 中。** 如需提前测试某个 PR，先执行 git fetch origin，再根据 PR 中显示的分支名切换到相应远端分支；验收完成后切回 main。不要假设 git pull 会自动拉到尚未合并的功能。
 
