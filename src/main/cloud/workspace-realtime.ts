@@ -68,6 +68,13 @@ export class WorkspaceRealtimeBridge {
     return {workspaceId,phase:"connecting",hint:false};
   }
 
+  /** A delayed cleanup from the previous selection cannot stop a newer watch. */
+  stopWatching(rawWorkspaceId:unknown):{stopped:true}{
+    const workspaceId=requireUuid(rawWorkspaceId);
+    if(this.workspaceId===workspaceId)this.stop();
+    return {stopped:true};
+  }
+
   stop():void{
     this.epoch++;
     this.clearTimersAndSocket();
