@@ -43,6 +43,22 @@ function mockCloud(pull:SharedCloudClient["pullPersonalSyncChanges"]){
 }
 
 describe("ALPHA-SYNC-002F cursor and device preflight",()=>{
+  it("also preflights a zero cursor before sending a freshly queued local create",async()=>{
+    const tasks=new LocalStore(":memory:"),calendar=new FixedCalendarStore(":memory:");
+    active.push(tasks,calendar);
+    const local=tasks.createTask({title:"Brand new local pending"});
+    tasks.setTaskSyncEnabled(local.id,true,OWNER);
+    const device=tasks.getOrCreatePersonalSyncDevice(OWNER);
+    expect(device.cursor).toBe("0");
+    const firstChange={...remote,cursor:"1"};
+    const cloud=mockCloud(async()=>({changes:[firstChange],nextCursor:"1",hasMore:false}));
+    const result=await new PersonalSyncService(cloud,tasks,calendar).syncNow();
+    expect(cloud.pullPersonalSyncChanges).toHaveBeenNthCalledWith(1,device.deviceId,"0",1);
+    expect(cloud.applyPersonalSyncOperation).not.toHaveBeenCalled();
+    expect(result).toMatchObject({pushDeferred:true,pushed:0,pulled:1,pending:1,cursor:"1"});
+    expect(tasks.listPersonalSyncOutbox(OWNER)).toHaveLength(1);
+  });
+
   it("pulls remote changes first and defers all uploads for a nonzero saved cursor",async()=>{
     const {tasks,calendar,local,device}=setup();
     const cloud=mockCloud(async()=>({changes:[remote],nextCursor:"6",hasMore:false}));
