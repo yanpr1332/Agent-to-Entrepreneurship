@@ -72,18 +72,21 @@ describe("ALPHA-SYNC-003A: RLS-verified snapshots and private socket auth",()=>{
 
   it("refuses cross-account snapshots if a user signs out while membership is in flight",async()=>{
     let complete:(value:Response)=>void=()=>{};
+    let notifyStarted:()=>void=()=>{};
+    const started=new Promise<void>(resolve=>{notifyStarted=resolve;});
     const fetcher=vi.fn(async(url:string,init:RequestInit)=>{
       if(url.includes("/auth/v1/"))return new Response(JSON.stringify({
         access_token:"real-JWT-only-main",refresh_token:"secret-refresh",expires_in:3600,
         user:{id:OWNER,email:"owner@example.edu"},
       }));
+      notifyStarted();
       return new Promise<Response>(resolve=>{complete=resolve;});
     });
     const cloud=new SharedCloudClient(fetcher);
     cloud.configure({projectUrl,publishableKey:publicKey});
     await cloud.login({email:"owner@example.edu",password:"valid-password"});
     const job=cloud.workspaceSnapshot(WORKSPACE);
-    await Promise.resolve();
+    await started;
     cloud.signOut();
     complete(new Response(JSON.stringify(MEMBERS)));
     await expect(job).rejects.toThrow("Log in");
