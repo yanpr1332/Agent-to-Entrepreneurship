@@ -242,6 +242,14 @@ export default function CloudWorkspace() {
     });
   }
 
+  async function discardReceiptReview():Promise<void>{
+    setReceiptReview(null);
+    await run(async()=>{
+      await window.desktop.cloud.discardPersonalSyncReceiptReview();
+      setNotice("已取消回执核销，本地待发送队列未修改。");
+    });
+  }
+
   async function reconcileReceipts():Promise<void>{
     if(!receiptReview?.reviewToken)return;
     const reviewToken=receiptReview.reviewToken;
@@ -454,7 +462,7 @@ export default function CloudWorkspace() {
               <button type="button" className="primary-button" disabled={busy}
                 onClick={()=>void reconcileReceipts()}>确认核销 {receiptReview.eligibleToAcknowledge} 项已接受操作</button>
               <button type="button" className="secondary-button" disabled={busy}
-                onClick={()=>setReceiptReview(null)}>取消，不修改本地队列</button>
+                onClick={()=>void discardReceiptReview()}>取消，不修改本地队列</button>
             </div>}
           </div>}
           {recoveryHealth && <div className="connector-notice" role="status">
