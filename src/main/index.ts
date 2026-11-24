@@ -686,6 +686,14 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return personalSyncService().replaceDevice(input);
   });
+  handle(IPC_CHANNELS.cloudInspectPersonalSyncRecovery, async (event) => {
+    requireTrustedSender(event);
+    return personalSyncService().inspectRecovery();
+  });
+  handle(IPC_CHANNELS.cloudReconcilePersonalSyncReceipts, async (event) => {
+    requireTrustedSender(event);
+    return personalSyncService().reconcileReceipts();
+  });
   handle(IPC_CHANNELS.cloudPersonalSyncCandidates, (event) => {
     requireTrustedSender(event);
     const ownerId=sharedCloud.currentUserId();
