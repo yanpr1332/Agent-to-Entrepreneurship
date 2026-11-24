@@ -47,9 +47,10 @@ W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全�
 - PR #37 已合并：owner-scoped 本地 enrollment/Outbox、旧 ownerless 数据隔离和明确重新授权；任务库 schema v8、日历库 v5。
 - PR #38 已合并：Main 进程手动 push/ack + pull/SQLite 应用、逐条授权 UI、冲突保留与状态展示；任务库 schema v9 增加冲突记录表。
 - PR #39 已合并：本地/云端冲突二次确认、owner/版本/operationId 校验；未解决冲突阻止继续上传/覆写。
-- 当前开发轮 ALPHA-SYNC-002E 续篇：旧 ownerless 同步记录的只读审查与逐条二次确认重新授权；历史删除墓碑继续隔离。设备撤销、Cursor 恢复仍待后续。
+- PR #40 已合并：旧 ownerless 同步数据的只读审查与逐条重新授权；历史删除墓碑继续隔离。
+- 当前 ALPHA-SYNC-002F 第一部分：校验本地设备身份/Cursor，在非零游标且有待发送内容时先进行只读拉取预检；发现远端新变更则本轮暂缓上传并先拉取。完整设备更换与 Cursor 重建仍待后续。
 
-详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 、[32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md) 、[33 冲突解决](docs/w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md) 与 [34 旧数据审查](docs/w5/34_ALPHA_SYNC_002E_LEGACY_REVIEW.md)。
+详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 、[32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md) 、[33 冲突解决](docs/w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md) 、[34 旧数据审查](docs/w5/34_ALPHA_SYNC_002E_LEGACY_REVIEW.md) 与 [35 Cursor 预检](docs/w5/35_ALPHA_SYNC_002F_CURSOR_PREFLIGHT.md)。
 
 **重要边界：目前只提供用户手动触发的同步，不会后台自动上传；002E 只允许对本地待发送操作与云端变更冲突选择一方，来源冲突、学习计划占用、容量问题仍需人工处理。旧 ownerless 记录只有逐条明确确认才生成新的待发送意图，不会直接上传历史内容；旧删除墓碑不会变成远端删除。Supabase 迁移未部署，真实 RLS/双设备验收尚未完成。** Canvas、ICS、邮件、知识库、专注记录、学习计划和 legacy ownerless 队列均不会自动上传。
 
