@@ -51,6 +51,7 @@ describe("local-first SQLite store", () => {
         DROP TABLE personal_sync_legacy_outbox;
         DROP TABLE personal_sync_devices;
         DROP TABLE personal_sync_conflicts;
+        DROP TABLE personal_sync_pull_checkpoints;
         CREATE TABLE personal_task_sync_enrollment(
           task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
           server_version INTEGER,enabled_at TEXT NOT NULL
@@ -286,12 +287,38 @@ describe("local-first SQLite store", () => {
       const task=initial.createTask({title:"Preserve through conflict migration"});
       initial.close();
       const raw=new DatabaseSync(file);
-      raw.exec("DROP TABLE personal_sync_conflicts; PRAGMA user_version=8");
+      raw.exec("DROP TABLE personal_sync_conflicts; DROP TABLE personal_sync_pull_checkpoints; PRAGMA user_version=8");
       raw.close();
       const upgraded=new LocalStore(file);
       expect(upgraded.listTasks()).toMatchObject([{id:task.id,title:task.title}]);
       expect(upgraded.listPersonalSyncConflicts(OWNER_A)).toEqual([]);
       upgraded.close();
+    }finally{rmSync(directory,{recursive:true,force:true});}
+  });
+
+  it("migrates a v9 task database to durable pull checkpoints without touching existing sync state",()=>{
+    const directory=mkdtempSync(join(tmpdir(),"ate-sync-checkpoint-v10-"));
+    const file=join(directory,"local.sqlite");
+    try{
+      const initial=new LocalStore(file);
+      const local=initial.createTask({title:"Preserve v9 task"});
+      initial.setTaskSyncEnabled(local.id,true,OWNER_A);
+      const device=initial.getOrCreatePersonalSyncDevice(OWNER_A);
+      initial.advancePersonalSyncCursor(OWNER_A,"7");
+      const oldOutbox=initial.listPersonalSyncOutbox(OWNER_A);
+      initial.close();
+      const v9=new DatabaseSync(file);
+      v9.exec("DROP TABLE personal_sync_pull_checkpoints; PRAGMA user_version=9");
+      v9.close();
+      const upgraded=new LocalStore(file);
+      expect(upgraded.listTasks()).toMatchObject([{id:local.id,title:"Preserve v9 task"}]);
+      expect(upgraded.getOrCreatePersonalSyncDevice(OWNER_A)).toEqual({deviceId:device.deviceId,cursor:"7"});
+      expect(upgraded.listPersonalSyncOutbox(OWNER_A)).toEqual(oldOutbox);
+      expect(upgraded.getPendingPersonalSyncPull(OWNER_A)).toBeNull();
+      upgraded.close();
+      const check=new DatabaseSync(file,{readOnly:true});
+      expect((check.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(10);
+      check.close();
     }finally{rmSync(directory,{recursive:true,force:true});}
   });
 
