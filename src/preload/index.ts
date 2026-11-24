@@ -15,6 +15,7 @@ import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } fr
 import type {
   CloudCredentials, CloudProjectConfig, CloudSessionStatus,
   SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
+  SharedWorkspaceSnapshot, WorkspaceLiveUpdate,
 } from "../shared/cloud-model";
 import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncRunResult,
@@ -101,6 +102,17 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.cloudMembers, workspaceId) as Promise<SharedMember[]>,
     messages: (workspaceId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudMessages, workspaceId) as Promise<SharedMessage[]>,
+    workspaceSnapshot: (workspaceId:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudWorkspaceSnapshot,workspaceId) as Promise<SharedWorkspaceSnapshot>,
+    watchWorkspace: (workspaceId:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudWatchWorkspace,workspaceId) as Promise<WorkspaceLiveUpdate>,
+    stopWorkspaceWatch: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudStopWorkspaceWatch) as Promise<{stopped:true}>,
+    onWorkspaceLiveUpdated:(listener:(state:WorkspaceLiveUpdate)=>void)=>{
+      const handler=(_event:Electron.IpcRendererEvent,payload:WorkspaceLiveUpdate)=>listener(payload);
+      ipcRenderer.on(IPC_CHANNELS.cloudWorkspaceLiveUpdated,handler);
+      return ()=>ipcRenderer.removeListener(IPC_CHANNELS.cloudWorkspaceLiveUpdated,handler);
+    },
     sendMessage: (workspaceId: string, body: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudSendMessage, workspaceId, body) as Promise<SharedMessage>,
     tasks: (workspaceId: string) =>
