@@ -145,7 +145,12 @@ describe("ALPHA-SYNC-002H exact receipt reconciliation",()=>{
       startMinute:540,durationMinutes:60,weeks:1})[0];
     st.calendar.setManualEventSyncEnabled(event.id,true,OWNER);
     remote.lookupPersonalSyncReceipt.mockImplementation(async()=>matched(1));
-    const r=await sync.reconcileReceipts();
+    const review=await sync.reviewReceipts();
+    expect(review).toMatchObject({inspected:2,eligibleToAcknowledge:2,notFound:0,unresolved:0,pending:2,
+      hasMore:false});
+    expect(st.tasks.listPersonalSyncOutbox(OWNER)).toHaveLength(1);
+    expect(st.calendar.listManualCalendarSyncOutbox(OWNER)).toHaveLength(1);
+    const r=await sync.reconcileReceipts({reviewToken:review.reviewToken,confirmation:true});
     expect(r).toMatchObject({inspected:2,acknowledged:2,notFound:0,unresolved:0,pending:0,
       hasMore:false});
     expect(remote.lookupPersonalSyncReceipt).toHaveBeenCalledTimes(2);
@@ -169,8 +174,8 @@ describe("ALPHA-SYNC-002H exact receipt reconciliation",()=>{
     remote.lookupPersonalSyncReceipt.mockResolvedValueOnce({status:"matched",response:{
       status:"conflict",serverVersion:3,cursor:"3",
     }});
-    const r=await sync.reconcileReceipts();
-    expect(r).toMatchObject({inspected:2,acknowledged:0,notFound:1,unresolved:1,pending:2});
+    const r=await sync.reviewReceipts();
+    expect(r).toMatchObject({inspected:2,eligibleToAcknowledge:0,notFound:1,unresolved:1,pending:2,reviewToken:null});
     expect(st.tasks.listPersonalSyncOutbox(OWNER)).toHaveLength(2);
   });
 
@@ -183,7 +188,7 @@ describe("ALPHA-SYNC-002H exact receipt reconciliation",()=>{
     }
     remote.lookupPersonalSyncReceipt.mockResolvedValueOnce(matched());
     remote.lookupPersonalSyncReceipt.mockResolvedValueOnce({status:"mismatch",response:null});
-    await expect(sync.reconcileReceipts()).rejects.toThrow("differs");
+    await expect(sync.reviewReceipts()).rejects.toThrow("differs");
     expect(st.tasks.listPersonalSyncOutbox(OWNER)).toHaveLength(2);
     expect(st.tasks.listPersonalSyncEnrollments(OWNER).every(x=>x.serverVersion===null)).toBe(true);
   });
@@ -194,7 +199,7 @@ describe("ALPHA-SYNC-002H exact receipt reconciliation",()=>{
     const t=st.tasks.createTask({title:"Keep pending"});
     st.tasks.setTaskSyncEnabled(t.id,true,OWNER);
     remote.lookupPersonalSyncReceipt.mockRejectedValueOnce(Error("Cloud request rejected (HTTP 404)"));
-    await expect(sync.reconcileReceipts()).rejects.toThrow("HTTP 404");
+    await expect(sync.reviewReceipts()).rejects.toThrow("HTTP 404");
     expect(st.tasks.listPersonalSyncOutbox(OWNER)).toHaveLength(1);
     expect(remote.applyPersonalSyncOperation).not.toHaveBeenCalled();
   });
@@ -208,10 +213,9 @@ describe("ALPHA-SYNC-002H exact receipt reconciliation",()=>{
       st.tasks.updateTask({id:t.id,title:"Edited while inspecting"});
       return matched(1);
     });
-    const result=await sync.reconcileReceipts();
-    expect(result.acknowledged).toBe(1);
+    await expect(sync.reviewReceipts()).rejects.toThrow("Local pending queue changed");
     expect(st.tasks.listPersonalSyncOutbox(OWNER)).toMatchObject([
-      {entityId:t.id,baseVersion:1,action:"upsert"},
+      {entityId:t.id,baseVersion:null,action:"upsert"},
     ]);
     expect(st.tasks.listTasks().find(x=>x.id===t.id)?.title).toBe("Edited while inspecting");
   });
@@ -223,7 +227,7 @@ describe("ALPHA-SYNC-002H exact receipt reconciliation",()=>{
     st.tasks.setTaskSyncEnabled(t.id,true,OWNER);
     let release:(r:{status:"not-found";response:null})=>void=()=>{};
     remote.lookupPersonalSyncReceipt.mockImplementationOnce(()=>new Promise(resolve=>{release=resolve;}));
-    const job=sync.reconcileReceipts();
+    const job=sync.reviewReceipts();
     expect(sync.hasInFlightRun()).toBe(true);
     await expect(sync.syncNow()).rejects.toThrow("reconciliation");
     remote.changeOwner(OTHER);
@@ -236,13 +240,126 @@ describe("ALPHA-SYNC-002H exact receipt reconciliation",()=>{
     const st=setup(),remote=cloud(),sync=service(remote,st);
     const device=st.tasks.getOrCreatePersonalSyncDevice(OWNER);
     st.tasks.beginPersonalSyncPullPage(OWNER,device.deviceId,"0",checkpoint);
-    await expect(sync.reconcileReceipts()).rejects.toThrow("checkpoint");
+    await expect(sync.reviewReceipts()).rejects.toThrow("checkpoint");
     expect(remote.lookupPersonalSyncReceipt).not.toHaveBeenCalled();
+  });
+
+  it("cannot confirm without the exact one-time token and an explicit true confirmation",async()=>{
+    const st=setup(),remote=cloud(),sync=service(remote,st);
+    st.tasks.getOrCreatePersonalSyncDevice(OWNER);
+    const task=st.tasks.createTask({title:"Await explicit confirmation"});
+    st.tasks.setTaskSyncEnabled(task.id,true,OWNER);
+    remote.lookupPersonalSyncReceipt.mockResolvedValueOnce(matched());
+    const preview=await sync.reviewReceipts();
+    expect(preview.eligibleToAcknowledge).toBe(1);
+    for(const input of [
+      {reviewToken:preview.reviewToken,confirmation:false},
+      {reviewToken:preview.reviewToken,confirmation:true,ownerId:OTHER},
+    ])await expect(Promise.resolve().then(()=>sync.reconcileReceipts(input))).rejects.toThrow();
+    expect(st.tasks.countPersonalSyncOutbox(OWNER)).toBe(1);
+    await expect(sync.reconcileReceipts({reviewToken:REMOTE_ID,confirmation:true}))
+      .rejects.toThrow("expired");
+    await expect(sync.reconcileReceipts({reviewToken:preview.reviewToken,confirmation:true}))
+      .rejects.toThrow("expired");
+    expect(st.tasks.countPersonalSyncOutbox(OWNER)).toBe(1);
+  });
+
+  it("expires a reviewed token after five minutes without clearing local pending state",async()=>{
+    const st=setup(),remote=cloud(),sync=service(remote,st);
+    st.tasks.getOrCreatePersonalSyncDevice(OWNER);
+    const task=st.tasks.createTask({title:"Expired confirmation"});
+    st.tasks.setTaskSyncEnabled(task.id,true,OWNER);
+    remote.lookupPersonalSyncReceipt.mockResolvedValueOnce(matched());
+    const preview=await sync.reviewReceipts();
+    const now=vi.spyOn(Date,"now").mockReturnValue(Date.now()+6*60_000);
+    try{
+      await expect(sync.reconcileReceipts({reviewToken:preview.reviewToken,confirmation:true}))
+        .rejects.toThrow("expired");
+    }finally{now.mockRestore();}
+    expect(st.tasks.countPersonalSyncOutbox(OWNER)).toBe(1);
+  });
+
+  it("discards confirmation on cancel; a second attempt needs a fresh cloud preview",async()=>{
+    const st=setup(),remote=cloud(),sync=service(remote,st);
+    st.tasks.getOrCreatePersonalSyncDevice(OWNER);
+    const task=st.tasks.createTask({title:"Cancel review"});
+    st.tasks.setTaskSyncEnabled(task.id,true,OWNER);
+    remote.lookupPersonalSyncReceipt.mockResolvedValue(matched());
+    const preview=await sync.reviewReceipts();
+    expect(sync.discardReceiptReview()).toEqual({cancelled:true});
+    await expect(sync.reconcileReceipts({reviewToken:preview.reviewToken,confirmation:true}))
+      .rejects.toThrow("expired");
+    expect(st.tasks.countPersonalSyncOutbox(OWNER)).toBe(1);
+    const second=await sync.reviewReceipts();
+    expect(second.reviewToken).not.toBe(preview.reviewToken);
+  });
+
+  it("refuses changed task outbox between preview and confirm, without changing local version",async()=>{
+    const st=setup(),remote=cloud(),sync=service(remote,st);
+    st.tasks.getOrCreatePersonalSyncDevice(OWNER);
+    const task=st.tasks.createTask({title:"Pre-review"});
+    st.tasks.setTaskSyncEnabled(task.id,true,OWNER);
+    remote.lookupPersonalSyncReceipt.mockResolvedValue(matched());
+    const preview=await sync.reviewReceipts();
+    st.tasks.updateTask({id:task.id,title:"New local edit"});
+    await expect(sync.reconcileReceipts({reviewToken:preview.reviewToken,confirmation:true}))
+      .rejects.toThrow("queue changed");
+    expect(st.tasks.listPersonalSyncOutbox(OWNER)).toMatchObject([
+      {entityId:task.id,baseVersion:null,action:"upsert"},
+    ]);
+  });
+
+  it("refuses calendar outbox changes after preview and preserves both pending queues",async()=>{
+    const st=setup(),remote=cloud(),sync=service(remote,st);
+    st.tasks.getOrCreatePersonalSyncDevice(OWNER);
+    const task=st.tasks.createTask({title:"Pending task"});
+    st.tasks.setTaskSyncEnabled(task.id,true,OWNER);
+    remote.lookupPersonalSyncReceipt.mockResolvedValue(matched());
+    const preview=await sync.reviewReceipts();
+    const event=st.calendar.create({title:"New calendar item",day:"2026-11-25",
+      startMinute:540,durationMinutes:60,weeks:1})[0];
+    st.calendar.setManualEventSyncEnabled(event.id,true,OWNER);
+    await expect(sync.reconcileReceipts({reviewToken:preview.reviewToken,confirmation:true}))
+      .rejects.toThrow("queue changed");
+    expect(st.tasks.countPersonalSyncOutbox(OWNER)).toBe(1);
+    expect(st.calendar.countManualCalendarSyncOutbox(OWNER)).toBe(1);
+  });
+
+  it("refuses a changed device/cursor and owner switch after the review",async()=>{
+    const st=setup(),remote=cloud(),sync=service(remote,st);
+    st.tasks.getOrCreatePersonalSyncDevice(OWNER);
+    const task=st.tasks.createTask({title:"Pending"});
+    st.tasks.setTaskSyncEnabled(task.id,true,OWNER);
+    remote.lookupPersonalSyncReceipt.mockResolvedValue(matched());
+    const preview=await sync.reviewReceipts();
+    st.tasks.advancePersonalSyncCursor(OWNER,"1");
+    await expect(sync.reconcileReceipts({reviewToken:preview.reviewToken,confirmation:true}))
+      .rejects.toThrow("device changed");
+    const later=await sync.reviewReceipts();
+    remote.changeOwner(OTHER);
+    await expect(sync.reconcileReceipts({reviewToken:later.reviewToken,confirmation:true}))
+      .rejects.toThrow("expired or account changed");
+    expect(st.tasks.countPersonalSyncOutbox(OWNER)).toBe(1);
+  });
+
+  it("does not allow sync to reuse a receipt review from a previous run",async()=>{
+    const st=setup(),remote=cloud(),sync=service(remote,st);
+    st.tasks.getOrCreatePersonalSyncDevice(OWNER);
+    const task=st.tasks.createTask({title:"Pending"});
+    st.tasks.setTaskSyncEnabled(task.id,true,OWNER);
+    remote.lookupPersonalSyncReceipt.mockResolvedValue(matched());
+    const review=await sync.reviewReceipts();
+    remote.registerPersonalSyncDevice.mockResolvedValue({ownerId:OWNER,deviceId:"",createdAt:STAMP,lastSeenAt:STAMP});
+    remote.pullPersonalSyncChanges.mockResolvedValue({changes:[],nextCursor:"0",hasMore:false});
+    remote.applyPersonalSyncOperation.mockResolvedValue({status:"accepted",serverVersion:1,cursor:"1"});
+    await sync.syncNow();
+    await expect(sync.reconcileReceipts({reviewToken:review.reviewToken,confirmation:true}))
+      .rejects.toThrow("expired");
   });
 
   it("never initializes a device merely to find receipts",async()=>{
     const st=setup(),remote=cloud(),sync=service(remote,st);
-    await expect(sync.reconcileReceipts()).rejects.toThrow("No local personal sync device");
+    await expect(sync.reviewReceipts()).rejects.toThrow("No local personal sync device");
     expect(st.tasks.peekPersonalSyncDevice(OWNER)).toBeNull();
     expect(remote.lookupPersonalSyncReceipt).not.toHaveBeenCalled();
   });
