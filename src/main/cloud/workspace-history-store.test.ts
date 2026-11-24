@@ -4,6 +4,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
 import {WorkspaceHistoryStore} from "./workspace-history-store";
+import {testHistoryCipher} from "./workspace-history-crypto.test-helper";
 import type {WorkspaceHistoryChange} from "../../shared/workspace-history-contract";
 
 const OWNER="aae9ac05-b37d-4898-aee4-5848fa28e01b";
@@ -17,7 +18,7 @@ function makeDisk(){
   const dir=mkdtempSync(join(tmpdir(),"ate-team-history-"));
   paths.push(dir);
   const file=join(dir,"shared.sqlite");
-  const store=new WorkspaceHistoryStore(file);
+  const store=new WorkspaceHistoryStore(file,testHistoryCipher);
   opened.push(store);
   return {file,store};
 }
@@ -51,7 +52,7 @@ describe("ALPHA-SYNC-003B durable workspace SQLite store",()=>{
     expect(store.getCursor(OWNER,WORKSPACE)).toBe("205");
     expect(store.counts(OWNER,WORKSPACE)).toEqual({messages:205,tasks:0});
     store.close();opened.length=0;
-    const reopened=new WorkspaceHistoryStore(file);opened.push(reopened);
+    const reopened=new WorkspaceHistoryStore(file,testHistoryCipher);opened.push(reopened);
     expect(reopened.getCursor(OWNER,WORKSPACE)).toBe("205");
     const first=reopened.list(OWNER,WORKSPACE,"message");
     expect(first.items).toHaveLength(100);
@@ -140,11 +141,11 @@ describe("ALPHA-SYNC-003B durable workspace SQLite store",()=>{
     const sqlite=new DatabaseSync(file);
     sqlite.prepare("UPDATE progress SET cursor=?").run("9223372036854775808");
     sqlite.close();
-    const corrupted=new WorkspaceHistoryStore(file);opened.push(corrupted);
+    const corrupted=new WorkspaceHistoryStore(file,testHistoryCipher);opened.push(corrupted);
     expect(()=>corrupted.getCursor(OWNER,WORKSPACE)).toThrow("cursor");
     corrupted.close();opened.length=0;
     const modified=new DatabaseSync(file);
-    modified.exec("PRAGMA user_version=3");modified.close();
-    expect(()=>new WorkspaceHistoryStore(file)).toThrow("newer app");
+    modified.exec("PRAGMA user_version=4");modified.close();
+    expect(()=>new WorkspaceHistoryStore(file,testHistoryCipher)).toThrow("newer app");
   });
 });
