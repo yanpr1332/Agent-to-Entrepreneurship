@@ -77,7 +77,7 @@ describe("PDF page-specific text provenance and version 2 knowledge SQLite",()=>
     first.createCard({documentId:doc.id,sourceOrdinal:0,question:"Old question",answer:"Old answer"});
     first.close();
     const raw=new DatabaseSync(path);
-    raw.exec(`DROP TABLE knowledge_graph_edges; DROP TABLE knowledge_graph_nodes;
+    raw.exec(`DROP TABLE knowledge_vectors; DROP TABLE knowledge_vector_config; DROP TABLE knowledge_graph_edges; DROP TABLE knowledge_graph_nodes;
       DROP TABLE knowledge_chunk_pages;
       DROP TABLE knowledge_pdf_sources;
       ALTER TABLE knowledge_cards DROP COLUMN source_page;
