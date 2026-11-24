@@ -222,3 +222,8 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 ## ALPHA-SYNC-002F 续篇：手动更换同步设备身份（开发中，2026-11-24）
 
 [36 设备更换说明与验收](36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md) 在已合并 PR #41 的只读 Cursor 预检基础上，增加有条件、明确两步确认的 owner-scoped 旧设备撤销/本机 UUID 轮换。任务/日历 pending 或冲突非空时阻止更换；不回退 Cursor，不清空队列，不后台同步。**Cursor 损坏重建和真实云端权限/多设备测试仍未完成。**
+
+
+## ALPHA-SYNC-002G：跨 SQLite 拉取中断后安全恢复（开发中，2026-11-24）
+
+[37 持久拉取检查点与故障注入验收](37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md)：本机任务库 schema v10 在每页远端增量进入两个 SQLite 事务前先持久保存页面，故障重启后先从本地检查点重放，再统一提交 Cursor + 删除检查点。遇到损坏快照停止自动同步。无远端部署或真实双设备验收。
