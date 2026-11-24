@@ -25,6 +25,7 @@
 - [06 里程碑与时间表](06_MILESTONES.md)
 - [07 外部依赖与风险](07_EXTERNAL_DEPENDENCIES.md)
 - [08 GitHub 分支、PR 与 main 保护建议](08_GITHUB_GOVERNANCE.md)
+- [09 Study Anchor 仓库更名及本机数据兼容记录](09_REPOSITORY_RENAME_STUDY_ANCHOR.md)
 
 ## 重要范围说明
 1. PRD 中八大模块的正式 P0/P1/P2 划分保持不变。本次内部 Alpha 是限期原型，不得把尚未实现的正式 P0 私自改成 P1。
