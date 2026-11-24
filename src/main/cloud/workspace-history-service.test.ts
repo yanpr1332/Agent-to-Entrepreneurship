@@ -33,7 +33,7 @@ function setup(){
     listMembers:vi.fn(async()=>authorized?[member()]:[]),
     workspaceSnapshot:vi.fn(async()=>({workspaceId:W,members:[member()],
       messages:[payload(1)],tasks:[] as SharedTask[]})),
-    pullWorkspaceHistory:vi.fn(async(_workspace:string,cursor:string)=>({
+    pullWorkspaceHistory:vi.fn(async(_workspace:string,cursor:string):Promise<unknown>=>({
       changes:[],nextCursor:cursor,serverCursor:cursor,hasMore:false,
     })),
   };
