@@ -194,6 +194,9 @@ describe("ALPHA-SYNC-003A: Main-only Realtime transport",()=>{
     await vi.advanceTimersByTimeAsync(100_000);
     await tick();
     expect(m.sockets[0].closed).toBe(true);
+    // Backoff timer begins after the stale heartbeat is detected.
+    await vi.advanceTimersByTimeAsync(1_500);
+    await tick();
     expect(m.sockets.length).toBeGreaterThanOrEqual(2);
     m.bridge.stop();
   });
