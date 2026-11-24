@@ -28,6 +28,8 @@ describe("ALPHA-KB-005A pinned local embedding contract",()=>{
     expect(a.readFloatLE(0)).toBeCloseTo(.6,6);
     expect(a.readFloatLE(4)).toBeCloseTo(.8,6);
     expect(embeddingCosine(a,encodeEmbedding([6,8,0],3))).toBeCloseTo(1,5);
+    expect(embeddingCosine(a,new Uint8Array(encodeEmbedding([6,8,0],3))))
+      .toBeCloseTo(1,5);
     expect(embeddingCosine(a,encodeEmbedding([-3,-4,0],3))).toBeCloseTo(-1,5);
     for(const bad of [[0,0,0],[1,Number.NaN,0],[Infinity,0,0],[1,2],[1,1e90,0]])
       expect(()=>encodeEmbedding(bad,3)).toThrow();
