@@ -7,6 +7,10 @@ import type { MailCandidateAction, MailCandidateChoiceResult, MailCandidateDecis
 import { suggestedTaskTitle } from "../shared/mail-candidates";
 import type { MailRecord } from "../shared/mail-model";
 import { requireUuid } from "../shared/cloud-model";
+import type {
+  PersonalSyncChange, PersonalSyncConflict, PersonalSyncConflictRecord, PersonalSyncCandidate,
+  PersonalTaskSnapshot,
+} from "../shared/personal-sync-contract";
 import {
   parseCreateTask, parseFocusCompletion, parseFocusTitleUpdate, parseTaskId, parseUpdateTask,
   type FocusSession, type FocusSummary, type LocalTask, type TaskPriority,
@@ -93,8 +97,8 @@ export class LocalStore {
 
   private migrate(): void {
     const version = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (version > 8) throw new Error("Database created by a newer application; refusing to downgrade");
-    if (version === 8) return;
+    if (version > 9) throw new Error("Database created by a newer application; refusing to downgrade");
+    if (version === 9) return;
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -251,7 +255,34 @@ export class LocalStore {
           CREATE INDEX personal_task_sync_enrollment_owner ON personal_task_sync_enrollment(owner_id,enabled_at);
         `);
       }
-      this.db.exec("PRAGMA user_version = 8");
+      if (version <= 8) {
+        this.db.exec(`
+          CREATE TABLE personal_sync_conflicts (
+            owner_id TEXT NOT NULL CHECK(length(owner_id)=36),
+            entity_type TEXT NOT NULL CHECK(entity_type IN ('personal-task','manual-calendar-event')),
+            entity_id TEXT NOT NULL,
+            local_operation_id TEXT,
+            local_action TEXT CHECK(local_action IS NULL OR local_action IN ('upsert','delete')),
+            local_payload TEXT,
+            remote_version INTEGER NOT NULL CHECK(remote_version>0),
+            remote_payload TEXT,
+            remote_deleted INTEGER NOT NULL CHECK(remote_deleted IN (0,1)),
+            remote_updated_at TEXT NOT NULL,
+            reason TEXT NOT NULL CHECK(reason IN (
+              'remote-change-while-local-pending','remote-delete-while-local-pending',
+              'local-entity-not-eligible','remote-overlaps-study-plan','local-calendar-capacity'
+            )),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(owner_id,entity_type,entity_id),
+            CHECK((remote_deleted=1 AND remote_payload IS NULL) OR
+              (remote_deleted=0 AND remote_payload IS NOT NULL))
+          );
+          CREATE INDEX personal_sync_conflicts_owner_updated
+            ON personal_sync_conflicts(owner_id,updated_at DESC);
+        `);
+      }
+      this.db.exec("PRAGMA user_version = 9");
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -269,19 +300,17 @@ export class LocalStore {
 
   /** A stable device identity and cursor are scoped to the authenticated owner. */
   getOrCreatePersonalSyncDevice(ownerId: string, now = new Date()): {deviceId:string;cursor:string} {
-    if (typeof ownerId !== "string" ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerId))
-      throw new Error("Invalid personal sync owner");
+    const owner=syncOwnerId(ownerId);
     const existing = this.db.prepare(
       "SELECT device_id,cursor FROM personal_sync_devices WHERE owner_id=?"
-    ).get(ownerId) as {device_id:string;cursor:string}|undefined;
+    ).get(owner) as {device_id:string;cursor:string}|undefined;
     if (existing) return {deviceId:existing.device_id,cursor:existing.cursor};
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.db.prepare(
         "INSERT INTO personal_sync_devices(owner_id,device_id,cursor,created_at) VALUES(?,?, '0', ?) " +
         "ON CONFLICT(owner_id) DO NOTHING"
-      ).run(ownerId,randomUUID(),now.toISOString());
+      ).run(owner,randomUUID(),now.toISOString());
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -289,26 +318,25 @@ export class LocalStore {
     }
     const created=this.db.prepare(
       "SELECT device_id,cursor FROM personal_sync_devices WHERE owner_id=?"
-    ).get(ownerId) as {device_id:string;cursor:string}|undefined;
+    ).get(owner) as {device_id:string;cursor:string}|undefined;
     if (!created) throw new Error("Personal sync device could not be initialized");
     return {deviceId:created.device_id,cursor:created.cursor};
   }
 
   /** Advance only after a complete page has been durably applied locally. */
   advancePersonalSyncCursor(ownerId:string,cursor:string):void {
-    if (typeof ownerId!=="string" ||
-        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ownerId) ||
-        typeof cursor!=="string" || !/^(0|[1-9][0-9]{0,18})$/.test(cursor))
+    const owner=syncOwnerId(ownerId);
+    if(typeof cursor!=="string"||!/^(0|[1-9][0-9]{0,18})$/.test(cursor))
       throw new Error("Invalid personal sync cursor");
     const current=this.db.prepare(
       "SELECT cursor FROM personal_sync_devices WHERE owner_id=?"
-    ).get(ownerId) as {cursor:string}|undefined;
+    ).get(owner) as {cursor:string}|undefined;
     if (!current) throw new Error("Personal sync device is not registered locally");
     const next=BigInt(cursor);
     if(next>9223372036854775807n)throw new Error("Personal sync cursor exceeds server bounds");
     if (next<BigInt(current.cursor)) throw new Error("Personal sync cursor cannot move backwards");
-    this.db.prepare("UPDATE personal_sync_devices SET cursor=? WHERE owner_id=?")
-      .run(cursor,ownerId);
+    this.db.prepare("UPDATE personal_sync_devices SET cursor=?,last_sync_at=? WHERE owner_id=?")
+      .run(cursor,new Date().toISOString(),owner);
   }
 
   private readonly taskSelect = `SELECT t.*, l.instance_origin, l.account_id, l.course_id,
@@ -379,7 +407,7 @@ export class LocalStore {
       INSERT INTO personal_sync_outbox(owner_id,operation_id,entity_type,entity_id,action,base_version,payload,created_at)
       VALUES(?,?,'personal-task',?,'upsert',?,?,?)
       ON CONFLICT(owner_id,entity_type,entity_id) DO UPDATE SET
-        action='upsert',base_version=excluded.base_version,
+        operation_id=excluded.operation_id,action='upsert',base_version=excluded.base_version,
         payload=excluded.payload,created_at=excluded.created_at
     `).run(ownerId,randomUUID(),id,enrolled.server_version,payload,now.toISOString());
   }
@@ -393,11 +421,56 @@ export class LocalStore {
     if(!Number.isSafeInteger(limit)||limit<1||limit>500)throw new Error("Invalid outbox limit");
     return (this.db.prepare(
       "SELECT operation_id,entity_type,entity_id,action,base_version,payload,created_at "+
-      "FROM personal_sync_outbox WHERE owner_id=? ORDER BY created_at,operation_id LIMIT ?"
+      "FROM personal_sync_outbox WHERE owner_id=? AND entity_type='personal-task' ORDER BY created_at,operation_id LIMIT ?"
     ).all(ownerId,limit) as unknown as {operation_id:string;entity_type:"personal-task"|"manual-calendar-event";
       entity_id:string;action:"upsert"|"delete";base_version:number|null;payload:string|null;created_at:string}[])
       .map(row=>({operationId:row.operation_id,entityType:row.entity_type,entityId:row.entity_id,
         action:row.action,baseVersion:row.base_version,payload:row.payload,createdAt:row.created_at}));
+  }
+
+  hasPendingPersonalSyncOperation(ownerInput:unknown,operationIdInput:unknown):boolean{
+    const ownerId=syncOwnerId(ownerInput),operationId=requireUuid(operationIdInput);
+    return Boolean(this.db.prepare(
+      "SELECT 1 AS found FROM personal_sync_outbox "+
+      "WHERE owner_id=? AND entity_type='personal-task' AND operation_id=?"
+    ).get(ownerId,operationId));
+  }
+
+  countPersonalSyncOutbox(ownerInput:unknown):number{
+    const ownerId=syncOwnerId(ownerInput);
+    const row=this.db.prepare(
+      "SELECT COUNT(*) AS count FROM personal_sync_outbox "+
+      "WHERE owner_id=? AND entity_type='personal-task'"
+    ).get(ownerId) as {count:number};
+    return row.count;
+  }
+
+  countPersonalSyncConflicts(ownerInput:unknown):number{
+    const ownerId=syncOwnerId(ownerInput);
+    const row=this.db.prepare(
+      "SELECT COUNT(*) AS count FROM personal_sync_conflicts WHERE owner_id=?"
+    ).get(ownerId) as {count:number};
+    return row.count;
+  }
+
+  listPersonalSyncCandidates(ownerInput:unknown,limit=500):PersonalSyncCandidate[]{
+    const ownerId=syncOwnerId(ownerInput);
+    if(!Number.isSafeInteger(limit)||limit<1||limit>500)throw Error("Invalid sync candidate limit");
+    const rows=this.db.prepare(`
+      SELECT t.id,t.title,t.due_date,e.server_version,e.task_id AS enrolled
+      FROM tasks t
+      LEFT JOIN canvas_assignment_links l ON l.task_id=t.id
+      LEFT JOIN personal_task_sync_enrollment e ON e.owner_id=? AND e.task_id=t.id
+      WHERE l.task_id IS NULL
+        AND NOT EXISTS(SELECT 1 FROM mail_candidate_reviews m
+          WHERE m.task_id=t.id AND m.decision='accepted')
+      ORDER BY t.updated_at DESC,t.id LIMIT ?
+    `).all(ownerId,limit) as unknown as {
+      id:string;title:string;due_date:string|null;server_version:number|null;enrolled:string|null;
+    }[];
+    return rows.map(row=>({entityType:"personal-task",entityId:row.id,title:row.title,
+      detail:row.due_date?("截止 "+row.due_date):null,enabled:row.enrolled!==null,
+      serverVersion:row.server_version}));
   }
 
   listPersonalSyncEnrollments(ownerInput:unknown):{
@@ -484,28 +557,223 @@ export class LocalStore {
     }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
 
-  /** Acknowledge only the exact pending operation within the same account. */
-  acknowledgePersonalSyncOperation(ownerInput:unknown,operationId:string,serverVersion:number):void{
-    const ownerId=syncOwnerId(ownerInput);
-    if(typeof operationId!=="string"||!/^[a-f0-9-]{36}$/i.test(operationId)||
-      !Number.isSafeInteger(serverVersion)||serverVersion<1)throw Error("Invalid sync acknowledgement");
-    const row=this.db.prepare(
-      "SELECT entity_id,entity_type,action FROM personal_sync_outbox WHERE owner_id=? AND operation_id=?"
-    ).get(ownerId,operationId) as {entity_id:string;entity_type:string;action:string}|undefined;
-    if(!row)throw Error("Sync operation is no longer pending for this account");
+  /** Acknowledge only the exact owner-scoped operation that was sent. */
+  acknowledgePersonalSyncOperation(ownerInput:unknown,operationId:string,entityIdInput:unknown,
+    actionInput:unknown,serverVersion:number,expectedBaseVersion:number|null):
+    "acknowledged"|"not-pending"{
+    const ownerId=syncOwnerId(ownerInput),entityId=parseTaskId(entityIdInput);
+    requireUuid(operationId);
+    if((actionInput!=="upsert"&&actionInput!=="delete")||
+      !Number.isSafeInteger(serverVersion)||serverVersion<1||
+      (expectedBaseVersion!==null&&(!Number.isSafeInteger(expectedBaseVersion)||expectedBaseVersion<0)))
+      throw Error("Invalid sync acknowledgement");
+    const action=actionInput as "upsert"|"delete";
     this.db.exec("BEGIN IMMEDIATE");
     try{
+      const row=this.db.prepare(
+        "SELECT entity_id,entity_type,action,base_version FROM personal_sync_outbox WHERE owner_id=? AND operation_id=?"
+      ).get(ownerId,operationId) as {entity_id:string;entity_type:string;action:string;base_version:number|null}|undefined;
+      if(!row){
+        this.db.exec("COMMIT");
+        return "not-pending";
+      }
+      if(row.entity_id!==entityId||row.entity_type!=="personal-task"||row.action!==action||
+        row.base_version!==expectedBaseVersion)
+        throw Error("Sync acknowledgement does not match its pending operation");
       this.db.prepare("DELETE FROM personal_sync_outbox WHERE owner_id=? AND operation_id=?")
         .run(ownerId,operationId);
-      if(row.entity_type==="personal-task"&&row.action==="upsert")
+      if(action==="upsert")
         this.db.prepare("UPDATE personal_task_sync_enrollment SET server_version=? WHERE owner_id=? AND task_id=?")
-          .run(serverVersion,ownerId,row.entity_id);
-      if(row.entity_type==="personal-task"&&row.action==="delete")
+          .run(serverVersion,ownerId,entityId);
+      if(action==="delete")
         this.db.prepare("DELETE FROM personal_task_sync_enrollment WHERE owner_id=? AND task_id=?")
-          .run(ownerId,row.entity_id);
+          .run(ownerId,entityId);
+      this.db.exec("COMMIT");
+      return "acknowledged";
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+
+  /** Rebase only an owner-scoped newer intent after this sync run confirms its prior request. */
+  rebasePersonalSyncOperation(ownerInput:unknown,entityIdInput:unknown,actionInput:unknown,
+    serverVersion:number,expectedBaseVersion:number|null):
+    "superseded"|"deleted-during-upload"|"stale"{
+    const ownerId=syncOwnerId(ownerInput),entityId=parseTaskId(entityIdInput);
+    if((actionInput!=="upsert"&&actionInput!=="delete")||
+      !Number.isSafeInteger(serverVersion)||serverVersion<1||
+      (expectedBaseVersion!==null&&(!Number.isSafeInteger(expectedBaseVersion)||expectedBaseVersion<0)))
+      throw Error("Invalid sync rebase");
+    const action=actionInput as "upsert"|"delete";
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const newer=this.db.prepare(
+        "SELECT operation_id,base_version FROM personal_sync_outbox "+
+        "WHERE owner_id=? AND entity_type='personal-task' AND entity_id=?"
+      ).get(ownerId,entityId) as {operation_id:string;base_version:number|null}|undefined;
+      if(newer&&newer.base_version===expectedBaseVersion){
+        this.db.prepare(
+          "UPDATE personal_task_sync_enrollment SET server_version=? WHERE owner_id=? AND task_id=?"
+        ).run(serverVersion,ownerId,entityId);
+        this.db.prepare(
+          "UPDATE personal_sync_outbox SET base_version=? WHERE owner_id=? AND operation_id=?"
+        ).run(serverVersion,ownerId,newer.operation_id);
+        this.db.exec("COMMIT");
+        return "superseded";
+      }
+      const taskExists=Boolean(this.db.prepare("SELECT 1 AS found FROM tasks WHERE id=?").get(entityId));
+      if(!newer&&!taskExists&&action==="upsert"){
+        this.db.prepare(`
+          INSERT INTO personal_sync_outbox(owner_id,operation_id,entity_type,entity_id,action,base_version,payload,created_at)
+          VALUES(?,?,'personal-task',?,'delete',?,NULL,?)
+          ON CONFLICT(owner_id,entity_type,entity_id) DO UPDATE SET
+            operation_id=excluded.operation_id,action='delete',base_version=excluded.base_version,
+            payload=NULL,created_at=excluded.created_at
+        `).run(ownerId,randomUUID(),entityId,serverVersion,new Date().toISOString());
+        this.db.exec("COMMIT");
+        return "deleted-during-upload";
+      }
+      this.db.exec("COMMIT");
+      return "stale";
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+
+  applyRemotePersonalTaskChanges(ownerInput:unknown,changes:readonly PersonalSyncChange[],
+    now=new Date()):PersonalSyncConflict[]{
+    const ownerId=syncOwnerId(ownerInput);
+    if(!Array.isArray(changes)||changes.length>500)throw Error("Invalid remote task changes");
+    const conflicts:PersonalSyncConflict[]=[];
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      for(const change of changes){
+        if(change.entityType!=="personal-task"||!Number.isSafeInteger(change.version)||change.version<1)
+          throw Error("Invalid remote personal task change");
+        const entityId=parseTaskId(change.entityId);
+        const pending=this.db.prepare(
+          "SELECT operation_id,action,base_version,payload FROM personal_sync_outbox "+
+          "WHERE owner_id=? AND entity_type='personal-task' AND entity_id=?"
+        ).get(ownerId,entityId) as {operation_id:string;action:"upsert"|"delete";
+          base_version:number|null;payload:string|null}|undefined;
+        if(pending){
+          if(change.version>(pending.base_version??0)){
+            conflicts.push({entityType:"personal-task",entityId,localOperationId:pending.operation_id,
+              localAction:pending.action,localPayload:pending.payload?JSON.parse(pending.payload):null,
+              remoteVersion:change.version,remotePayload:change.payload as PersonalSyncConflict["remotePayload"],
+              remoteDeleted:change.deleted,remoteUpdatedAt:change.updatedAt,
+              reason:change.deleted?"remote-delete-while-local-pending":"remote-change-while-local-pending"});
+          }
+          continue;
+        }
+        const enrollment=this.db.prepare(
+          "SELECT server_version FROM personal_task_sync_enrollment WHERE owner_id=? AND task_id=?"
+        ).get(ownerId,entityId) as {server_version:number|null}|undefined;
+        if(enrollment?.server_version!==null&&enrollment?.server_version!==undefined&&
+          change.version<=enrollment.server_version)continue;
+        const task=this.findTask(entityId);
+        const acceptedMail=this.db.prepare(
+          "SELECT 1 AS found FROM mail_candidate_reviews WHERE task_id=? AND decision='accepted'"
+        ).get(entityId);
+        if(task&&(!enrollment||task.source!==null||acceptedMail)){
+          const localPayload=task.source===null&&!acceptedMail?{
+            title:task.title,description:task.description,dueDate:task.dueDate,
+            priority:task.priority,completed:task.completed,
+          }:null;
+          conflicts.push({entityType:"personal-task",entityId,localOperationId:null,localAction:null,
+            localPayload,remoteVersion:change.version,
+            remotePayload:change.payload as PersonalSyncConflict["remotePayload"],
+            remoteDeleted:change.deleted,remoteUpdatedAt:change.updatedAt,
+            reason:"local-entity-not-eligible"});
+          continue;
+        }
+        if(change.deleted){
+          this.db.prepare("DELETE FROM tasks WHERE id=?").run(entityId);
+          this.db.prepare("DELETE FROM personal_task_sync_enrollment WHERE owner_id=? AND task_id=?")
+            .run(ownerId,entityId);
+          continue;
+        }
+        const payload=change.payload as PersonalTaskSnapshot|null;
+        if(!payload||typeof payload!=="object"||!("title" in payload))
+          throw Error("Remote task snapshot is missing");
+        if(task){
+          this.db.prepare(`
+            UPDATE tasks SET title=?,description=?,due_date=?,priority=?,completed=?,updated_at=?
+            WHERE id=?
+          `).run(payload.title,payload.description,payload.dueDate,payload.priority,
+            payload.completed?1:0,change.updatedAt,entityId);
+        }else{
+          this.db.prepare(`
+            INSERT INTO tasks(id,title,description,due_date,priority,completed,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?)
+          `).run(entityId,payload.title,payload.description,payload.dueDate,payload.priority,
+            payload.completed?1:0,change.updatedAt,change.updatedAt);
+        }
+        this.db.prepare(`
+          INSERT INTO personal_task_sync_enrollment(owner_id,task_id,server_version,enabled_at)
+          VALUES(?,?,?,?)
+          ON CONFLICT(owner_id,task_id) DO UPDATE SET server_version=excluded.server_version
+        `).run(ownerId,entityId,change.version,now.toISOString());
+      }
+      this.db.exec("COMMIT");
+      return conflicts;
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+
+  recordPersonalSyncConflicts(ownerInput:unknown,conflicts:readonly PersonalSyncConflict[],
+    now=new Date()):void{
+    const ownerId=syncOwnerId(ownerInput);
+    if(!Array.isArray(conflicts)||conflicts.length>1000)throw Error("Invalid personal sync conflicts");
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      for(const conflict of conflicts){
+        const entityId=requireUuid(conflict.entityId);
+        if((conflict.entityType!=="personal-task"&&conflict.entityType!=="manual-calendar-event")||
+          !Number.isSafeInteger(conflict.remoteVersion)||conflict.remoteVersion<1||
+          typeof conflict.remoteDeleted!=="boolean"||
+          (conflict.remoteDeleted?conflict.remotePayload!==null:conflict.remotePayload===null)||
+          !Number.isFinite(Date.parse(conflict.remoteUpdatedAt)))
+          throw Error("Invalid personal sync conflict");
+        if(conflict.localOperationId!==null)requireUuid(conflict.localOperationId);
+        if(conflict.localAction!==null&&conflict.localAction!=="upsert"&&conflict.localAction!=="delete")
+          throw Error("Invalid local conflict action");
+        const stamp=now.toISOString();
+        this.db.prepare(`
+          INSERT INTO personal_sync_conflicts(owner_id,entity_type,entity_id,local_operation_id,
+            local_action,local_payload,remote_version,remote_payload,remote_deleted,remote_updated_at,
+            reason,created_at,updated_at)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ON CONFLICT(owner_id,entity_type,entity_id) DO UPDATE SET
+            local_operation_id=excluded.local_operation_id,local_action=excluded.local_action,
+            local_payload=excluded.local_payload,remote_version=excluded.remote_version,
+            remote_payload=excluded.remote_payload,remote_deleted=excluded.remote_deleted,
+            remote_updated_at=excluded.remote_updated_at,reason=excluded.reason,updated_at=excluded.updated_at
+        `).run(ownerId,conflict.entityType,entityId,conflict.localOperationId,conflict.localAction,
+          conflict.localPayload===null?null:JSON.stringify(conflict.localPayload),conflict.remoteVersion,
+          conflict.remotePayload===null?null:JSON.stringify(conflict.remotePayload),
+          conflict.remoteDeleted?1:0,conflict.remoteUpdatedAt,conflict.reason,stamp,stamp);
+      }
       this.db.exec("COMMIT");
     }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
+
+  listPersonalSyncConflicts(ownerInput:unknown,limit=100):PersonalSyncConflictRecord[]{
+    const ownerId=syncOwnerId(ownerInput);
+    if(!Number.isSafeInteger(limit)||limit<1||limit>500)throw Error("Invalid sync conflict limit");
+    const rows=this.db.prepare(
+      "SELECT entity_type,entity_id,local_operation_id,local_action,local_payload,remote_version,"+
+      "remote_payload,remote_deleted,remote_updated_at,reason,created_at,updated_at "+
+      "FROM personal_sync_conflicts WHERE owner_id=? ORDER BY updated_at DESC,entity_id LIMIT ?"
+    ).all(ownerId,limit) as unknown as Array<{
+      entity_type:"personal-task"|"manual-calendar-event";entity_id:string;
+      local_operation_id:string|null;local_action:"upsert"|"delete"|null;local_payload:string|null;
+      remote_version:number;remote_payload:string|null;remote_deleted:number;remote_updated_at:string;
+      reason:PersonalSyncConflict["reason"];created_at:string;updated_at:string;
+    }>;
+    return rows.map(row=>({entityType:row.entity_type,entityId:row.entity_id,
+      localOperationId:row.local_operation_id,localAction:row.local_action,
+      localPayload:row.local_payload?JSON.parse(row.local_payload):null,
+      remoteVersion:row.remote_version,remotePayload:row.remote_payload?JSON.parse(row.remote_payload):null,
+      remoteDeleted:row.remote_deleted===1,remoteUpdatedAt:row.remote_updated_at,
+      reason:row.reason,createdAt:row.created_at,updatedAt:row.updated_at}));
+  }
+
 
   createTask(input: unknown): LocalTask {
     const draft = parseCreateTask(input);

@@ -16,6 +16,9 @@ import type {
   CloudCredentials, CloudProjectConfig, CloudSessionStatus,
   SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
 } from "../../shared/cloud-model";
+import type {
+  PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncRunResult,
+} from "../../shared/personal-sync-contract";
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
@@ -79,6 +82,11 @@ declare global {
         tasks: (workspaceId: string) => Promise<SharedTask[]>;
         createTask: (workspaceId: string, input: SharedTaskInput) => Promise<SharedTask>;
         markTask: (workspaceId: string, taskId: string, completed: boolean) => Promise<SharedTask>;
+        syncPersonalNow: () => Promise<PersonalSyncRunResult>;
+        personalSyncCandidates: () => Promise<PersonalSyncCandidate[]>;
+        setPersonalTaskSync: (id:string,enabled:boolean) => Promise<{saved:true}>;
+        setManualEventSync: (id:string,enabled:boolean) => Promise<{saved:true}>;
+        personalSyncConflicts: () => Promise<PersonalSyncConflictRecord[]>;
       };
       canvas: {
         status: () => Promise<CanvasConnectionStatus>;

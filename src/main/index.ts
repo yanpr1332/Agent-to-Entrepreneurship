@@ -15,6 +15,7 @@ import { CanvasApi } from "./connectors/canvas-api";
 import { CanvasCredentialVault } from "./connectors/canvas-credentials";
 import { CanvasSyncService } from "./connectors/canvas-sync";
 import { SharedCloudClient } from "./cloud/supabase-client";
+import { PersonalSyncService } from "./personal-sync";
 import { parseCanvasCourseId, parseCanvasPersonalTokenInput } from "../shared/canvas-model";
 import { CampusMailStore } from "./connectors/mail-store";
 import { CampusMailVault } from "./connectors/mail-vault";
@@ -110,6 +111,11 @@ function campusMail(): CampusMailService {
 }
 const CANVAS_SYNC_UPDATED = "canvas:sync-updated";
 const sharedCloud = new SharedCloudClient();
+let personalSync:PersonalSyncService|null=null;
+function personalSyncService():PersonalSyncService{
+  if(!personalSync)throw new Error("Personal synchronization is not initialized");
+  return personalSync;
+}
 
 function coordinator(): CanvasSyncService {
   if (!canvasSync) throw new Error("Canvas synchronization is not initialized");
@@ -664,6 +670,40 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return sharedCloud.markTask(workspaceId, taskId, completed);
   });
+  handle(IPC_CHANNELS.cloudPersonalSyncNow, async (event) => {
+    requireTrustedSender(event);
+    return personalSyncService().syncNow();
+  });
+  handle(IPC_CHANNELS.cloudPersonalSyncCandidates, (event) => {
+    requireTrustedSender(event);
+    const ownerId=sharedCloud.currentUserId();
+    return [
+      ...localStore().listPersonalSyncCandidates(ownerId),
+      ...fixedCalendar().listManualCalendarSyncCandidates(ownerId),
+    ];
+  });
+  handle(IPC_CHANNELS.cloudSetPersonalTaskSync, (event,input:unknown) => {
+    requireTrustedSender(event);
+    if(!input||typeof input!=="object"||Array.isArray(input))throw Error("Invalid task sync preference");
+    const row=input as Record<string,unknown>;
+    if(Object.keys(row).sort().join(",")!=="enabled,id"||typeof row.enabled!=="boolean")
+      throw Error("Invalid task sync preference");
+    localStore().setTaskSyncEnabled(row.id,row.enabled,sharedCloud.currentUserId());
+    return {saved:true as const};
+  });
+  handle(IPC_CHANNELS.cloudSetManualEventSync, (event,input:unknown) => {
+    requireTrustedSender(event);
+    if(!input||typeof input!=="object"||Array.isArray(input))throw Error("Invalid calendar sync preference");
+    const row=input as Record<string,unknown>;
+    if(Object.keys(row).sort().join(",")!=="enabled,id"||typeof row.enabled!=="boolean"||
+      typeof row.id!=="string")throw Error("Invalid calendar sync preference");
+    fixedCalendar().setManualEventSyncEnabled(row.id,row.enabled,sharedCloud.currentUserId());
+    return {saved:true as const};
+  });
+  handle(IPC_CHANNELS.cloudPersonalSyncConflicts, (event) => {
+    requireTrustedSender(event);
+    return localStore().listPersonalSyncConflicts(sharedCloud.currentUserId());
+  });
 }
 
 function createWindow(): void {
@@ -713,7 +753,7 @@ app.whenReady().then(async () => {
   if(sandboxDisabled)report("SANDBOX_DISABLED","app");
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
-    await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",8);
+    await backupBeforeMigration(app.getPath("userData"),"ate-local.sqlite",9);
     await backupBeforeMigration(app.getPath("userData"),"ate-knowledge.sqlite",3);
     await backupBeforeMigration(app.getPath("userData"),"ate-fixed-calendar.sqlite",5);
     await backupBeforeMigration(app.getPath("userData"),"ate-plans.sqlite",2);
@@ -724,6 +764,7 @@ app.whenReady().then(async () => {
       ()=>planningStore?.listCommitted()??[],
       ()=>canvasSync?.scope()??null,
     );
+    personalSync = new PersonalSyncService(sharedCloud,localStore(),fixedCalendar());
     planningStore = new PlanningStore(join(app.getPath("userData"), "ate-plans.sqlite"),
       ()=>fixedCalendar().busySlots());
     aiLedger = new AIUsageLedger(join(app.getPath("userData"), "ate-ai-usage.sqlite"));
@@ -784,7 +825,21 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on("before-quit", () => {
+let waitingForPersonalSyncShutdown=false;
+app.on("before-quit", (event) => {
+  const activePersonalSync=personalSync;
+  if(activePersonalSync?.hasInFlightRun()){
+    event.preventDefault();
+    if(!waitingForPersonalSyncShutdown){
+      waitingForPersonalSyncShutdown=true;
+      activePersonalSync.cancel();
+      void activePersonalSync.waitForIdle().finally(()=>{
+        waitingForPersonalSyncShutdown=false;
+        app.quit();
+      });
+    }
+    return;
+  }
   mailService?.cancel();
   mailService?.stop();
   mailService = null;
@@ -800,6 +855,7 @@ app.on("before-quit", () => {
   aiLedger?.close();
   aiLedger = null;
   pendingICS=null;
+  personalSync=null;
   planningStore?.close();
   planningStore = null;
   fixedCalendarStore?.close();

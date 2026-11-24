@@ -95,6 +95,11 @@ export const IPC_CHANNELS = {
   cloudTasks: "cloud:tasks",
   cloudCreateTask: "cloud:create-task",
   cloudMarkTask: "cloud:mark-task",
+  cloudPersonalSyncNow: "cloud:personal-sync-now",
+  cloudPersonalSyncCandidates: "cloud:personal-sync-candidates",
+  cloudSetPersonalTaskSync: "cloud:set-personal-task-sync",
+  cloudSetManualEventSync: "cloud:set-manual-event-sync",
+  cloudPersonalSyncConflicts: "cloud:personal-sync-conflicts",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

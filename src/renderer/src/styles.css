@@ -481,3 +481,20 @@ footer{text-align:center;color:var(--muted);font-size:10px;padding:28px 0 4px}
 .kb-ai-source-evidence{font-size:11px;line-height:1.65;max-height:210px;
   overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;
   border:1px solid var(--line);padding:9px;border-radius:8px}
+
+/* ALPHA-SYNC-002D: explicit personal sync consent and conflict visibility. */
+.cloud-personal-sync{display:grid;gap:12px;margin-bottom:18px;min-width:0}
+.cloud-personal-sync .panel-heading{align-items:center;gap:12px;flex-wrap:wrap}
+.cloud-sync-candidates{display:grid;gap:7px}
+.cloud-sync-candidates h3,.cloud-sync-conflicts h3{font-size:13px;margin:4px 0}
+.cloud-sync-candidate{display:flex;align-items:center;gap:10px;padding:9px 10px;
+  border:1px solid var(--line);border-radius:8px;min-width:0}
+.cloud-sync-candidate input{flex:0 0 auto;width:16px;height:16px}
+.cloud-sync-candidate span{display:grid;gap:3px;min-width:0}
+.cloud-sync-candidate strong{font-size:12px;overflow-wrap:anywhere}
+.cloud-sync-candidate small{font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.cloud-sync-conflicts{display:grid;gap:8px;padding-top:10px;border-top:1px solid var(--line)}
+.cloud-sync-conflict{display:grid;gap:5px;padding:10px;border:1px solid var(--line);
+  border-radius:8px;min-width:0}
+.cloud-sync-conflict strong{font-size:12px;overflow-wrap:anywhere}
+.cloud-sync-conflict small,.cloud-sync-conflict p{font-size:11px;color:var(--muted);margin:0;overflow-wrap:anywhere}

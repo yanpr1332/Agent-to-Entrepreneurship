@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import type { PersonalSyncChange } from "../shared/personal-sync-contract";
 
 const OWNER_A="aae9ac05-b37d-4898-aee4-5848fa28e01b";
 const OWNER_B="9db8a5cb-1d6c-4e93-807e-e18be4b482a1";
@@ -32,7 +33,7 @@ describe("local-first SQLite store", () => {
     expect(db.getOrCreatePersonalSyncDevice("aae9ac05-b37d-4898-aee4-5848fa28e01b").cursor).toBe("12");
     expect(()=>db.advancePersonalSyncCursor("aae9ac05-b37d-4898-aee4-5848fa28e01b","11")).toThrow("backwards");
     expect(()=>db.advancePersonalSyncCursor("aae9ac05-b37d-4898-aee4-5848fa28e01b","12x")).toThrow("cursor");
-    expect(()=>db.getOrCreatePersonalSyncDevice("not-a-user")).toThrow("owner");
+    expect(()=>db.getOrCreatePersonalSyncDevice("not-a-user")).toThrow("Invalid cloud identifier");
   });
 
   it("migrates v6 ownerless sync data into quarantined legacy tables without auto-assigning an account",()=>{
@@ -49,6 +50,7 @@ describe("local-first SQLite store", () => {
         DROP TABLE personal_task_sync_legacy_enrollment;
         DROP TABLE personal_sync_legacy_outbox;
         DROP TABLE personal_sync_devices;
+        DROP TABLE personal_sync_conflicts;
         CREATE TABLE personal_task_sync_enrollment(
           task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
           server_version INTEGER,enabled_at TEXT NOT NULL
@@ -120,11 +122,13 @@ describe("local-first SQLite store", () => {
     const a=db.listPersonalSyncOutbox(OWNER_A)[0];
     const b=db.listPersonalSyncOutbox(OWNER_B)[0];
     expect(a.operationId).not.toBe(b.operationId);
-    expect(()=>db.acknowledgePersonalSyncOperation(OWNER_B,a.operationId,3)).toThrow("no longer pending");
-    db.updateTask({id:task.id,title:"Edited for both explicitly enrolled accounts"});
-    expect(db.listPersonalSyncOutbox(OWNER_A)[0].operationId).toBe(a.operationId);
+    expect(db.acknowledgePersonalSyncOperation(OWNER_B,a.operationId,task.id,"upsert",3,null)).toBe("not-pending");
     expect(db.listPersonalSyncOutbox(OWNER_B)[0].operationId).toBe(b.operationId);
-    db.acknowledgePersonalSyncOperation(OWNER_A,db.listPersonalSyncOutbox(OWNER_A)[0].operationId,4);
+    db.updateTask({id:task.id,title:"Edited for both explicitly enrolled accounts"});
+    expect(db.listPersonalSyncOutbox(OWNER_A)[0].operationId).not.toBe(a.operationId);
+    expect(db.listPersonalSyncOutbox(OWNER_B)[0].operationId).not.toBe(b.operationId);
+    const latestA=db.listPersonalSyncOutbox(OWNER_A)[0];
+    db.acknowledgePersonalSyncOperation(OWNER_A,latestA.operationId,task.id,"upsert",4,null);
     expect(db.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
     expect(db.listPersonalSyncOutbox(OWNER_B)).toHaveLength(1);
     db.setTaskSyncEnabled(task.id,false,OWNER_B);
@@ -141,7 +145,7 @@ describe("local-first SQLite store", () => {
     db.setTaskSyncEnabled(task.id,true,OWNER_A);
     db.setTaskSyncEnabled(task.id,true,OWNER_B);
     const a=db.listPersonalSyncOutbox(OWNER_A)[0];
-    db.acknowledgePersonalSyncOperation(OWNER_A,a.operationId,7);
+    db.acknowledgePersonalSyncOperation(OWNER_A,a.operationId,task.id,"upsert",7,null);
     expect(db.removeTask(task.id)).toBe(true);
     expect(db.listPersonalSyncOutbox(OWNER_A)).toMatchObject([
       {entityType:"personal-task",entityId:task.id,action:"delete",baseVersion:7,payload:null},
@@ -149,7 +153,7 @@ describe("local-first SQLite store", () => {
     expect(db.listPersonalSyncOutbox(OWNER_B)).toEqual([]);
   });
 
-  it("coalesces repeated edits into the same pending intent and preserves server version after acknowledgement", () => {
+  it("coalesces pending edits while rotating the idempotency key for each new payload", () => {
     const db = memory();
     const task = db.createTask({title:"初始标题"});
     db.setTaskSyncEnabled(task.id, true, OWNER_A);
@@ -157,9 +161,9 @@ describe("local-first SQLite store", () => {
     db.updateTask({id:task.id,title:"更新标题"});
     db.updateTask({id:task.id,completed:true});
     const latest = db.listPersonalSyncOutbox(OWNER_A)[0];
-    expect(latest.operationId).toBe(first.operationId);
+    expect(latest.operationId).not.toBe(first.operationId);
     expect(JSON.parse(latest.payload!)).toMatchObject({title:"更新标题",completed:true});
-    db.acknowledgePersonalSyncOperation(OWNER_A,latest.operationId, 4);
+    db.acknowledgePersonalSyncOperation(OWNER_A,latest.operationId,task.id,"upsert",4,null);
     expect(db.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
     db.updateTask({id:task.id,title:"版本四之后"});
     expect(db.listPersonalSyncOutbox(OWNER_A)[0].baseVersion).toBe(4);
@@ -170,7 +174,7 @@ describe("local-first SQLite store", () => {
     const task = db.createTask({title:"远端任务"});
     db.setTaskSyncEnabled(task.id,true,OWNER_A);
     const create = db.listPersonalSyncOutbox(OWNER_A)[0];
-    db.acknowledgePersonalSyncOperation(OWNER_A,create.operationId,2);
+    db.acknowledgePersonalSyncOperation(OWNER_A,create.operationId,task.id,"upsert",2,null);
     expect(db.removeTask(task.id)).toBe(true);
     expect(db.listPersonalSyncOutbox(OWNER_A)).toMatchObject([{entityType:"personal-task",entityId:task.id,action:"delete",baseVersion:2,payload:null}]);
   });
@@ -190,6 +194,105 @@ describe("local-first SQLite store", () => {
     db.setTaskSyncEnabled(task.id,false,OWNER_A);
     expect(db.listTasks()).toHaveLength(1);
     expect(db.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
+  });
+
+  it("lists eligible personal task sync candidates with per-owner consent state",()=>{
+    const db=memory();
+    const task=db.createTask({title:"Candidate task",dueDate:"2026-12-01"});
+    expect(db.listPersonalSyncCandidates(OWNER_A)).toMatchObject([
+      {entityType:"personal-task",entityId:task.id,title:"Candidate task",enabled:false,serverVersion:null},
+    ]);
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    expect(db.listPersonalSyncCandidates(OWNER_A)[0].enabled).toBe(true);
+    expect(db.listPersonalSyncCandidates(OWNER_B)[0].enabled).toBe(false);
+    expect(db.countPersonalSyncOutbox(OWNER_A)).toBe(1);
+    expect(db.countPersonalSyncOutbox(OWNER_B)).toBe(0);
+  });
+
+  it("applies remote personal task snapshots and records conflicts without overwriting local pending edits",()=>{
+    const db=memory();
+    const entityId="3babcb78-c10d-4f4e-ab3e-f47f6ad72447";
+    const first:PersonalSyncChange={cursor:"1",entityType:"personal-task",entityId,version:1,
+      payload:{title:"From another device",description:"remote",dueDate:null,priority:"normal",completed:false},
+      deleted:false,updatedAt:"2026-11-20T10:00:00.000Z"};
+    expect(db.applyRemotePersonalTaskChanges(OWNER_A,[first])).toEqual([]);
+    expect(db.listTasks()).toMatchObject([{id:entityId,title:"From another device"}]);
+    expect(db.listPersonalSyncEnrollments(OWNER_A)).toMatchObject([{taskId:entityId,serverVersion:1}]);
+    db.updateTask({id:entityId,title:"Local edit"});
+    const second:PersonalSyncChange={...first,cursor:"2",version:2,
+      payload:{title:"Remote edit",description:"remote 2",dueDate:null,priority:"high",completed:true},
+      updatedAt:"2026-11-20T10:01:00.000Z"};
+    const conflicts=db.applyRemotePersonalTaskChanges(OWNER_A,[second]);
+    expect(conflicts).toMatchObject([{
+      entityId,localAction:"upsert",remoteVersion:2,reason:"remote-change-while-local-pending",
+    }]);
+    expect(db.listTasks()).toMatchObject([{id:entityId,title:"Local edit"}]);
+    db.recordPersonalSyncConflicts(OWNER_A,conflicts);
+    expect(db.listPersonalSyncConflicts(OWNER_A)).toMatchObject([
+      {entityId,remoteVersion:2,localPayload:{title:"Local edit",description:"remote",dueDate:null,priority:"normal",completed:false}},
+    ]);
+    expect(db.countPersonalSyncConflicts(OWNER_A)).toBe(1);
+  });
+
+  it("deletes a remote task only when no newer local intent is pending",()=>{
+    const db=memory();
+    const entityId="3babcb78-c10d-4f4e-ab3e-f47f6ad72447";
+    const upsert:PersonalSyncChange={cursor:"1",entityType:"personal-task",entityId,version:1,
+      payload:{title:"Remote task",description:"",dueDate:null,priority:"normal",completed:false},
+      deleted:false,updatedAt:"2026-11-20T10:00:00.000Z"};
+    db.applyRemotePersonalTaskChanges(OWNER_A,[upsert]);
+    const deletion:PersonalSyncChange={...upsert,cursor:"2",version:2,payload:null,deleted:true,
+      updatedAt:"2026-11-20T10:01:00.000Z"};
+    expect(db.applyRemotePersonalTaskChanges(OWNER_A,[deletion])).toEqual([]);
+    expect(db.listTasks()).toEqual([]);
+    expect(db.listPersonalSyncEnrollments(OWNER_A)).toEqual([]);
+  });
+
+  it("rebases a newer local edit after an earlier in-flight create is acknowledged",()=>{
+    const db=memory(),task=db.createTask({title:"Before push"});
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    const sent=db.listPersonalSyncOutbox(OWNER_A)[0];
+    db.updateTask({id:task.id,title:"Edited while request is in flight"});
+    const newer=db.listPersonalSyncOutbox(OWNER_A)[0];
+    expect(newer.operationId).not.toBe(sent.operationId);
+    expect(db.acknowledgePersonalSyncOperation(OWNER_A,sent.operationId,task.id,"upsert",1,null))
+      .toBe("not-pending");
+    expect(db.rebasePersonalSyncOperation(OWNER_A,task.id,"upsert",1,null)).toBe("superseded");
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toMatchObject([
+      {operationId:newer.operationId,baseVersion:1},
+    ]);
+    expect(db.listPersonalSyncEnrollments(OWNER_A)).toMatchObject([{serverVersion:1}]);
+  });
+
+  it("creates a compensating delete when a task is removed while its first upload is in flight",()=>{
+    const db=memory(),task=db.createTask({title:"Delete during push"});
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    const sent=db.listPersonalSyncOutbox(OWNER_A)[0];
+    expect(db.removeTask(task.id)).toBe(true);
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
+    expect(db.acknowledgePersonalSyncOperation(OWNER_A,sent.operationId,task.id,"upsert",1,null))
+      .toBe("not-pending");
+    expect(db.rebasePersonalSyncOperation(OWNER_A,task.id,"upsert",1,null)).toBe("deleted-during-upload");
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toMatchObject([
+      {entityId:task.id,action:"delete",baseVersion:1,payload:null},
+    ]);
+  });
+
+  it("migrates v8 conflict-free databases to v9 without changing local tasks",()=>{
+    const directory=mkdtempSync(join(tmpdir(),"ate-sync-conflicts-v9-"));
+    const file=join(directory,"local.sqlite");
+    try{
+      const initial=new LocalStore(file);
+      const task=initial.createTask({title:"Preserve through conflict migration"});
+      initial.close();
+      const raw=new DatabaseSync(file);
+      raw.exec("DROP TABLE personal_sync_conflicts; PRAGMA user_version=8");
+      raw.close();
+      const upgraded=new LocalStore(file);
+      expect(upgraded.listTasks()).toMatchObject([{id:task.id,title:task.title}]);
+      expect(upgraded.listPersonalSyncConflicts(OWNER_A)).toEqual([]);
+      upgraded.close();
+    }finally{rmSync(directory,{recursive:true,force:true});}
   });
 
   it("creates, updates and deletes personal tasks", () => {

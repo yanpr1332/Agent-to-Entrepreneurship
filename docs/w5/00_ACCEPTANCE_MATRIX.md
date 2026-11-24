@@ -125,7 +125,8 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - **001：已有代码，真实验收未做**。个人同步协议/字段来源白名单、显式授权投影、五账号 RLS 手动验收脚本及离线 mock 已合并；独立测试项目部署、五账号与服务端 RLS 正反向真实验收仍未完成，不把 Mock 结果填成联机通过。详细见 [28](28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)。
 - **002 第一阶段：已合并 PR #35，尚未联机**。个人任务与手动日历逐条显式授权、事务性 Outbox、pending 合并、版本基线及删除墓碑已落地。详见 [29](29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)。
 - **002B：已合并 PR #36，未部署**。owner-scoped 个人同步表/RLS、设备注册与撤销、幂等 apply、版本检查、按 owner 串行 cursor pull RPC，以及本机 per-owner deviceId/cursor 持久化已合并；没有真实 Supabase 项目/多设备验收。详见 [30](30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)。
-- **002C：当前开发中**。任务库 schema v8、手动日历库 schema v5；owner-scoped enrollment/outbox、按 owner ack、跨账号独立删除墓碑；旧 ownerless 数据保留在隔离表，只有明确确认才重新授权存活的个人任务/手动事件。**仍无 uploader、pull 本地应用、冲突 UI、逐条授权 UI、真实部署或联机证据**。详见 [31](31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md)。
+- **002C：已合并 PR #37**。任务库 schema v8、手动日历库 schema v5；owner-scoped enrollment/outbox、按 owner ack、跨账号独立删除墓碑；旧 ownerless 数据保留在隔离表，只有明确确认才重新授权存活的个人任务/手动事件。详见 [31](31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md)。
+- **002D：当前开发中**。Main-process 手动 push/ack + pull/SQLite 应用、逐条授权 UI、冲突记录与展示；任务库 schema v9 新增 owner-scoped conflict 表。每轮 push 最多读取 100 个任务和 100 个手动日历操作；pull 每页 200、最多 10 页。普通编辑轮换 operationId，ack 与并发 rebase 分离，上传前再次核验 pending 意图；pull 只有在本地数据和冲突记录完成后才推进 cursor。退出应用时等待/停止在途同步，未确认操作保留供重试。**不自动后台同步；没有冲突解决 UI、legacy 认领 UI、真实 Supabase 部署或双设备验收**。详见 [32](32_ALPHA_SYNC_002D_PUSH_PULL.md)。
 - **003：未开发**。团队消息仍使用轮询，Realtime + 断线补拉 + 撤权后拒绝 + 五账号联机尚无真实证据。
 - **Embedding：未开发**。ALPHA-KB-005 继续保留，待同步核心门槛后先做离线 PoC；不将 PR #32 的 AI 单段解释误算为本地 embedding。
 - 2026-11-25 内部 Alpha 以真实授权测试账号、RLS 反向测试、最小跨设备增量场景及已知风险记录为条件性目标；未验证项应明确阻塞，不能冒充完成。详见 [27 同步优先实施计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。

@@ -36,7 +36,7 @@ describe("verified online SQLite snapshots",()=>{
     tasks.close();kb.close();
   });
 
-  it("snapshots v3 before opening/upgrading the owner-scoped v8 local database",async()=>{
+  it("snapshots v3 before opening/upgrading the owner-scoped v9 local database",async()=>{
     const dir=fixture(),path=join(dir,"ate-local.sqlite");
     const db=new LocalStore(path);
     db.createTask({title:"Original before schema upgrade"});
@@ -44,9 +44,9 @@ describe("verified online SQLite snapshots",()=>{
     const older=new DatabaseSync(path);
     older.exec("DROP TABLE mail_candidate_reviews; DROP TABLE personal_sync_outbox; DROP TABLE personal_task_sync_enrollment; "+
       "DROP TABLE personal_sync_legacy_outbox; DROP TABLE personal_task_sync_legacy_enrollment; "+
-      "DROP TABLE personal_sync_devices; PRAGMA user_version=3");
+      "DROP TABLE personal_sync_devices; DROP TABLE personal_sync_conflicts; PRAGMA user_version=3");
     older.close();
-    const snapshot=await backupBeforeMigration(dir,"ate-local.sqlite",8);
+    const snapshot=await backupBeforeMigration(dir,"ate-local.sqlite",9);
     expect(snapshot).toBeTruthy();
     const pre=new DatabaseSync(join(snapshot!,"ate-local.sqlite"),{readOnly:true});
     expect((pre.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(3);
@@ -55,7 +55,7 @@ describe("verified online SQLite snapshots",()=>{
     const migrated=new LocalStore(path);
     expect(migrated.listTasks()).toHaveLength(1);
     migrated.close();
-    expect(await backupBeforeMigration(dir,"ate-local.sqlite",8)).toBeNull();
+    expect(await backupBeforeMigration(dir,"ate-local.sqlite",9)).toBeNull();
   });
 
   it("snapshots a v1 planning database before the v2 migration",async()=>{
