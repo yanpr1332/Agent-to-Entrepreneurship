@@ -305,7 +305,7 @@ function registerIpcHandlers(): void {
     const events=fixedCalendar().list();
     const selection=await dialog.showSaveDialog(owner,{
       title:"导出本机日历（仅固定事件，不含个人任务）",
-      defaultPath:"ate-calendar.ics",
+      defaultPath:"study-anchor-calendar.ics",
       filters:[{name:"iCalendar",extensions:["ics"]}],
     });
     if(selection.canceled||!selection.filePath)return {saved:false,eventCount:0};
