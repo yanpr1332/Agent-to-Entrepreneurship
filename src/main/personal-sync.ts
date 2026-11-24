@@ -5,6 +5,7 @@ import {
   type PersonalSyncChange, type PersonalSyncConflict, type PersonalSyncConflictRecord,
   type PersonalSyncRunResult, type PersonalSyncDeviceReplacementReview, type PersonalSyncPullPage,
   type PersonalSyncRecoveryHealth, type PersonalSyncReceiptReconcileResult, type PersonalSyncReceiptLookup,
+  type PersonalSyncReceiptReview, parsePersonalSyncReceiptConfirmation,
 } from "../shared/personal-sync-contract";
 import type { SharedCloudClient } from "./cloud/supabase-client";
 import type { LocalStore } from "./local-store";
@@ -13,6 +14,13 @@ import type { FixedCalendarStore } from "./fixed-calendar-store";
 type TaskOutbox=ReturnType<LocalStore["listPersonalSyncOutbox"]>[number]&{entityType:"personal-task"};
 type CalendarOutbox=ReturnType<FixedCalendarStore["listManualCalendarSyncOutbox"]>[number]&{entityType:"manual-calendar-event"};
 type PendingOutbox=TaskOutbox|CalendarOutbox;
+type ReceiptEvidence={item:PendingOutbox;result:PersonalSyncReceiptLookup};
+type ReceiptReviewState={
+  token:string;ownerId:string;deviceId:string;cursor:string;expiresAt:number;
+  taskCount:number;calendarCount:number;conflicts:number;
+  items:PendingOutbox[];receipts:ReceiptEvidence[];
+};
+const RECEIPT_REVIEW_TTL_MS=5*60_000;
 
 const PUSH_LIMIT=100;
 const PULL_PAGE_SIZE=200;
@@ -32,7 +40,8 @@ function deviceLabel():string{
 export class PersonalSyncService{
   private running:Promise<PersonalSyncRunResult>|null=null;
   private replacementRunning:Promise<{replaced:true}>|null=null;
-  private receiptRunning:Promise<PersonalSyncReceiptReconcileResult>|null=null;
+  private receiptRunning:Promise<unknown>|null=null;
+  private receiptReview:ReceiptReviewState|null=null;
   private replacementReview:{ownerId:string;deviceId:string;cursor:string;token:string}|null=null;
   private stopping=false;
 
@@ -48,6 +57,7 @@ export class PersonalSyncService{
     if(this.replacementRunning)return Promise.reject(Error("Device replacement is in progress"));
     if(this.receiptRunning)return Promise.reject(Error("Receipt reconciliation is in progress"));
     if(this.running)return this.running;
+    this.receiptReview=null; // sync invalidates all prior cloud-receipt previews
     const job=this.performSync().finally(()=>{if(this.running===job)this.running=null;});
     this.running=job;
     return job;
@@ -93,6 +103,7 @@ export class PersonalSyncService{
   resolveConflict(raw:unknown):{resolved:true;choice:"keep-local"|"use-remote"}{
     if(this.stopping||this.hasInFlightRun())throw Error("Wait until personal sync is idle before resolving");
     const ownerId=this.cloud.currentUserId();
+    this.receiptReview=null;
     const input=parsePersonalSyncResolutionRequest(raw);
     const conflict=this.tasks.getPersonalSyncConflict(ownerId,input.entityType,input.entityId);
     if(!conflict||conflict.remoteVersion!==input.remoteVersion||
@@ -151,31 +162,59 @@ export class PersonalSyncService{
       pendingReplay:false,detail:explanation[status]};
   }
 
-  /** Read exact receipts for a bounded owner queue. This NEVER invokes apply.
-   * All remote responses are validated before any local acknowledgement, so
-   * a missing RPC or a mismatched saved operation leaves every item intact. */
-  reconcileReceipts():Promise<PersonalSyncReceiptReconcileResult>{
+  /** A bounded, read-only cloud lookup. The preview does not alter either
+   * SQLite store; confirmation is a separate explicit operation. */
+  reviewReceipts():Promise<PersonalSyncReceiptReview>{
     if(this.stopping||this.hasInFlightRun())return Promise.reject(Error("Personal sync is in progress"));
-    const job=this.performReceiptReconciliation().finally(()=>{
+    this.receiptReview=null;
+    const job=this.performReceiptReview().finally(()=>{
       if(this.receiptRunning===job)this.receiptRunning=null;
     });
     this.receiptRunning=job;
     return job;
   }
 
-  private async performReceiptReconciliation():Promise<PersonalSyncReceiptReconcileResult>{
+  /** Both queues must be unchanged; counts alone do not detect edits. */
+  private receiptOutbox(ownerId:string):{items:PendingOutbox[];taskCount:number;calendarCount:number}{
+    const taskCount=this.tasks.countPersonalSyncOutbox(ownerId);
+    const calendarCount=this.calendar.countManualCalendarSyncOutbox(ownerId);
+    const tasks=this.tasks.listPersonalSyncOutbox(ownerId,PUSH_LIMIT)
+      .map(item=>({...item,entityType:"personal-task" as const}));
+    const calendar=this.calendar.listManualCalendarSyncOutbox(ownerId,PUSH_LIMIT)
+      .map(item=>({...item,entityType:"manual-calendar-event" as const}));
+    const items:PendingOutbox[]=[...tasks,...calendar].sort((a,b)=>
+      a.createdAt.localeCompare(b.createdAt)||a.operationId.localeCompare(b.operationId));
+    return {items,taskCount,calendarCount};
+  }
+
+  private assertReviewedReceiptQueue(state:ReceiptReviewState):void{
+    this.assertOwner(state.ownerId);
+    const device=this.tasks.peekPersonalSyncDevice(state.ownerId);
+    if(!device||device.deviceId!==state.deviceId||device.cursor!==state.cursor)
+      throw Error("Sync device changed since receipt review; inspect again");
+    if(this.tasks.getPendingPersonalSyncPull(state.ownerId))
+      throw Error("Interrupted pull checkpoint must be recovered before acknowledgement");
+    const current=this.receiptOutbox(state.ownerId);
+    if(current.taskCount!==state.taskCount||current.calendarCount!==state.calendarCount||
+       this.tasks.countPersonalSyncConflicts(state.ownerId)!==state.conflicts||
+       JSON.stringify(current.items)!==JSON.stringify(state.items))
+      throw Error("Local pending queue changed since receipt review; inspect again");
+  }
+
+  private async performReceiptReview():Promise<PersonalSyncReceiptReview>{
     const ownerId=this.cloud.currentUserId();
     const device=this.tasks.peekPersonalSyncDevice(ownerId);
     if(!device)throw Error("No local personal sync device exists; receipt lookup cannot be performed");
     if(this.tasks.getPendingPersonalSyncPull(ownerId))
       throw Error("Finish the interrupted pull checkpoint before reconciling receipts");
-    const tasks=this.tasks.listPersonalSyncOutbox(ownerId,PUSH_LIMIT)
-      .map(item=>({...item,entityType:"personal-task" as const}));
-    const events=this.calendar.listManualCalendarSyncOutbox(ownerId,PUSH_LIMIT)
-      .map(item=>({...item,entityType:"manual-calendar-event" as const}));
-    const items:PendingOutbox[]=[...tasks,...events].sort((a,b)=>
-      a.createdAt.localeCompare(b.createdAt)||a.operationId.localeCompare(b.operationId));
-    const receipts:Array<{item:PendingOutbox;status:"not-found"|"matched";result:PersonalSyncReceiptLookup|null}> = [];
+    const {items,taskCount,calendarCount}=this.receiptOutbox(ownerId);
+    const state:ReceiptReviewState={
+      ownerId,deviceId:device.deviceId,cursor:device.cursor,
+      token:randomUUID(),expiresAt:Date.now()+RECEIPT_REVIEW_TTL_MS,
+      items,taskCount,calendarCount,
+      conflicts:this.tasks.countPersonalSyncConflicts(ownerId),receipts:[],
+    };
+    let eligibleToAcknowledge=0,notFound=0,unresolved=0;
     for(const item of items){
       this.assertOwner(ownerId);
       const createdAt=new Date(item.createdAt);
@@ -188,41 +227,78 @@ export class PersonalSyncService{
       });
       const result=await this.cloud.lookupPersonalSyncReceipt(op);
       this.assertOwner(ownerId);
-      if(result.status==="mismatch")throw Error("Cloud receipt request differs from saved operation; manual review required");
-      receipts.push({item,status:result.status,result:result.status==="matched"?result:null});
+      if(result.status==="mismatch")
+        throw Error("Cloud receipt request differs from saved operation; manual review required");
+      if(result.status==="not-found")notFound++;
+      else if(result.response.status==="accepted"||result.response.status==="duplicate")
+        eligibleToAcknowledge++;
+      else unresolved++;
+      state.receipts.push({item,result});
     }
+    this.assertReviewedReceiptQueue(state); // changes during network lookup require fresh review
+    if(eligibleToAcknowledge>0)this.receiptReview=state;
+    return {
+      reviewToken:eligibleToAcknowledge>0?state.token:null,
+      inspected:items.length,eligibleToAcknowledge,notFound,unresolved,
+      pending:taskCount+calendarCount,
+      hasMore:taskCount>PUSH_LIMIT||calendarCount>PUSH_LIMIT,
+    };
+  }
+
+  /** A one-time Main-only review token gates all local acknowledgement.
+   * Token is consumed even on failure; no remote RPC is called on confirm. */
+  reconcileReceipts(raw:unknown):Promise<PersonalSyncReceiptReconcileResult>{
+    if(this.stopping||this.hasInFlightRun())return Promise.reject(Error("Personal sync is in progress"));
+    const input=parsePersonalSyncReceiptConfirmation(raw);
+    const state=this.receiptReview;
+    this.receiptReview=null;
+    if(!state||state.token!==input.reviewToken||Date.now()>state.expiresAt||
+       this.cloud.currentUserId()!==state.ownerId)
+      return Promise.reject(Error("Receipt review expired or account changed; inspect again"));
+    const job=this.applyReceiptReview(state).finally(()=>{
+      if(this.receiptRunning===job)this.receiptRunning=null;
+    });
+    this.receiptRunning=job;
+    return job;
+  }
+
+  private async applyReceiptReview(state:ReceiptReviewState):
+    Promise<PersonalSyncReceiptReconcileResult>{
+    this.assertReviewedReceiptQueue(state);
     let acknowledged=0,notFound=0,unresolved=0;
-    for(const {item,status,result} of receipts){
-      this.assertOwner(ownerId);
-      if(status==="not-found"){notFound++;continue;}
-      if(!result||result.status!=="matched")throw Error("Malformed saved sync receipt");
+    for(const {item,result} of state.receipts){
+      this.assertOwner(state.ownerId);
+      if(result.status==="not-found"){notFound++;continue;}
+      if(result.status!=="matched")throw Error("Invalid saved receipt review");
       const receipt=result.response;
       if(receipt.status!=="accepted"&&receipt.status!=="duplicate"){unresolved++;continue;}
-      if(receipt.serverVersion===null)throw Error("Receipt is missing server version");
+      if(receipt.serverVersion===null)throw Error("Receipt missing server version");
+      // Existing acknowledgement methods use owner+operationId+entity CAS.
+      // In-flight same-entity edits cannot accidentally delete newer intent.
       if(item.entityType==="personal-task"){
-        const ack=this.tasks.acknowledgePersonalSyncOperation(ownerId,item.operationId,item.entityId,
-          item.action,receipt.serverVersion,item.baseVersion);
-        if(ack==="not-pending")this.tasks.rebasePersonalSyncOperation(ownerId,item.entityId,item.action,
-          receipt.serverVersion,item.baseVersion);
-      }else{
-        const ack=this.calendar.acknowledgeManualCalendarSyncOperation(ownerId,item.operationId,
+        const ack=this.tasks.acknowledgePersonalSyncOperation(state.ownerId,
+          item.operationId,item.entityId,item.action,receipt.serverVersion,item.baseVersion);
+        if(ack==="not-pending")this.tasks.rebasePersonalSyncOperation(state.ownerId,
           item.entityId,item.action,receipt.serverVersion,item.baseVersion);
-        if(ack==="not-pending")this.calendar.rebaseManualCalendarSyncOperation(ownerId,item.entityId,
-          item.action,receipt.serverVersion,item.baseVersion);
+      }else{
+        const ack=this.calendar.acknowledgeManualCalendarSyncOperation(state.ownerId,
+          item.operationId,item.entityId,item.action,receipt.serverVersion,item.baseVersion);
+        if(ack==="not-pending")this.calendar.rebaseManualCalendarSyncOperation(state.ownerId,
+          item.entityId,item.action,receipt.serverVersion,item.baseVersion);
       }
       acknowledged++;
     }
-    const pending=this.tasks.countPersonalSyncOutbox(ownerId)+
-      this.calendar.countManualCalendarSyncOutbox(ownerId);
-    return {inspected:receipts.length,acknowledged,notFound,unresolved,pending,
-      hasMore:items.length<this.tasks.countPersonalSyncOutbox(ownerId)+
-        this.calendar.countManualCalendarSyncOutbox(ownerId)+acknowledged};
+    const pending=this.tasks.countPersonalSyncOutbox(state.ownerId)+
+      this.calendar.countManualCalendarSyncOutbox(state.ownerId);
+    return {inspected:state.receipts.length,acknowledged,notFound,unresolved,pending,
+      hasMore:state.taskCount>PUSH_LIMIT||state.calendarCount>PUSH_LIMIT};
   }
 
   /** The preview is local-only and has no power to choose an owner or device. */
   reviewDeviceReplacement():PersonalSyncDeviceReplacementReview{
     if(this.stopping||this.hasInFlightRun())throw Error("Wait until personal sync is idle before replacing a device");
     this.replacementReview=null;
+    this.receiptReview=null;
     const ownerId=this.cloud.currentUserId();
     const device=this.tasks.getOrCreatePersonalSyncDevice(ownerId);
     if(this.tasks.getPendingPersonalSyncPull(ownerId))return {
@@ -276,7 +352,7 @@ export class PersonalSyncService{
     return {replaced:true};
   }
 
-  cancel():void{this.stopping=true;this.replacementReview=null;}
+  cancel():void{this.stopping=true;this.replacementReview=null;this.receiptReview=null;}
 
   waitForIdle():Promise<void>{
     return Promise.allSettled([this.running,this.replacementRunning,this.receiptRunning]).then(()=>undefined);
