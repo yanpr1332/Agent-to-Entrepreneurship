@@ -135,6 +135,35 @@ describe("ALPHA-SYNC-003D protected and revocable local team history",()=>{
     });
   });
 
+  it("fails closed on a lost OS key at database open, preserves bytes, and releases Windows locks",()=>{
+    const {path,store}=fixture();
+    store.applyPage(A,W,upsert());
+    store.beginCheckpoint(A,W,{status:"expired",checkpointCursor:"5",
+      serverCursor:"5",totalItems:"1"});
+    store.stageCheckpointPage(A,W,{checkpointCursor:"5",totalItems:"1",
+      items:[{ordinal:"1",kind:"message",entityId:ID,record:message()}],
+      nextOrdinal:"1",hasMore:false});
+    close(store);
+    const invalidKey:TeamHistoryCipher={
+      encrypt:testHistoryCipher.encrypt,
+      decrypt:()=>{throw Error("Simulated OS key access revoked");},
+    };
+    expect(()=>new WorkspaceHistoryStore(path,invalidKey))
+      .toThrow("Protected team history is not readable");
+    const db=new DatabaseSync(path,{readOnly:true});
+    expect((db.prepare("PRAGMA user_version").get() as {user_version:number}).user_version)
+      .toBe(3);
+    const original=(db.prepare("SELECT json FROM records").get() as {json:string}).json;
+    expect(original).toMatch(/^sa1:/);
+    expect(testHistoryCipher.decrypt(original)).toContain("Confidential study group report");
+    db.close();
+    const recovered=new WorkspaceHistoryStore(path,testHistoryCipher);
+    opened.push(recovered);
+    expect(recovered.getCheckpoint(A,W)?.nextOrdinal).toBe("1");
+    expect(recovered.list(A,W,"message").items[0].body)
+      .toBe("Confidential study group report");
+  });
+
   it("purges only the target account, including staged snapshots, without cloud deletion",()=>{
     const {store}=fixture();
     store.applyPage(A,W,upsert());
