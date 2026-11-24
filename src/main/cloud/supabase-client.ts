@@ -5,6 +5,10 @@ import {
   type CloudSessionStatus, type SharedMember, type SharedMessage,
   type SharedTask, type SharedWorkspace, type CloudProjectConfig,
 } from "../../shared/cloud-model";
+import {
+  parsePersonalSyncOperation, parsePersonalSyncPullPage, parseSyncOperationResult,
+  type PersonalSyncPullPage, type PersonalSyncOperation, type SyncOperationResult,
+} from "../../shared/personal-sync-contract";
 
 type Fetcher=(input:string,init:RequestInit)=>Promise<Response>;
 interface AuthPayload{
@@ -135,6 +139,61 @@ export class SharedCloudClient {
     if(!this.session)throw Error("Log in to the cloud workspace first");
     return this.session.userId;
   }
+
+  /** Authenticated identity is exposed only to trusted Main-process services. */
+  currentUserId():string {
+    return this.userId();
+  }
+
+  async registerPersonalSyncDevice(deviceIdInput:unknown,labelInput:unknown):Promise<{
+    ownerId:string;deviceId:string;createdAt:string;lastSeenAt:string;
+  }> {
+    const ownerId=this.userId(),deviceId=requireUuid(deviceIdInput);
+    const deviceLabel=requireDisplayName(labelInput);
+    const result=await this.rpc("ate_personal_sync_register_device",{
+      p_device_id:deviceId,p_device_label:deviceLabel,
+    });
+    if(!result||typeof result!=="object"||Array.isArray(result))
+      throw Error("Cloud returned an invalid device registration");
+    const row=result as Record<string,unknown>;
+    if(Object.keys(row).sort().join(",")!=="createdAt,deviceId,lastSeenAt,ownerId"||
+      row.ownerId!==ownerId||row.deviceId!==deviceId||
+      typeof row.createdAt!=="string"||typeof row.lastSeenAt!=="string"||
+      !Number.isFinite(Date.parse(row.createdAt))||!Number.isFinite(Date.parse(row.lastSeenAt)))
+      throw Error("Cloud returned an invalid device registration");
+    return {ownerId,deviceId,createdAt:row.createdAt,lastSeenAt:row.lastSeenAt};
+  }
+
+  async applyPersonalSyncOperation(input:unknown):Promise<SyncOperationResult> {
+    const operation:PersonalSyncOperation=parsePersonalSyncOperation(input);
+    const ownerId=this.userId();
+    if(operation.actorId!==ownerId||operation.ownerId!==ownerId)
+      throw Error("Personal sync operation belongs to another cloud account");
+    return parseSyncOperationResult(await this.rpc("ate_personal_sync_apply",{
+      p_operation:operation,
+    }));
+  }
+
+  async pullPersonalSyncChanges(deviceIdInput:unknown,cursorInput:unknown,limit=200):Promise<PersonalSyncPullPage> {
+    const deviceId=requireUuid(deviceIdInput);
+    if(typeof cursorInput!=="string"||!/^(0|[1-9][0-9]{0,18})$/.test(cursorInput)||
+      BigInt(cursorInput)>9223372036854775807n||
+      !Number.isSafeInteger(limit)||limit<1||limit>500)
+      throw Error("Invalid personal sync pull request");
+    this.userId();
+    return parsePersonalSyncPullPage(await this.rpc("ate_personal_sync_pull",{
+      p_device_id:deviceId,p_cursor:cursorInput,p_limit:limit,
+    }));
+  }
+
+  async revokePersonalSyncDevice(deviceIdInput:unknown):Promise<boolean> {
+    const deviceId=requireUuid(deviceIdInput);
+    this.userId();
+    const result=await this.rpc("ate_personal_sync_revoke_device",{p_device_id:deviceId});
+    if(typeof result!=="boolean")throw Error("Cloud returned an invalid device revocation result");
+    return result;
+  }
+
   private async getArray<T>(path:string):Promise<T[]>{
     const output=await this.call(path,"GET");
     if(!Array.isArray(output))throw Error("Cloud returned an unexpected list");

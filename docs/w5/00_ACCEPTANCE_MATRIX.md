@@ -122,8 +122,9 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 
 ### ALPHA-SYNC-001/002/003 同步优先队列（2026-11-24，持续实施）
 
-- **001：已有代码，真实验收未做**。独立开发 PR 新增个人同步协议/字段来源白名单、显式授权投影、五账号 RLS 手动验收脚本及离线 mock；**尚未连接到 Electron 同步功能**，不触碰 SQLite 或 Supabase。独立测试项目部署、五账号与服务端 RLS 正反向真实验收均未完成，不把 Mock 结果填成联机通过。详细见 [28](28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)。
-- **002：本地 Outbox 第一阶段已写入开发 PR，尚未联机**。个人任务与手动日历新增逐条显式授权、事务性变更队列、待发送操作合并、服务器版本基线及删除墓碑；没有网络传输、服务端个人表、登录设备绑定、持久拉取游标或冲突 UI。详见 [29](29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)。
+- **001：已有代码，真实验收未做**。个人同步协议/字段来源白名单、显式授权投影、五账号 RLS 手动验收脚本及离线 mock 已合并；独立测试项目部署、五账号与服务端 RLS 正反向真实验收仍未完成，不把 Mock 结果填成联机通过。详细见 [28](28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)。
+- **002 第一阶段：已合并 PR #35，尚未联机**。个人任务与手动日历逐条显式授权、事务性 Outbox、pending 合并、版本基线及删除墓碑已落地。详见 [29](29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)。
+- **002B：服务端协议基础当前开发中**。新增 owner-scoped 个人同步表/RLS、设备注册与撤销、幂等 apply、版本检查、按 owner 串行 cursor pull RPC，以及本机 per-owner deviceId/cursor 持久化；**未部署、未连接 Outbox 上传或本地 pull 应用、无冲突 UI/逐条授权 UI**。详见 [30](30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)。
 - **003：未开发**。团队消息仍使用轮询，Realtime + 断线补拉 + 撤权后拒绝 + 五账号联机尚无真实证据。
 - **Embedding：未开发**。ALPHA-KB-005 继续保留，待同步核心门槛后先做离线 PoC；不将 PR #32 的 AI 单段解释误算为本地 embedding。
 - 2026-11-25 内部 Alpha 以真实授权测试账号、RLS 反向测试、最小跨设备增量场景及已知风险记录为条件性目标；未验证项应明确阻塞，不能冒充完成。详见 [27 同步优先实施计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。

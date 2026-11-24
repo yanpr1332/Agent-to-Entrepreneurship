@@ -76,4 +76,10 @@
 
 ## 7. 进度更新：ALPHA-SYNC-002 本地 Outbox 第一阶段（2026-11-24）
 
-已在独立开发分支开始 SYNC-002：两个本机 SQLite 库分别新增逐条授权 enrollment 与持久 Outbox；任务/手动日历编辑在各自事务内同步写入待发送意图；重复编辑合并 pending operation；已获服务器版本的删除生成墓碑，未上传创建被删除时撤销本地意图。Canvas、ICS、邮件候选任务排除，默认不开启。当前无远端传输、个人云端表、设备/账号身份绑定、cursor pull、冲突 UI。详见 [29](29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)。
+PR #35 已合并：两个本机 SQLite 库分别新增逐条授权 enrollment 与持久 Outbox；任务/手动日历编辑在各自事务内同步写入待发送意图；重复编辑合并 pending operation；已获服务器版本的删除生成墓碑，未上传创建被删除时撤销本地意图。Canvas、ICS、邮件候选任务排除，默认不开启。该阶段没有远端传输。详见 [29](29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)。
+
+## 8. 进度更新：ALPHA-SYNC-002B 个人云端协议基础（2026-11-24）
+
+当前开发轮新增个人同步 Supabase schema 与 owner-scoped RLS：设备注册/撤销、只允许 personal-task/manual-calendar-event 的严格 RPC、服务端版本检查、operationId 幂等回执、每个 owner 串行分配的增量 cursor 和分页 pull。桌面端 SharedCloudClient 增加使用当前用户 JWT 的 RPC 包装与严格响应解析；本地 ate-local.sqlite schema v7 为每个 owner 持久保存 deviceId/cursor。
+
+**这仍是协议和传输端点基础，不是可用的双向同步**：没有部署迁移、没有真实联机；Outbox 尚未按 owner 隔离/上传，pull 变更尚未应用到本地，冲突 UI 与逐条授权 UI 尚未完成。不得用离线 mock、静态 SQL 检查或 CI 代替真实 Supabase RLS/多设备验收。下一阶段先完成 owner-scoped Outbox 与上传确认，再实现增量应用和冲突处理。详见 [30](30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)。

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FixedEvent } from "./fixed-calendar-model";
 import type { LocalTask } from "./local-model";
 import {
-  parsePersonalSyncOperation, parseSyncOperationResult,
+  parsePersonalSyncOperation, parseSyncOperationResult, parsePersonalSyncPullPage,
   projectManualCalendarEvent, projectPersonalTask,
 } from "./personal-sync-contract";
 
@@ -110,6 +110,29 @@ describe("ALPHA-SYNC-001 strict wire envelope, without enabling sync", () => {
     expect(projectManualCalendarEvent(event, true)).toEqual(calendarPayload);
     expect(projectManualCalendarEvent({...event, source: "ics"}, true)).toBeNull();
     expect(projectManualCalendarEvent({...event, sourceUid: "ical-item"}, true)).toBeNull();
+  });
+
+  it("parses ordered incremental pages and rejects malformed or non-monotonic cursors",()=>{
+    const page={
+      changes:[
+        {cursor:"4",entityType:"personal-task",entityId:operation.entityId,version:2,
+          payload:operation.payload,deleted:false,updatedAt:"2026-11-20T10:00:00.000Z"},
+        {cursor:"7",entityType:"manual-calendar-event",entityId:operation.entityId,version:3,
+          payload:calendarPayload,deleted:false,updatedAt:"2026-11-20T10:01:00.000Z"},
+        {cursor:"8",entityType:"personal-task",entityId:operation.entityId,version:4,
+          payload:null,deleted:true,updatedAt:"2026-11-20T10:02:00.000Z"},
+      ],
+      nextCursor:"8",hasMore:false,
+    };
+    expect(parsePersonalSyncPullPage(page)).toEqual(page);
+    expect(()=>parsePersonalSyncPullPage({...page,extra:true})).toThrow();
+    expect(()=>parsePersonalSyncPullPage({changes:[],nextCursor:"0",hasMore:true})).toThrow("page");
+    expect(()=>parsePersonalSyncPullPage({...page,nextCursor:"7"})).toThrow("equal");
+    expect(()=>parsePersonalSyncPullPage({...page,changes:[page.changes[1],page.changes[0]]})).toThrow("ordered");
+    expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[2],payload:operation.payload}]})).toThrow("Deleted");
+    expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[0],cursor:"../users"}]})).toThrow();
+    expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[0],version:0}]})).toThrow();
+    expect(()=>parsePersonalSyncPullPage({...page,changes:[{...page.changes[0],updatedAt:"not-a-date"}]})).toThrow();
   });
 
   it("only accepts bounded, versioned acknowledgement and opaque cursor", () => {
