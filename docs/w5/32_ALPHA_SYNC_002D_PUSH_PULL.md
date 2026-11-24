@@ -99,14 +99,7 @@ npm run build
 若先只验证本轮涉及的核心测试，可执行：
 
 ```sh
-node node_modules/vitest/vitest.mjs run \
-  src/main/personal-sync.test.ts \
-  src/main/local-store.test.ts \
-  src/main/fixed-calendar-store.test.ts \
-  src/main/local-backup.test.ts \
-  src/main/mail-candidates.test.ts \
-  src/shared/personal-sync-contract.test.ts \
-  src/shared/ipc-channels.test.ts
+node node_modules/vitest/vitest.mjs run src/main/personal-sync.test.ts src/main/local-store.test.ts src/main/fixed-calendar-store.test.ts src/main/local-backup.test.ts src/main/mail-candidates.test.ts src/shared/personal-sync-contract.test.ts src/shared/ipc-channels.test.ts
 npm run test:sync-rls
 ```
 
