@@ -201,8 +201,11 @@ export class PersonalSyncService{
     // an owner/device-authenticated read-only RPC before any pending upload.
     // If remote changes exist, pull them first in this run and defer every
     // outgoing operation until the user can review any new conflicts.
-    let pushDeferred=false;
-    if(pending.length>0){
+    // A run that has just replayed an interrupted cross-store page is
+    // deliberately pull-only. Let the user inspect that recovery before
+    // the next explicitly requested upload.
+    let pushDeferred=recoveredPages>0&&pending.length>0;
+    if(pending.length>0&&!pushDeferred){
       const preflight=await this.cloud.pullPersonalSyncChanges(device.deviceId,device.cursor,1);
       this.assertOwner(ownerId);
       if(preflight.changes.length===0&&preflight.nextCursor!==device.cursor)
