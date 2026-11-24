@@ -6,6 +6,7 @@ import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncConflictReason, PersonalSyncRunResult,
   PersonalSyncResolutionRequest, PersonalSyncLegacyReview, PersonalSyncLegacyAdoptionRequest,
   PersonalSyncDeviceReplacementReview, PersonalSyncRecoveryHealth, PersonalSyncReceiptReconcileResult,
+  PersonalSyncReceiptReview,
 } from "../../shared/personal-sync-contract";
 
 const empty:CloudSessionStatus={configured:false,authenticated:false,userId:null,email:null};
@@ -71,6 +72,7 @@ export default function CloudWorkspace() {
   const [deviceReplacement,setDeviceReplacement]=useState<PersonalSyncDeviceReplacementReview|null>(null);
   const [recoveryHealth,setRecoveryHealth]=useState<PersonalSyncRecoveryHealth|null>(null);
   const [receiptReconciliation,setReceiptReconciliation]=useState<PersonalSyncReceiptReconcileResult|null>(null);
+  const [receiptReview,setReceiptReview]=useState<PersonalSyncReceiptReview|null>(null);
 
   useEffect(()=>{
     let active=true;
@@ -110,7 +112,7 @@ export default function CloudWorkspace() {
       setLegacyReview({items:[],taskLimitReached:false,calendarLimitReached:false});
       setLegacySelection(null);
       setDeviceReplacement(null);
-      setRecoveryHealth(null);setReceiptReconciliation(null);
+      setRecoveryHealth(null);setReceiptReconciliation(null);setReceiptReview(null);
       return;
     }
     let active=true;
@@ -177,7 +179,7 @@ export default function CloudWorkspace() {
       setPersonalCandidates([]);setPersonalConflicts([]);setPersonalSyncResult(null);
       setLegacyReview({items:[],taskLimitReached:false,calendarLimitReached:false});
       setLegacySelection(null);setResolutionReview(null);setDeviceReplacement(null);
-      setRecoveryHealth(null);setReceiptReconciliation(null);
+      setRecoveryHealth(null);setReceiptReconciliation(null);setReceiptReview(null);
       setNotice("已退出云端账号；个人本地任务与其他连接器不受影响。");
     });
   }
@@ -228,17 +230,33 @@ export default function CloudWorkspace() {
     });
   }
 
-  async function reconcileReceipts():Promise<void>{
+  async function previewReceipts():Promise<void>{
+    setReceiptReview(null);
     await run(async()=>{
-      const result=await window.desktop.cloud.reconcilePersonalSyncReceipts();
+      const review=await window.desktop.cloud.reviewPersonalSyncReceipts();
+      setReceiptReview(review);
+      setReceiptReconciliation(null);
+      setNotice(review.eligibleToAcknowledge>0?
+        "回执预览完成：尚未改变本地队列。请仔细检查数量，再决定是否确认核销。":
+        "回执预览完成：没有可核销的已接受记录。未找到或冲突的操作继续保留。");
+    });
+  }
+
+  async function reconcileReceipts():Promise<void>{
+    if(!receiptReview?.reviewToken)return;
+    const reviewToken=receiptReview.reviewToken;
+    setReceiptReview(null); // confirmation tokens are single-use on Main
+    await run(async()=>{
+      const result=await window.desktop.cloud.reconcilePersonalSyncReceipts({reviewToken,confirmation:true});
       setReceiptReconciliation(result);
       setRecoveryHealth(null);
       await refreshPersonalSync();
-      setNotice("回执核对已完成：仅核销云端已确认接受且请求内容完全一致的本地待发送操作；没有上传任何内容。");
+      setNotice("已按明确确认核销云端已接受的精确回执；未找到或冲突项继续保留。本轮没有上传任何内容。");
     });
   }
 
   async function reviewDeviceReplacement():Promise<void>{
+    setReceiptReview(null);
     await run(async()=>{
       const review=await window.desktop.cloud.reviewPersonalSyncDeviceReplacement();
       setDeviceReplacement(review);
@@ -261,6 +279,7 @@ export default function CloudWorkspace() {
   }
 
   async function syncPersonalNow():Promise<void>{
+    setReceiptReview(null);
     await run(async()=>{
       const result=await window.desktop.cloud.syncPersonalNow();
       setPersonalSyncResult(result);
@@ -271,6 +290,7 @@ export default function CloudWorkspace() {
   }
 
   async function setPersonalSyncEnabled(item:PersonalSyncCandidate,enabled:boolean):Promise<void>{
+    setReceiptReview(null);
     await run(async()=>{
       if(item.entityType==="personal-task")
         await window.desktop.cloud.setPersonalTaskSync(item.entityId,enabled);
@@ -416,14 +436,27 @@ export default function CloudWorkspace() {
         <div className="cloud-sync-recovery-diagnostics">
           <h3>同步健康检查与发送回执对账</h3>
           <p className="privacy-note">检查只读取当前账号的本机和云端设备状态，不会修复、清零或上传。
-            “核对发送回执”会向云端查询当前待发送操作的<strong>精确请求回执</strong>，仅对已接受且完全匹配的记录更新本地待发送状态；
+            “预览发送回执”只查询当前待发送操作的<strong>精确请求回执</strong>、不会修改本地数据；仅在第二次明确确认后，才会核销已接受且完全匹配的记录。
             不会重发、删除云端项目，未知或冲突的操作继续保留。须先在隔离 Supabase 项目部署 002H 只读 RPC。</p>
           <div className="button-row">
             <button type="button" className="secondary-button" disabled={busy}
               onClick={()=>void inspectRecovery()}>只读检查同步状态</button>
             <button type="button" className="secondary-button" disabled={busy}
-              onClick={()=>void reconcileReceipts()}>仅核对未确认发送回执</button>
+              onClick={()=>void previewReceipts()}>预览未确认发送回执</button>
           </div>
+          {receiptReview && <div className="connector-notice" role="group" aria-label="确认本地回执核销">
+            <strong>只读预览（尚未核销）：</strong>
+            检查 {receiptReview.inspected} · 可确认成功 {receiptReview.eligibleToAcknowledge}
+            {" · "}云端未找到 {receiptReview.notFound} · 其他状态 {receiptReview.unresolved}
+            {" · "}本地待发送 {receiptReview.pending}
+            {receiptReview.hasMore?" · 仍有未检查操作":""}
+            {receiptReview.reviewToken && <div className="button-row">
+              <button type="button" className="primary-button" disabled={busy}
+                onClick={()=>void reconcileReceipts()}>确认核销 {receiptReview.eligibleToAcknowledge} 项已接受操作</button>
+              <button type="button" className="secondary-button" disabled={busy}
+                onClick={()=>setReceiptReview(null)}>取消，不修改本地队列</button>
+            </div>}
+          </div>}
           {recoveryHealth && <div className="connector-notice" role="status">
             <strong>状态：{recoveryHealth.status}</strong>
             {" · "}任务待发送 {recoveryHealth.taskPending} · 日历待发送 {recoveryHealth.calendarPending}
