@@ -125,3 +125,8 @@ PR #40 已合并，legacy ownerless 审查流程完成。002F 首先实施不涉
 ## 14. ALPHA-SYNC-002G：持久增量检查点与跨 SQLite 中断恢复（2026-11-24）
 
 PR #42 已合并。本轮集中解决前述“task DB 已应用、calendar DB 未应用、cursor 仍旧”这一跨库崩溃窗口：任务库 v10 在处理每个 Pull 页前事务性记录 owner/device/fromCursor/完整白名单页；两库与冲突记录成功后 CAS 提交 Cursor 并同事务删除检查点。应用在途中断后，下次**用户手动同步**从本地检查点重放，阻断本轮未审查上传；设备更换期间不得丢弃检查点。不可解析的检查点、损坏/超前 Cursor 均失败关闭，不自动清零。完整验收与限制见 [37](37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md)；真实 Supabase RLS、多设备和 GUI 仍待单独授权验收。
+
+
+## 15. ALPHA-SYNC-002H：只读健康诊断与已发送回执对账（2026-11-24）
+
+在 PR #43 崩溃恢复检查点已合并的基础上，本轮实现供用户主动触发的恢复诊断：Main 读取当前 owner 设备/Cursor 和两个 Outbox、冲突/检查点，不创建本地设备；新增只读 RPC 根据 JWT owner 判断设备 active/revoked/unregistered 和云端 Cursor，标记超前但不自动回退。另一个只读 RPC 仅在 operationId 和**原完整操作请求**与服务端幂等回执完全一致时返回历史响应；客户端在所有返回通过校验后才对 accepted/duplicate 执行本地 ACK/CAS rebase，其他状态保持不变。无任何自动推送/云端变更；新 RPC 的迁移只留于仓库、须隔离项目额外安全审查。完整边界和验收见 [38](38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
