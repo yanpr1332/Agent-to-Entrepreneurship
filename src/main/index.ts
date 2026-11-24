@@ -33,6 +33,7 @@ import { CampusMailService } from "./connectors/mail-service";
 import { classifyMailSubject, parseMailCandidateChoice } from "../shared/mail-candidates";
 import type { MailCandidate } from "../shared/mail-candidates";
 import { KnowledgeStore } from "./knowledge-store";
+import {KnowledgeOfflineModels} from "./knowledge-offline-models";
 import { PlanningStore } from "./planning-store";
 import { readSelectedKnowledgeFile } from "./knowledge-import";
 import { createLocalBackup, backupBeforeMigration } from "./local-backup";
@@ -96,6 +97,7 @@ function report(code:DiagnosticCode,operation:"app"|"storage"|"canvas"|"mail"|"a
 let mainWindow: BrowserWindow | null = null;
 let store: LocalStore | null = null;
 let knowledgeStore: KnowledgeStore | null = null;
+let offlineModels:KnowledgeOfflineModels|null=null;
 let planningStore: PlanningStore | null = null;
 let fixedCalendarStore: FixedCalendarStore | null = null;
 let pendingICS:{id:string;expires:number;filename:string;events:FixedEventDraft[]}|null=null;
@@ -122,6 +124,10 @@ function planner():PlanningStore{
 function knowledge(): KnowledgeStore {
   if(!knowledgeStore)throw new Error("Local knowledge database is unavailable");
   return knowledgeStore;
+}
+function localModels():KnowledgeOfflineModels{
+  if(!offlineModels)throw Error("Local embedding models are not initialized");
+  return offlineModels;
 }
 let canvasVault: CanvasCredentialVault | null = null;
 let canvasSync: CanvasSyncService | null = null;
@@ -451,11 +457,38 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.knowledgeEmbeddingStatus, event => {
     requireTrustedSender(event);
-    return knowledge().embeddingStatus();
+    return localModels().status();
+  });
+  handle(IPC_CHANNELS.knowledgeImportOfflineModel, async(event,accepted:unknown)=>{
+    requireTrustedSender(event);
+    if(accepted!==true)throw Error("Explicit local model import consent required");
+    const owner=BrowserWindow.fromWebContents(event.sender);
+    if(!owner||owner.isDestroyed())throw Error("Model import requires a trusted window");
+    const selection=await dialog.showOpenDialog(owner,{
+      title:"选择你已核对来源与许可的本机 UTF-8 词向量 .vec 文件",
+      properties:["openFile"],
+      filters:[{name:"静态词向量文件",extensions:["vec"]}],
+    });
+    if(selection.canceled||!selection.filePaths.length)return null;
+    return localModels().importFile(selection.filePaths[0]);
+  });
+  handle(IPC_CHANNELS.knowledgeStartOfflineIndex,event=>{
+    requireTrustedSender(event);
+    return localModels().startIndex();
+  });
+  handle(IPC_CHANNELS.knowledgeCancelOfflineIndex,event=>{
+    requireTrustedSender(event);
+    return localModels().cancel();
+  });
+  handle(IPC_CHANNELS.knowledgeRemoveOfflineModel,(event,confirmation:unknown)=>{
+    requireTrustedSender(event);
+    if(confirmation!=="REMOVE_LOCAL_MODEL_AND_VECTORS")
+      throw Error("Explicit local model removal confirmation required");
+    return localModels().remove();
   });
   handle(IPC_CHANNELS.knowledgeSearch, (event,query:unknown) => {
     requireTrustedSender(event);
-    return knowledge().search(query);
+    return localModels().search(query);
   });
   handle(IPC_CHANNELS.knowledgeCards, event => {
     requireTrustedSender(event);
@@ -911,6 +944,10 @@ app.whenReady().then(async () => {
     await backupBeforeMigration(app.getPath("userData"),"study-anchor-planning.sqlite",2);
     store = new LocalStore(join(app.getPath("userData"), "study-anchor-tasks.sqlite"));
     knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "study-anchor-knowledge.sqlite"));
+    // No downloads or cloud lookups. Optional models are restored only from
+    // already verified assets in this application's private userData folder.
+    offlineModels=new KnowledgeOfflineModels(app.getPath("userData"),knowledgeStore);
+    await offlineModels.restore();
     fixedCalendarStore = new FixedCalendarStore(
       join(app.getPath("userData"),"study-anchor-calendar.sqlite"),
       ()=>planningStore?.listCommitted()??[],
@@ -1035,6 +1072,8 @@ app.on("before-quit", (event) => {
   planningStore = null;
   fixedCalendarStore?.close();
   fixedCalendarStore=null;
+  offlineModels?.close();
+  offlineModels=null;
   knowledgeStore?.close();
   knowledgeStore = null;
   store?.close();
