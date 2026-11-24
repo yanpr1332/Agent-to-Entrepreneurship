@@ -103,6 +103,8 @@ export const IPC_CHANNELS = {
   cloudResolvePersonalSyncConflict: "cloud:resolve-personal-sync-conflict",
   cloudPersonalSyncLegacyReview: "cloud:personal-sync-legacy-review",
   cloudAdoptPersonalSyncLegacy: "cloud:adopt-personal-sync-legacy",
+  cloudReviewPersonalSyncDeviceReplacement: "cloud:review-personal-sync-device-replacement",
+  cloudConfirmPersonalSyncDeviceReplacement: "cloud:confirm-personal-sync-device-replacement",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

@@ -5,6 +5,7 @@ import type {
 import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncConflictReason, PersonalSyncRunResult,
   PersonalSyncResolutionRequest, PersonalSyncLegacyReview, PersonalSyncLegacyAdoptionRequest,
+  PersonalSyncDeviceReplacementReview,
 } from "../../shared/personal-sync-contract";
 
 const empty:CloudSessionStatus={configured:false,authenticated:false,userId:null,email:null};
@@ -67,6 +68,7 @@ export default function CloudWorkspace() {
     items:[],taskLimitReached:false,calendarLimitReached:false,
   });
   const [legacySelection,setLegacySelection]=useState<PersonalSyncLegacyAdoptionRequest|null>(null);
+  const [deviceReplacement,setDeviceReplacement]=useState<PersonalSyncDeviceReplacementReview|null>(null);
 
   useEffect(()=>{
     let active=true;
@@ -105,6 +107,7 @@ export default function CloudWorkspace() {
       setResolutionReview(null);
       setLegacyReview({items:[],taskLimitReached:false,calendarLimitReached:false});
       setLegacySelection(null);
+      setDeviceReplacement(null);
       return;
     }
     let active=true;
@@ -170,7 +173,7 @@ export default function CloudWorkspace() {
       setMembers([]);setMessages([]);setTasks([]);setInvite("");
       setPersonalCandidates([]);setPersonalConflicts([]);setPersonalSyncResult(null);
       setLegacyReview({items:[],taskLimitReached:false,calendarLimitReached:false});
-      setLegacySelection(null);setResolutionReview(null);
+      setLegacySelection(null);setResolutionReview(null);setDeviceReplacement(null);
       setNotice("已退出云端账号；个人本地任务与其他连接器不受影响。");
     });
   }
@@ -210,6 +213,28 @@ export default function CloudWorkspace() {
       const code=await window.desktop.cloud.createInvite(selected);
       setInvite(code);
       setNotice("此邀请码 48 小时内有效，最多还能用于 4 人加入。只分享给要邀请的成员。");
+    });
+  }
+
+  async function reviewDeviceReplacement():Promise<void>{
+    await run(async()=>{
+      const review=await window.desktop.cloud.reviewPersonalSyncDeviceReplacement();
+      setDeviceReplacement(review);
+      if(!review.eligible)setNotice(review.reason??"暂不满足设备更换条件。");
+      else setNotice("当前账号可以更换本机同步设备身份；请再次核对账号并确认。");
+    });
+  }
+
+  async function confirmDeviceReplacement():Promise<void>{
+    if(!deviceReplacement?.eligible||!deviceReplacement.reviewToken)return;
+    const reviewToken=deviceReplacement.reviewToken;
+    // A token is single-use. Do not leave the old confirmation active on failure.
+    setDeviceReplacement(null);
+    await run(async()=>{
+      await window.desktop.cloud.confirmPersonalSyncDeviceReplacement({reviewToken,confirmation:true});
+      setPersonalSyncResult(null);
+      await refreshPersonalSync();
+      setNotice("旧同步设备身份已撤销（或原本未注册），新本机身份已建立。Cursor 保持不变；下次点击“立即同步”才会注册并拉取。");
     });
   }
 
@@ -364,6 +389,27 @@ export default function CloudWorkspace() {
           {personalSyncResult.hasMore ? " · 还有更多变更待拉取" : ""}
           {personalSyncResult.pushDeferred ? " · 本轮因云端存在新变更已暂缓上传" : ""}
         </div>}
+        <div className="cloud-sync-device-recovery">
+          <h3>设备身份恢复（需人工确认）</h3>
+          <p className="privacy-note">如果本机同步设备被云端撤销，可以在没有待发送项目和冲突时更换身份。
+            确认后会请求服务端撤销旧设备、创建新的本机 ID，<strong>保留原 Cursor</strong>；
+            不会自动上传、清空队列或修复损坏的 Cursor。若有尚未上传的修改，请先保留数据并处理，不要尝试重置。</p>
+          <button type="button" className="secondary-button" disabled={busy}
+            onClick={()=>void reviewDeviceReplacement()}>检查设备更换条件</button>
+          {deviceReplacement && (!deviceReplacement.eligible?
+            <p className="privacy-note" role="status">{deviceReplacement.reason}</p>:
+            <div className="cloud-sync-confirm" role="group" aria-label="确认更换同步设备身份">
+              <p><strong>确认更换当前登录账号 {status.email??"未知账号"} 的本机同步身份？</strong>
+                这会撤销当前设备 ID。不会删除云端内容，也不会修改已拉取的 Cursor；
+                只有确认后才会联系云端并更换本机 ID。</p>
+              <div className="button-row">
+                <button type="button" className="primary-button" disabled={busy}
+                  onClick={()=>void confirmDeviceReplacement()}>确认撤销旧设备并更换身份</button>
+                <button type="button" className="secondary-button" disabled={busy}
+                  onClick={()=>setDeviceReplacement(null)}>取消</button>
+              </div>
+            </div>)}
+        </div>
         <div className="cloud-sync-candidates">
           <h3>逐条选择同步内容</h3>
           {personalCandidates.length===0 ? <p className="empty-state">当前没有可授权的个人任务或手动课程。</p> :

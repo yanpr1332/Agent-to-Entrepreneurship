@@ -29,9 +29,11 @@ describe("ALPHA-SYNC-002D manual personal transfer orchestration",()=>{
       registerPersonalSyncDevice:vi.fn(async(deviceId:string)=>({ownerId:OWNER,deviceId,
         createdAt:"2026-11-24T01:00:00.000Z",lastSeenAt:"2026-11-24T01:00:00.000Z"})),
       applyPersonalSyncOperation:vi.fn(async()=>({status:"accepted" as const,serverVersion:1,cursor:"1"})),
-      pullPersonalSyncChanges:vi.fn(async(_device:string,cursor:string)=>cursor==="0"
-        ? {changes:[remote],nextCursor:"1",hasMore:false}
-        : {changes:[],nextCursor:cursor,hasMore:false}),
+      pullPersonalSyncChanges:vi.fn(async(_device:string,cursor:string,limit:number)=>limit===1
+        ? {changes:[],nextCursor:cursor,hasMore:false}
+        : cursor==="0"
+          ? {changes:[remote],nextCursor:"1",hasMore:false}
+          : {changes:[],nextCursor:cursor,hasMore:false}),
     } as unknown as SharedCloudClient;
     const service=new PersonalSyncService(cloud,tasks,calendar);
     const result=await service.syncNow();
@@ -63,7 +65,9 @@ describe("ALPHA-SYNC-002D manual personal transfer orchestration",()=>{
         applied.push(operation);
         return {status:"accepted" as const,serverVersion:1,cursor:"1"};
       }),
-      pullPersonalSyncChanges:vi.fn(async()=>({changes:[change],nextCursor:"1",hasMore:false})),
+      pullPersonalSyncChanges:vi.fn(async(_device:string,cursor:string,limit:number)=>limit===1
+        ? {changes:[],nextCursor:cursor,hasMore:false}
+        : {changes:[change],nextCursor:"1",hasMore:false}),
     } as unknown as SharedCloudClient;
     const result=await new PersonalSyncService(cloud,tasks,calendar).syncNow();
     expect(applied).toMatchObject([{entityType:"manual-calendar-event",entityId:event.id,action:"upsert"}]);
@@ -88,7 +92,9 @@ describe("ALPHA-SYNC-002D manual personal transfer orchestration",()=>{
       registerPersonalSyncDevice:vi.fn(async(deviceId:string)=>({ownerId:OWNER,deviceId,
         createdAt:"2026-11-24T01:00:00.000Z",lastSeenAt:"2026-11-24T01:00:00.000Z"})),
       applyPersonalSyncOperation:vi.fn(async()=>({status:"conflict" as const,serverVersion:2,cursor:"2"})),
-      pullPersonalSyncChanges:vi.fn(async()=>({changes:[remote],nextCursor:"2",hasMore:false})),
+      pullPersonalSyncChanges:vi.fn(async(_device:string,cursor:string,limit:number)=>limit===1
+        ? {changes:[],nextCursor:cursor,hasMore:false}
+        : {changes:[remote],nextCursor:"2",hasMore:false}),
     } as unknown as SharedCloudClient;
     const service=new PersonalSyncService(cloud,tasks,calendar);
     const result=await service.syncNow();
@@ -259,7 +265,10 @@ describe("ALPHA-SYNC-002D manual personal transfer orchestration",()=>{
     await idle;
     expect(service.hasInFlightRun()).toBe(false);
     expect(tasks.listPersonalSyncOutbox(OWNER)).toHaveLength(1);
-    expect(cloud.pullPersonalSyncChanges).not.toHaveBeenCalled();
+    // A read-only preflight now runs before upload even when cursor is zero.
+    expect(cloud.pullPersonalSyncChanges).toHaveBeenCalledTimes(1);
+    expect(cloud.pullPersonalSyncChanges).toHaveBeenCalledWith(
+      tasks.getOrCreatePersonalSyncDevice(OWNER).deviceId,"0",1);
   });
 
   it("does not advance the cursor when remote changes cannot be applied locally",async()=>{

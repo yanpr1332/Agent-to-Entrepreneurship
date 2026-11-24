@@ -19,6 +19,7 @@ import type {
 import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncRunResult,
   PersonalSyncResolutionRequest, PersonalSyncLegacyReview, PersonalSyncLegacyAdoptionRequest,
+  PersonalSyncDeviceReplacementReview, PersonalSyncDeviceReplacementRequest,
 } from "../shared/personal-sync-contract";
 
 import type {
@@ -114,6 +115,10 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.cloudSetPersonalTaskSync,{id,enabled}) as Promise<{saved:true}>,
     setManualEventSync: (id:string,enabled:boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudSetManualEventSync,{id,enabled}) as Promise<{saved:true}>,
+    reviewPersonalSyncDeviceReplacement: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudReviewPersonalSyncDeviceReplacement) as Promise<PersonalSyncDeviceReplacementReview>,
+    confirmPersonalSyncDeviceReplacement: (input:PersonalSyncDeviceReplacementRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudConfirmPersonalSyncDeviceReplacement,input) as Promise<{replaced:true}>,
     personalSyncConflicts: () =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudPersonalSyncConflicts) as Promise<PersonalSyncConflictRecord[]>,
     personalSyncLegacyReview:() =>

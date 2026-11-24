@@ -335,6 +335,42 @@ export class LocalStore {
     return checkedPersonalSyncDevice(created);
   }
 
+  /**
+   * Explicit, owner-scoped device replacement after the remote device was revoked.
+   * Keep the last committed cursor and all enrollment metadata. A nonempty
+   * personal-task queue or unresolved conflict blocks any local identity change.
+   * Main also checks the separate manual-calendar queue before invoking this.
+   */
+  rotatePersonalSyncDevice(ownerInput:unknown,expectedDeviceIdInput:unknown,
+    expectedCursor:string,now=new Date()):{deviceId:string;cursor:string}{
+    const owner=syncOwnerId(ownerInput),expectedDeviceId=requireUuid(expectedDeviceIdInput);
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const stored=this.db.prepare(
+        "SELECT device_id,cursor FROM personal_sync_devices WHERE owner_id=?"
+      ).get(owner) as {device_id:string;cursor:string}|undefined;
+      if(!stored)throw Error("Personal sync device is missing; review replacement again");
+      const existing=checkedPersonalSyncDevice(stored);
+      if(existing.deviceId!==expectedDeviceId||existing.cursor!==expectedCursor)
+        throw Error("Personal sync device changed; review replacement again");
+      const taskPending=this.db.prepare(
+        "SELECT 1 FROM personal_sync_outbox WHERE owner_id=? LIMIT 1"
+      ).get(owner);
+      const unresolved=this.db.prepare(
+        "SELECT 1 FROM personal_sync_conflicts WHERE owner_id=? LIMIT 1"
+      ).get(owner);
+      if(taskPending||unresolved)throw Error("Resolve local pending operations and conflicts before replacing a device");
+      const deviceId=randomUUID();
+      const result=this.db.prepare(
+        "UPDATE personal_sync_devices SET device_id=?,created_at=?,last_sync_at=NULL "+
+        "WHERE owner_id=? AND device_id=? AND cursor=?"
+      ).run(deviceId,now.toISOString(),owner,existing.deviceId,existing.cursor);
+      if(result.changes!==1)throw Error("Personal sync device changed; review replacement again");
+      this.db.exec("COMMIT");
+      return {deviceId,cursor:existing.cursor};
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+
   /** Advance only after a complete page has been durably applied locally. */
   advancePersonalSyncCursor(ownerId:string,cursor:string):void {
     const owner=syncOwnerId(ownerId);
