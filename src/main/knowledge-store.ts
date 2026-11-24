@@ -497,12 +497,31 @@ export class KnowledgeStore {
     }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
 
+  /** Incremental resume across restart: look up the first passage missing
+   * an embedding for the ACTIVE pinned model. No disk-side progress cursor is
+   * needed: each committed batch is already checkpointed via SQLite. */
+  nextEmbeddingTarget():{documentId:string;revision:number;ordinal:number}|null{
+    const model=this.embeddingModel();
+    if(!model)return null;
+    const row=this.db.prepare(`SELECT c.document_id,c.ordinal,d.revision
+      FROM knowledge_chunks c JOIN knowledge_documents d ON d.id=c.document_id
+      LEFT JOIN knowledge_vectors v ON v.chunk_id=c.id
+        AND v.model_id=? AND v.model_revision=? AND v.dimension=?
+        AND v.document_revision=d.revision
+      WHERE v.chunk_id IS NULL
+      ORDER BY c.document_id,c.ordinal LIMIT 1`)
+      .get(model.id,model.revision,model.dimension) as
+        {document_id:string;ordinal:number;revision:number}|undefined;
+    return row?{documentId:row.document_id,revision:row.revision,ordinal:row.ordinal}:null;
+  }
+
   /** One bounded batch. The provider must already be a locally verified,
    * explicitly installed model; the app does not yet ship/download a runner.
    * Every source revision and passage hash is rechecked AFTER await before
    * committing all vectors atomically. Import/delete cascade deletes vectors. */
   async indexEmbeddingBatch(provider:LocalEmbeddingProvider,documentInput:unknown,
-    revisionInput:unknown,startInput=0):Promise<{written:number;nextOrdinal:number|null}>{
+    revisionInput:unknown,startInput=0,isCanceled:()=>boolean=()=>false):
+    Promise<{written:number;nextOrdinal:number|null}>{
     const documentId=requireKnowledgeId(documentInput);
     const model=parseLocalEmbeddingModel(provider.model),configured=this.embeddingModel();
     if(!configured||!sameEmbeddingModel(model,configured))
@@ -521,9 +540,11 @@ export class KnowledgeStore {
     const vectors=await provider.embed(passages.map(p=>p.body),"passage");
     if(!Array.isArray(vectors)||vectors.length!==passages.length)
       throw Error("Local model returned an incomplete embedding batch");
+    if(isCanceled())throw Error("Local indexing was canceled");
     const encoded=vectors.map(v=>encodeEmbedding(v,model.dimension));
     this.db.exec("BEGIN IMMEDIATE");
     try{
+      if(isCanceled())throw Error("Local indexing was canceled");
       const still=this.getDocument(documentId);
       const active=this.embeddingModel();
       if(still.revision!==revision||!active||!sameEmbeddingModel(active,model))
@@ -551,6 +572,7 @@ export class KnowledgeStore {
         put.run(part.id,documentId,revision,passageHash(part.body),
           model.id,model.revision,model.dimension,encoded[i]);
       });
+      if(isCanceled())throw Error("Local indexing was canceled");
       this.db.exec("COMMIT");
     }catch(error){this.db.exec("ROLLBACK");throw error;}
     return {written:passages.length,
