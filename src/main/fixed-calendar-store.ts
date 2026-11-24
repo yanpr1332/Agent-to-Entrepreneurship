@@ -336,7 +336,7 @@ export class FixedCalendarStore {
       }else{
         this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE entity_id=?").run(input);
       }
-      const removed=Number(this.db.prepare("DELETE FROM fixed_events WHERE id=? AND source='manual'").run(input).changes)===1;
+      const removed=Number(this.db.prepare("DELETE FROM fixed_events WHERE id=?").run(input).changes)===1;
       this.db.exec("COMMIT");
       return removed;
     }catch(error){this.db.exec("ROLLBACK");throw error;}
@@ -347,11 +347,14 @@ export class FixedCalendarStore {
     this.guardStudyConflicts([input]);
     this.db.exec("BEGIN IMMEDIATE");
     try{
+      const existing=this.db.prepare("SELECT source FROM fixed_events WHERE id=?")
+        .get(input.id) as {source:"manual"|"ics"}|undefined;
+      if(!existing)throw Error("Calendar event no longer exists");
       const updated=this.db.prepare(
-        "UPDATE fixed_events SET title=?,day=?,start_minute=?,duration_minutes=? WHERE id=? AND source='manual'"
+        "UPDATE fixed_events SET title=?,day=?,start_minute=?,duration_minutes=? WHERE id=?"
       ).run(input.title,input.day,input.startMinute,input.durationMinutes,input.id);
       if(Number(updated.changes)!==1)throw Error("Calendar event no longer exists");
-      this.enqueueManualEvent(input.id);
+      if(existing.source==="manual")this.enqueueManualEvent(input.id);
       this.db.exec("COMMIT");
     }catch(error){this.db.exec("ROLLBACK");throw error;}
     const found=this.list().find(item=>item.id===input.id);
