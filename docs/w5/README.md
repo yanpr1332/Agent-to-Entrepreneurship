@@ -217,3 +217,8 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 ## ALPHA-SYNC-002F：同步上传前设备/Cursor 预检（开发中，2026-11-24）
 
 [35 Cursor 预检实施及验收](35_ALPHA_SYNC_002F_CURSOR_PREFLIGHT.md)：不修改云端 SQL/schema，不自动重置/更换设备；本地设备 ID 与游标异常时阻止上传，对非零游标+pending 先执行云端只读预检。发现远端未拉取变更先 pull 并保留待发送内容、延迟本轮 push，下一轮仍由用户手动触发。
+
+
+## ALPHA-SYNC-002F 续篇：手动更换同步设备身份（开发中，2026-11-24）
+
+[36 设备更换说明与验收](36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md) 在已合并 PR #41 的只读 Cursor 预检基础上，增加有条件、明确两步确认的 owner-scoped 旧设备撤销/本机 UUID 轮换。任务/日历 pending 或冲突非空时阻止更换；不回退 Cursor，不清空队列，不后台同步。**Cursor 损坏重建和真实云端权限/多设备测试仍未完成。**
