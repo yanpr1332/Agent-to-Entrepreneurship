@@ -14,6 +14,10 @@ function memory(): LocalStore {
 afterEach(() => {
   while (stores.length) stores.pop()!.close();
 
+
+});
+
+describe("local-first SQLite store", () => {
   it("enrolls only one explicitly selected personal task and persists its outbox intent", () => {
     const db = memory();
     const task = db.createTask({title:"跨设备任务", description:"用户主动选择"});
@@ -68,9 +72,6 @@ afterEach(() => {
     expect(db.listPersonalSyncOutbox()).toEqual([]);
   });
 
-});
-
-describe("local-first SQLite store", () => {
   it("creates, updates and deletes personal tasks", () => {
     const db = memory();
     const task = db.createTask({ title: "  阅读论文 ", dueDate: "2026-11-25", priority: "high" });
