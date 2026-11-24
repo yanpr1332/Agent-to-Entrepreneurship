@@ -78,6 +78,7 @@ declare global {
         login: (input: CloudCredentials) => Promise<CloudSessionStatus>;
         signup: (input: CloudCredentials) => Promise<{emailVerificationRequired:true}>;
         logout: () => Promise<CloudSessionStatus>;
+        clearTeamHistory: (confirmation:"ERASE_CURRENT_TEAM_CACHE") => Promise<{workspaces:number;checkpointed:boolean}>;
         workspaces: () => Promise<SharedWorkspace[]>;
         createWorkspace: (name: string, displayName: string) => Promise<string>;
         createInvite: (workspaceId: string) => Promise<string>;
