@@ -10,6 +10,11 @@ import {
 } from "../shared/knowledge-model";
 import {extractKnowledgeText,fuzzyCandidateExpression,fuzzySubstringMatch,normalizeFuzzy}
   from "../shared/knowledge-search-text";
+import {
+  encodeEmbedding,embeddingCosine,fuseKnowledgeHits,parseLocalEmbeddingModel,
+  passageHash,sameEmbeddingModel,MAX_EMBED_BATCH,MAX_LOCAL_EMBEDDINGS,
+  type LocalEmbeddingModel,type LocalEmbeddingProvider,
+} from "./knowledge-embeddings";
 import {parseGraphNode,parseGraphNodeEdit,parseGraphEdge,
   type KnowledgeGraphSnapshot,type GraphNode,type GraphEdge} from "../shared/knowledge-graph-model";
 
@@ -74,7 +79,7 @@ export class KnowledgeStore {
   }
   private migrate():void{
     const version=(this.db.prepare("PRAGMA user_version").get() as {user_version:number}).user_version;
-    if(version>3)throw new Error("Knowledge database is from a newer application");
+    if(version>4)throw new Error("Knowledge database is from a newer application");
     if(version===0){this.db.exec("BEGIN IMMEDIATE");
     try{
       this.db.exec(`
@@ -185,6 +190,34 @@ export class KnowledgeStore {
           );
           CREATE INDEX knowledge_graph_edges_target ON knowledge_graph_edges(target_id);
           PRAGMA user_version=3;
+        `);
+        this.db.exec("COMMIT");
+      }catch(error){this.db.exec("ROLLBACK");throw error;}
+    }
+    if(version<=3){
+      this.db.exec("BEGIN IMMEDIATE");
+      try{
+        this.db.exec(`
+          CREATE TABLE knowledge_vector_config(
+            key INTEGER PRIMARY KEY CHECK(key=1),
+            model_id TEXT NOT NULL,model_revision TEXT NOT NULL,
+            dimension INTEGER NOT NULL CHECK(dimension BETWEEN 2 AND 2048),
+            format TEXT NOT NULL CHECK(format='float32-l2'),
+            protocol TEXT NOT NULL CHECK(protocol='passage-query-v1')
+          );
+          CREATE TABLE knowledge_vectors(
+            chunk_id INTEGER PRIMARY KEY REFERENCES knowledge_chunks(id)
+              ON DELETE CASCADE,
+            document_id TEXT NOT NULL REFERENCES knowledge_documents(id)
+              ON DELETE CASCADE,
+            document_revision INTEGER NOT NULL,
+            passage_hash TEXT NOT NULL,
+            model_id TEXT NOT NULL,model_revision TEXT NOT NULL,
+            dimension INTEGER NOT NULL CHECK(dimension BETWEEN 2 AND 2048),
+            vector BLOB NOT NULL CHECK(length(vector)=dimension*4)
+          );
+          CREATE INDEX knowledge_vectors_doc ON knowledge_vectors(document_id);
+          PRAGMA user_version=4;
         `);
         this.db.exec("COMMIT");
       }catch(error){this.db.exec("ROLLBACK");throw error;}
@@ -413,6 +446,164 @@ export class KnowledgeStore {
         matchType:"fuzzy" as const};
     });
     return [...exactHits,...fuzzyHits];
+  }
+
+  /** Local model metadata is registered by trusted Main code only, AFTER
+   * explicit model-install consent in a future model runner. No IPC accepts
+   * arbitrary vectors, paths or remote embedding API URLs. */
+  embeddingModel():LocalEmbeddingModel|null{
+    const row=this.db.prepare(`SELECT model_id,model_revision,dimension,format,protocol
+      FROM knowledge_vector_config WHERE key=1`).get() as {
+        model_id:string;model_revision:string;dimension:number;
+        format:string;protocol:string;
+      }|undefined;
+    return row?parseLocalEmbeddingModel({id:row.model_id,revision:row.model_revision,
+      dimension:row.dimension,format:row.format,protocol:row.protocol}):null;
+  }
+  embeddingStatus():{model:LocalEmbeddingModel|null;indexed:number;total:number}{
+    const model=this.embeddingModel();
+    const n=(this.db.prepare(`SELECT count(*) AS n FROM knowledge_chunks`)
+      .get() as {n:number}).n;
+    const indexed=(this.db.prepare(`SELECT count(*) AS n FROM knowledge_vectors v
+      JOIN knowledge_chunks c ON c.id=v.chunk_id
+      JOIN knowledge_documents d ON d.id=c.document_id
+      WHERE d.revision=v.document_revision AND v.document_id=d.id
+        AND v.model_id=? AND v.model_revision=?
+        AND v.dimension=?`)
+      .get(model?.id??"",model?.revision??"",model?.dimension??-1) as {n:number}).n;
+    return {model,indexed,total:n};
+  }
+  configureLocalEmbeddingModel(raw:unknown):void{
+    const model=parseLocalEmbeddingModel(raw),old=this.embeddingModel();
+    if(old&&sameEmbeddingModel(old,model))return;
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      this.db.prepare("DELETE FROM knowledge_vectors").run();
+      this.db.prepare(`INSERT INTO knowledge_vector_config(
+        key,model_id,model_revision,dimension,format,protocol
+      ) VALUES(1,?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET
+        model_id=excluded.model_id,model_revision=excluded.model_revision,
+        dimension=excluded.dimension,format=excluded.format,protocol=excluded.protocol`)
+        .run(model.id,model.revision,model.dimension,model.format,model.protocol);
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+  clearLocalEmbeddings():void{
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      this.db.prepare("DELETE FROM knowledge_vectors").run();
+      this.db.prepare("DELETE FROM knowledge_vector_config").run();
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+
+  /** One bounded batch. The provider must already be a locally verified,
+   * explicitly installed model; the app does not yet ship/download a runner.
+   * Every source revision and passage hash is rechecked AFTER await before
+   * committing all vectors atomically. Import/delete cascade deletes vectors. */
+  async indexEmbeddingBatch(provider:LocalEmbeddingProvider,documentInput:unknown,
+    revisionInput:unknown,startInput=0):Promise<{written:number;nextOrdinal:number|null}>{
+    const documentId=requireKnowledgeId(documentInput);
+    const model=parseLocalEmbeddingModel(provider.model),configured=this.embeddingModel();
+    if(!configured||!sameEmbeddingModel(model,configured))
+      throw Error("Local embedding model is not configured for this index");
+    if(!Number.isSafeInteger(revisionInput)||(revisionInput as number)<1||
+       !Number.isSafeInteger(startInput)||startInput<0||startInput>2500)
+      throw Error("Invalid knowledge vector batch boundary");
+    const revision=revisionInput as number;
+    const doc=this.getDocument(documentId);
+    if(doc.revision!==revision)throw Error("Knowledge source revision changed");
+    const passages=this.db.prepare(`SELECT id,ordinal,body FROM knowledge_chunks
+      WHERE document_id=? AND ordinal>=? ORDER BY ordinal LIMIT ?`)
+      .all(documentId,startInput,MAX_EMBED_BATCH) as
+        Array<{id:number;ordinal:number;body:string}>;
+    if(!passages.length)return {written:0,nextOrdinal:null};
+    const vectors=await provider.embed(passages.map(p=>p.body),"passage");
+    if(!Array.isArray(vectors)||vectors.length!==passages.length)
+      throw Error("Local model returned an incomplete embedding batch");
+    const encoded=vectors.map(v=>encodeEmbedding(v,model.dimension));
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const still=this.getDocument(documentId);
+      const active=this.embeddingModel();
+      if(still.revision!==revision||!active||!sameEmbeddingModel(active,model))
+        throw Error("Knowledge source/model changed during local indexing");
+      const available=(this.db.prepare(`SELECT count(*) AS n FROM knowledge_vectors`)
+        .get() as {n:number}).n;
+      const existing=this.db.prepare("SELECT 1 FROM knowledge_vectors WHERE chunk_id=?");
+      let newRows=0;
+      for(const part of passages)if(!existing.get(part.id))newRows++;
+      if(available+newRows>MAX_LOCAL_EMBEDDINGS)
+        throw Error("Local vector index limit reached");
+      const current=this.db.prepare(`SELECT id,body FROM knowledge_chunks
+        WHERE document_id=? AND ordinal=?`);
+      const put=this.db.prepare(`INSERT INTO knowledge_vectors(
+        chunk_id,document_id,document_revision,passage_hash,
+        model_id,model_revision,dimension,vector
+      ) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(chunk_id) DO UPDATE SET
+        document_revision=excluded.document_revision,passage_hash=excluded.passage_hash,
+        model_id=excluded.model_id,model_revision=excluded.model_revision,
+        dimension=excluded.dimension,vector=excluded.vector`);
+      passages.forEach((part,i)=>{
+        const check=current.get(documentId,part.ordinal) as {id:number;body:string}|undefined;
+        if(!check||check.id!==part.id||check.body!==part.body)
+          throw Error("Knowledge passage changed during embedding");
+        put.run(part.id,documentId,revision,passageHash(part.body),
+          model.id,model.revision,model.dimension,encoded[i]);
+      });
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+    return {written:passages.length,
+      nextOrdinal:passages.length===MAX_EMBED_BATCH
+        ?passages[passages.length-1].ordinal+1:null};
+  }
+
+  /** A search never accepts model vectors from the Renderer. If no trusted
+   * local model is attached, or it fails, exact/fuzzy remains unchanged. */
+  async searchWithEmbeddings(input:unknown,provider:LocalEmbeddingProvider|null):
+    Promise<KnowledgeSearchHit[]>{
+    const query=parseKnowledgeQuery(input),lexical=this.search(query);
+    if(!provider)return lexical;
+    let model:LocalEmbeddingModel;
+    try{model=parseLocalEmbeddingModel(provider.model);}catch{return lexical;}
+    const configured=this.embeddingModel();
+    if(!configured||!sameEmbeddingModel(configured,model))return lexical;
+    let queryVector:Buffer;
+    try{
+      const batch=await provider.embed([query],"query");
+      if(!Array.isArray(batch)||batch.length!==1)return lexical;
+      queryVector=encodeEmbedding(batch[0],model.dimension);
+    }catch{return lexical;}
+    const active=this.embeddingModel();
+    if(!active||!sameEmbeddingModel(active,model))return lexical;
+    type VectorRow={document_id:string;ordinal:number;body:string;title:string;
+      revision:number;page_number:number|null;passage_hash:string;vector:Buffer};
+    const records=this.db.prepare(`SELECT c.document_id,c.ordinal,c.body,d.title,
+      d.revision,cp.page_number,v.passage_hash,v.vector
+      FROM knowledge_vectors v JOIN knowledge_chunks c ON v.chunk_id=c.id
+      JOIN knowledge_documents d ON c.document_id=d.id
+      LEFT JOIN knowledge_chunk_pages cp ON cp.document_id=c.document_id
+        AND cp.ordinal=c.ordinal
+      WHERE d.revision=v.document_revision AND v.document_id=d.id
+        AND v.model_id=? AND v.model_revision=? AND v.dimension=?
+      ORDER BY c.document_id,c.ordinal LIMIT ?`)
+      .all(model.id,model.revision,model.dimension,MAX_LOCAL_EMBEDDINGS) as VectorRow[];
+    const semantic: Array<{hit:KnowledgeSearchHit;score:number}>=[];
+    for(const row of records){
+      if(passageHash(row.body)!==row.passage_hash)continue;
+      let score:number;
+      try{score=embeddingCosine(queryVector,row.vector);}catch{continue;}
+      if(score<0.2)continue;
+      semantic.push({score,hit:{
+        documentId:row.document_id,documentTitle:row.title,
+        documentRevision:row.revision,ordinal:row.ordinal,
+        pageNumber:row.page_number??null,excerpt:row.body.slice(0,500),
+        matchType:"semantic",
+      }});
+    }
+    semantic.sort((a,b)=>b.score-a.score||
+      a.hit.documentId.localeCompare(b.hit.documentId)||a.hit.ordinal-b.hit.ordinal);
+    return fuseKnowledgeHits(lexical,semantic.slice(0,40).map(x=>x.hit));
   }
 
   /** All graph records are local. Evidence is copied from the current trusted FTS passage. */
