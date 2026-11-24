@@ -710,3 +710,53 @@ input:hover:not(:disabled),textarea:hover:not(:disabled),select:hover:not(:disab
 @media(max-width:1050px){.overview-main-grid{grid-template-columns:minmax(0,1.25fr) minmax(250px,.85fr)}}
 @media(max-width:850px){.overview-main-grid{grid-template-columns:1fr}.overview-side-column{display:grid;grid-template-columns:1fr 1fr}.overview-focus-number{margin-top:12px}}
 @media(max-width:680px){.overview-side-column{grid-template-columns:1fr}.overview-actions{gap:7px}.overview-bottom-strip{align-items:flex-start}.overview-bottom-strip>.text-button{white-space:nowrap}}
+
+
+/* CALENDAR UI · quiet planning workspace */
+.calendar-layout{gap:18px;grid-template-columns:minmax(0,1.65fr) minmax(290px,.8fr)}
+.calendar-layout.editor-collapsed{grid-template-columns:minmax(0,1fr)}
+.calendar-column{gap:16px}
+.calendar-panel{padding:22px 23px;background:var(--surface-raised,var(--surface))}
+.calendar-header{align-items:flex-start;margin-bottom:18px}
+.calendar-heading h2{font-size:21px;letter-spacing:-.5px;margin:0}
+.calendar-selection{font-size:12px;margin-top:7px}
+.calendar-nav{gap:6px}
+.calendar-nav .icon-button{width:34px;height:34px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;padding:0;font-size:20px}
+.calendar-nav .small-button{padding:8px 12px}
+.calendar-view-tabs{padding:4px;background:var(--canvas);border:1px solid var(--line);border-radius:9px;width:max-content;margin-bottom:17px}
+.calendar-view-tabs .chip{border-color:transparent;background:transparent;padding:7px 13px}
+.calendar-view-tabs .chip.selected{background:var(--surface);border-color:var(--line);box-shadow:var(--shadow-soft);font-weight:650}
+.weekday-row{margin-bottom:6px}
+.weekday-row span{font-size:10px;font-weight:650;letter-spacing:.3px;padding:8px 0}
+.calendar-grid{gap:5px}
+.calendar-day{min-height:68px;position:relative;border-radius:8px;gap:5px;justify-content:flex-start;padding:12px 7px 8px;border-color:transparent;background:var(--canvas);font-size:12px}
+.calendar-day.muted-day{background:transparent;border-color:transparent}
+.calendar-day.selected-day{outline:0;border:1px solid var(--accent);background:var(--tint);font-weight:650}
+.calendar-day.today-day:not(.selected-day){border:1px solid color-mix(in srgb,var(--accent) 65%,var(--line));box-shadow:none;background:var(--surface)}
+.calendar-day.today-day>span{font-weight:700}
+.calendar-today-tag{font-size:9px;letter-spacing:.1px}
+.day-dot{position:absolute;bottom:8px;width:5px;height:5px}
+.agenda-legend{padding:10px 0 14px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.agenda-week-grid{gap:8px}
+.agenda-date{border-radius:10px}
+.agenda-date-head{padding:12px;background:var(--surface);font-weight:650}
+.agenda-date-body{gap:10px}
+.agenda-entry{border-radius:7px;padding:9px 10px;gap:4px}
+.agenda-day-grid .agenda-entry{grid-template-columns:105px minmax(0,1fr)}
+.planned-day-panel,.task-list-panel{padding:21px 22px}
+.planned-day-panel h2{font-size:17px;margin:7px 0 12px}
+.task-list-panel .panel-heading{margin-bottom:11px}
+.task-list-panel .panel-heading h2{font-size:17px;margin:5px 0 0}
+.filter-tabs{padding:4px;background:var(--canvas);border:1px solid var(--line);border-radius:9px;width:max-content;max-width:100%}
+.filter-tabs .chip{border-color:transparent;background:transparent;padding:7px 11px}
+.filter-tabs .chip.selected{background:var(--surface);border-color:var(--line);box-shadow:var(--shadow-soft)}
+.task-item{padding:15px 0}
+.task-item .task-copy strong{font-size:13px;line-height:1.5}
+.task-meta{flex-wrap:wrap}
+.task-editor{position:sticky;top:16px;padding:22px}
+.task-editor h2{font-size:17px}
+.task-editor form{gap:15px}
+.task-editor label{font-size:12px}
+.task-editor input,.task-editor select,.task-editor textarea{padding:10px 12px}
+@media(max-width:1200px){.calendar-layout{grid-template-columns:1fr}.task-editor{position:static}}
+@media(max-width:720px){.calendar-panel{padding:16px}.calendar-day{min-height:56px;padding-top:9px}.calendar-header{align-items:flex-start}.calendar-view-tabs,.filter-tabs{width:100%}.calendar-view-tabs .chip,.filter-tabs .chip{flex:1}}
