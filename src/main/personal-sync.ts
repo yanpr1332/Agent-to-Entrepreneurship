@@ -125,9 +125,23 @@ export class PersonalSyncService{
       .map(item=>({...item,entityType:"manual-calendar-event" as const}));
     const pending:PendingOutbox[]=[...taskOutbox,...calendarOutbox].sort((a,b)=>
       a.createdAt.localeCompare(b.createdAt)||a.operationId.localeCompare(b.operationId));
+    // If an older nonzero cursor is ahead of the server (for example after
+    // restoring mismatched SQLite backups), pushing first would publish data
+    // before discovering the inconsistency. Validate the saved position using
+    // an owner/device-authenticated read-only RPC before any pending upload.
+    // If remote changes exist, pull them first in this run and defer every
+    // outgoing operation until the user can review any new conflicts.
+    let pushDeferred=false;
+    if(device.cursor!=="0"&&pending.length>0){
+      const preflight=await this.cloud.pullPersonalSyncChanges(device.deviceId,device.cursor,1);
+      this.assertOwner(ownerId);
+      if(preflight.changes.length===0&&preflight.nextCursor!==device.cursor)
+        throw Error("Cloud preflight attempted to advance an empty cursor page");
+      pushDeferred=preflight.changes.length>0;
+    }
     let pushed=0,pushConflicts=0,rejected=0,retryableFailures=0;
 
-    for(const item of pending){
+    for(const item of (pushDeferred?[]:pending)){
       this.assertOwner(ownerId);
       // A prior network request may have allowed the user to edit or revoke this
       // later queue item. Never upload a stale snapshot that is no longer pending.
@@ -231,6 +245,6 @@ export class PersonalSyncService{
     const pendingCalendar=this.calendar.countManualCalendarSyncOutbox(ownerId);
     const conflicts=this.tasks.countPersonalSyncConflicts(ownerId);
     return {ownerId,deviceId:device.deviceId,pushed,pulled,pullPages,conflicts,pushConflicts,
-      rejected,retryableFailures,pending:pendingTasks+pendingCalendar,cursor,hasMore};
+      rejected,retryableFailures,pushDeferred,pending:pendingTasks+pendingCalendar,cursor,hasMore};
   }
 }
