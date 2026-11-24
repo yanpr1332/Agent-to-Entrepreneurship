@@ -11,6 +11,15 @@ describe("ALPHA-SYNC-003D OS-backed history encryption boundary",()=>{
     })).toThrow("OS encryption");
   });
 
+  it("rejects Electron insecure basic_text backend even if availability is true",()=>{
+    expect(()=>createTeamHistoryCipher({
+      isEncryptionAvailable:()=>true,
+      getSelectedStorageBackend:()=>"basic_text",
+      encryptString:()=>Buffer.from("plaintext"),
+      decryptString:()=>"",
+    })).toThrow("OS encryption");
+  });
+
   it("protects record payloads with non-deterministic authenticated bytes",()=>{
     const raw=JSON.stringify({body:"Sensitive team discussion",title:"Private title"});
     const one=testHistoryCipher.encrypt(raw),two=testHistoryCipher.encrypt(raw);
