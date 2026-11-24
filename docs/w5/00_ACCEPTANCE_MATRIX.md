@@ -133,8 +133,8 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - **002F 第一部分：PR #41 已合并，真实云端验收未做**。本地保存的 deviceId/cursor 必须先通过格式/边界检查；当非零 cursor 有 pending 时，先用同一 owner/device/cursor 只读 pull 预检；异常即禁止本轮上传，发现未读远端变化则先拉取并延后上传。**不能据此宣称修复设备撤销、损坏 Cursor 自动重建或跨库崩溃一致性**。详见 [35](35_ALPHA_SYNC_002F_CURSOR_PREFLIGHT.md)。
 - **002F 续篇：PR #42 已合并，真实云端验收未做**。当前登录账号无任务/日历 pending 和未解决冲突时，二次确认后使用当前 JWT 撤销旧设备，Main 一次性令牌 + owner/device/cursor CAS 更换本机设备 ID，保留 Cursor/本地数据，不自动上传；零 Cursor 且有 pending 时也先只读预检。损坏 Cursor 重建、待发送操作跨设备迁移、跨库崩溃恢复及真实 RLS/双设备仍是阻塞。详见 [36](36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md)。
 - **002G：PR #43 已合并，真实云端/跨设备验收未做**。任务库 v10 持久拉取页检查点，在两库/冲突记录处理中断时下次手动同步先重放并原子推进 Cursor；数据损坏或账号/设备不符时失败关闭，恢复当轮先不上传本地 Outbox。仍无跨库全局事务或损坏 Cursor 自动重建。详见 [37](37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md)。
-- **002H：开发中，隔离项目 RPC 未部署，真实验收未做**。当前账号只读设备状态/Cursor 查询，损坏本地状态/待恢复 Pull 检查点先阻断；精确 operationId + 完整请求匹配的云端回执查验，仅已接受项目本地 ACK，未知/冲突/不匹配不清空；额外后端 SQL 需明确授权人工部署。无自动 Cursor 重建/数据回写。详见 [38](38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
-- **003：未开发**。团队消息仍使用轮询，Realtime + 断线补拉 + 撤权后拒绝 + 五账号联机尚无真实证据。
+- **002H：PR #44 已合并，隔离项目 RPC 未部署，真实验收未做**。当前账号只读设备状态/Cursor 查询，损坏本地状态/待恢复 Pull 检查点先阻断；精确 operationId + 完整请求匹配的云端回执查验，仅已接受项目本地 ACK，未知/冲突/不匹配不清空；额外后端 SQL 需明确授权人工部署。无自动 Cursor 重建/数据回写。详见 [38](38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
+- **003A：开发中（真实 Supabase 未验收）**。Main 用户 JWT WebSocket 仅推送消息/任务刷新提示；重新成员验证、REST/RLS 每 10/30 秒补拉最新 100 条、切换 workspace 防交叉、撤权时清空共享 UI；publication SQL 未部署，持久游标/历史窗口外补拉和五账号联机仍阻塞。详见 [39](39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
 - **Embedding：未开发**。ALPHA-KB-005 继续保留，待同步核心门槛后先做离线 PoC；不将 PR #32 的 AI 单段解释误算为本地 embedding。
 - 2026-11-25 内部 Alpha 以真实授权测试账号、RLS 反向测试、最小跨设备增量场景及已知风险记录为条件性目标；未验证项应明确阻塞，不能冒充完成。详见 [27 同步优先实施计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。
 
@@ -143,7 +143,7 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 1. **双平台安装包**：从未执行 `npm run dist:win` / `dist:mac`，无签名、无公证、无安装包产物。
 2. **Canvas 真实读取**：无真实 Personal Token 的本机集成记录；OAuth 多用户方案依赖学校 Developer Key，未申请或未获批。
 3. **交大邮箱真实收发**：IMAP 登录、收件、SMTP 发送均无真实账号证据。
-4. **Supabase 真实部署**：迁移 SQL 未在真实项目执行；RLS 隔离未用独立账号做正反向验证；Realtime 未接入（当前 10 秒轮询）。
+4. **Supabase 真实部署**：迁移 SQL 未在真实项目执行；RLS 隔离未用独立账号做正反向验证；Realtime 提示代码已提交但 SQL publication 未部署且尚无真实 RLS/联机证据，轮询作为回退。
 5. **OpenAI 真实调用**：无真实 Key 的调用记录；成本与限流仅由单元测试的假 client 覆盖。
 6. **GUI 交互**：已用 CDP 自动化点击 9 个页面、建任务、重启持久化并通过；但专注计时、知识库导入、规划应用、ICS 导入等具体交互尚未人工走查。
 7. **备份恢复**：只能生成备份，无恢复 UI、无自动清理；备份未加密。
