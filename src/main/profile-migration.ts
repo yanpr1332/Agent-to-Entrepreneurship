@@ -33,7 +33,7 @@ export const RENAMED_PROFILE_FILES={
 
 const renamed=new Map(Object.entries(RENAMED_PROFILE_FILES));
 const oldFiles=new Set(Object.keys(RENAMED_PROFILE_FILES));
-const newFiles=new Set(Object.values(RENAMED_PROFILE_FILES));
+const newFiles:Set<string>=new Set(Object.values(RENAMED_PROFILE_FILES));
 const MIGRATION_VERSION=1;
 const safeRoot=(path:string)=>resolve(path);
 type MigrationMode="directory"|"in-place";
@@ -90,6 +90,10 @@ async function stageProfile(source:string,stage:string,mode:MigrationMode):Promi
   const visit=async(src:string,dst:string,topLevel:boolean):Promise<void>=>{
     mkdirSync(dst,{recursive:true,mode:0o700});
     for(const item of readdirSync(src,{withFileTypes:true})){
+      // Chromium can leave volatile profile singleton symlinks behind on
+      // macOS/Linux. Never follow or copy those; they are NOT user data.
+      if(topLevel&&["SingletonLock","SingletonSocket","SingletonCookie"].includes(item.name))
+        continue;
       if(item.isSymbolicLink()||(!item.isFile()&&!item.isDirectory()))
         throw Error("Unsupported symbolic link or special file in existing profile");
       if(topLevel&&(item.name===PROFILE_MARKER||item.name.startsWith(".study-anchor-migration-")))
