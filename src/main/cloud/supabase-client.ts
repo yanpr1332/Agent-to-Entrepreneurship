@@ -147,6 +147,11 @@ export class SharedCloudClient {
   currentUserId():string {
     return this.userId();
   }
+  /** Validated public project origin, used only to partition local team cache. */
+  currentProjectUrl():string{
+    if(!this.project)throw Error("Configure a Supabase test project first");
+    return this.project.projectUrl;
+  }
 
   async registerPersonalSyncDevice(deviceIdInput:unknown,labelInput:unknown):Promise<{
     ownerId:string;deviceId:string;createdAt:string;lastSeenAt:string;
