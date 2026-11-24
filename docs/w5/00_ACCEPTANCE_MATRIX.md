@@ -138,7 +138,7 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - **Embedding：未开发**。ALPHA-KB-005 继续保留，待同步核心门槛后先做离线 PoC；不将 PR #32 的 AI 单段解释误算为本地 embedding。
 - **003B：PR #46 已合并（真实 Supabase 未部署/未验收）**。新增事务提交顺序的 workspace 日志、历史既有行回填、消息/任务变更及删除墓碑、严格协议 Cursor 校验、独立 owner+project SQLite 原子补拉及本机历史分页。每轮最多 20×100 条；缺新 RPC（404）退回 003A 窗口。新增 SQLite **明文缓存敏感团队内容**，须评估磁盘留存与撤权清理；SQL 与 RLS 真机正反向尚无证据。详见 [40](40_ALPHA_SYNC_003B_DURABLE_HISTORY.md)。
 - **003C：PR #49 已合并（未部署、未做真实五账号验收）**。Owner 显式检查点和服务端有限日志裁剪、成员鉴权分页 RPC、过期 Cursor 严格协议、本机 SQLite v2 暂存与全量原子替换、跨重启续传及撤权删除正式/暂存缓存；没有自动压缩或生产保留策略，明文本机文件不保证安全擦除。详见 [41](41_ALPHA_SYNC_003C_CHECKPOINT_RECOVERY.md)。
-- **003D：开发分支中（PR #48 尚开放，故本轮不再另开 PR；真实 OS Keychain/DPAPI 未验收）**。团队历史 SQLite v3 的正式 JSON/暂存 checkpoint 由 Electron safeStorage 加密；旧 v1/v2 原文事务升级；账号退出/切换与二次确认清理当前云账号的团队缓存并作最佳努力 WAL 截断。旧明文库、迁移备份、旧 WAL/磁盘页及文件系统快照仍可能保存原文，**不构成物理安全擦除**。详见 [42](42_ALPHA_SYNC_003D_LOCAL_HISTORY_PRIVACY.md)。
+- **003D：独立开发 PR（经用户允许与 PR #48 分开并行；真实 OS Keychain/DPAPI 未验收）**。团队历史 SQLite v3 的正式 JSON/暂存 checkpoint 由 Electron safeStorage 加密；旧 v1/v2 原文事务升级；账号退出/切换与二次确认清理当前云账号的团队缓存并作最佳努力 WAL 截断。旧明文库、迁移备份、旧 WAL/磁盘页及文件系统快照仍可能保存原文，**不构成物理安全擦除**。详见 [42](42_ALPHA_SYNC_003D_LOCAL_HISTORY_PRIVACY.md)。
 - 2026-11-25 内部 Alpha 以真实授权测试账号、RLS 反向测试、最小跨设备增量场景及已知风险记录为条件性目标；未验证项应明确阻塞，不能冒充完成。详见 [27 同步优先实施计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。
 
 ## 4. 未验证项清单（按风险排序）
