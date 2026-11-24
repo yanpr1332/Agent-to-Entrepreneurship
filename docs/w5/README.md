@@ -257,3 +257,8 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 ## ALPHA-KB-005A：版本化本机向量索引与语义检索基础（2026-11-24）
 
 [43 本地向量和检索指标实施说明](43_ALPHA_KB_005A_VECTOR_FOUNDATION.md)：SQLite v4 同库保存严格的模型标识/修订/Float32 向量及原文块 SHA-256，重导入/删除会失效并清除旧向量；按文档 revision+chunk 重新校验，精确结果优先、容错与语义按名次融合并保留 PDF 页码。本轮测试使用**合成** Provider；没有实际下载、安装或运行真实 Embedding/ONNX 模型，正式知识库仍保持原有精确/容错检索。后续必须明确用户同意、离线模型许可及真实 Windows/macOS 性能/召回验证。
+
+
+## ALPHA-KB-005B：离线静态词向量完整操作链（2026-11-24）
+
+[44 本机词向量 Worker、用户导入/许可确认、索引及验收](44_ALPHA_KB_005B_OFFLINE_WORD_VECTORS.md)：从用户主动选择的 UTF-8 .vec 文件加载固定 SHA-256 小词表、在专用 Node Worker 完全离线计算真实静态词向量，分批建立可取消/续传索引，三路搜索沿用源修订和 PDF 引用；提供清除已安装模型与派生向量的界面。每次 `npm run build` 增加跨平台打包 Worker 启动测试。**不是 E5/BGE ONNX Transformer，不自动下载任何权重、不上传知识库，真实双语质量和安装包 GUI 待验收。**
