@@ -178,6 +178,30 @@ npm run build
 - npm run typecheck：TypeScript 类型检查。
 - npm test：Vitest 单元及集成测试。
 - npm run build：再次进行类型检查和测试，再编译 Electron-Vite；**不会生成最终安装包**。
+
+#### ALPHA-SYNC-002D 定向验收命令
+
+如果只想先验证个人任务/手动日历同步相关改动，在仓库根目录执行：
+
+~~~sh
+npm run typecheck
+node node_modules/vitest/vitest.mjs run \
+  src/main/personal-sync.test.ts \
+  src/main/local-store.test.ts \
+  src/main/fixed-calendar-store.test.ts \
+  src/main/local-backup.test.ts \
+  src/main/mail-candidates.test.ts \
+  src/shared/personal-sync-contract.test.ts \
+  src/shared/ipc-channels.test.ts
+npm run test:sync-rls
+~~~
+
+这些定向测试使用内存 SQLite、临时 SQLite 文件和 Mock 云端响应，不需要真实 Supabase、Canvas、学校邮箱或 API Key。覆盖内容包括：逐条授权、任务/手动课程 Push/Pull、冲突保留、跨账号隔离、在途编辑/删除、撤销尚未发送条目的授权、退出时保留待确认操作，以及 v8→v9 迁移备份。
+
+完整验收仍需运行 `npm test`。它会执行全部 Vitest 测试，并运行 `scripts/sync-rls-acceptance.node.mjs` 静态验收；`npm run build` 会再次执行类型检查和完整测试后才构建桌面 bundle。
+
+**本轮暂不做真实云端手工验收：** 当前 PR 没有部署 Supabase SQL migration，也没有提供隔离测试项目。不要为了让“立即同步”按钮通过而把 migration 直接部署到生产项目；真实双设备/RLS 验收须等隔离项目与部署授权明确后再做。
+
 - 受限 Windows 环境如出现 Timeout terminating forks worker，可额外用线程池复核，但不替代 CI：
 
 ~~~sh

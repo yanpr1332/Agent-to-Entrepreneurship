@@ -88,13 +88,29 @@ CI 通过只能证明本地代码和 mock 逻辑；不证明远端 RPC 已部署
 
 ## 8. 本地验收
 
-在仓库根目录运行：
+在仓库根目录运行完整验收：
 
 ```sh
 npm run typecheck
 npm test
 npm run build
 ```
+
+若先只验证本轮涉及的核心测试，可执行：
+
+```sh
+node node_modules/vitest/vitest.mjs run \
+  src/main/personal-sync.test.ts \
+  src/main/local-store.test.ts \
+  src/main/fixed-calendar-store.test.ts \
+  src/main/local-backup.test.ts \
+  src/main/mail-candidates.test.ts \
+  src/shared/personal-sync-contract.test.ts \
+  src/shared/ipc-channels.test.ts
+npm run test:sync-rls
+```
+
+完整 `npm test` 会运行 Vitest 全套测试及 RLS 静态验收脚本；`npm run build` 会再次执行类型检查和完整测试，再编译 Electron-Vite。上述本地测试不访问真实 Supabase。
 
 隔离数据目录的启动前备份目标应为：
 - `ate-local.sqlite`：v9
