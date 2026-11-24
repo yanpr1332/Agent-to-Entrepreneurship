@@ -3,7 +3,7 @@ import {
   parsePersonalSyncOperation, parsePersonalSyncResolutionRequest,
   parsePersonalSyncDeviceReplacementRequest,
   type PersonalSyncChange, type PersonalSyncConflict, type PersonalSyncConflictRecord,
-  type PersonalSyncRunResult, type PersonalSyncDeviceReplacementReview,
+  type PersonalSyncRunResult, type PersonalSyncDeviceReplacementReview, type PersonalSyncPullPage,
 } from "../shared/personal-sync-contract";
 import type { SharedCloudClient } from "./cloud/supabase-client";
 import type { LocalStore } from "./local-store";
@@ -112,6 +112,10 @@ export class PersonalSyncService{
     this.replacementReview=null;
     const ownerId=this.cloud.currentUserId();
     const device=this.tasks.getOrCreatePersonalSyncDevice(ownerId);
+    if(this.tasks.getPendingPersonalSyncPull(ownerId))return {
+      eligible:false,reviewToken:null,
+      reason:"上次拉取尚未完成本地恢复，请先点击“立即同步”完成恢复，再检查设备更换条件。",
+    };
     const pending=this.tasks.countPersonalSyncOutbox(ownerId)+
       this.calendar.countManualCalendarSyncOutbox(ownerId);
     const conflicts=this.tasks.countPersonalSyncConflicts(ownerId);
@@ -143,6 +147,8 @@ export class PersonalSyncService{
     const device=this.tasks.getOrCreatePersonalSyncDevice(review.ownerId);
     if(device.deviceId!==review.deviceId||device.cursor!==review.cursor)
       throw Error("Personal sync device changed; review replacement again");
+    if(this.tasks.getPendingPersonalSyncPull(review.ownerId))
+      throw Error("Interrupted personal sync pull must be recovered before device replacement");
     if(this.tasks.countPersonalSyncOutbox(review.ownerId)||
       this.calendar.countManualCalendarSyncOutbox(review.ownerId)||
       this.tasks.countPersonalSyncConflicts(review.ownerId))
@@ -171,6 +177,14 @@ export class PersonalSyncService{
 
   private async performSync():Promise<PersonalSyncRunResult>{
     const ownerId=this.cloud.currentUserId();
+    // Recover a page that was fully persisted before the previous process
+    // stopped, *before any network push or new device registration*.
+    let recoveredPages=0;
+    const unfinished=this.tasks.getPendingPersonalSyncPull(ownerId);
+    if(unfinished){
+      this.applyStagedPull(ownerId,unfinished.deviceId,unfinished.fromCursor,unfinished.page);
+      recoveredPages=1;
+    }
     const device=this.tasks.getOrCreatePersonalSyncDevice(ownerId);
     await this.cloud.registerPersonalSyncDevice(device.deviceId,deviceLabel());
     this.assertOwner(ownerId);
@@ -262,8 +276,35 @@ export class PersonalSyncService{
       // A conflict remains an explicit user decision even after its local
       // outbox entry is revoked. Later remote pages may update the reviewed
       // server version, but must never silently apply over the held local copy.
-      const ready:PersonalSyncChange[]=[];
-      const held:PersonalSyncConflict[]=[];
+      this.applyStagedPull(ownerId,device.deviceId,cursor,page);
+      cursor=page.nextCursor;
+      pulled+=page.changes.length;
+      pullPages++;
+      hasMore=page.hasMore;
+      if(!page.hasMore)break;
+      if(pageNumber===MAX_PULL_PAGES_PER_RUN-1)hasMore=true;
+    }
+
+    const pendingTasks=this.tasks.countPersonalSyncOutbox(ownerId);
+    const pendingCalendar=this.calendar.countManualCalendarSyncOutbox(ownerId);
+    const conflicts=this.tasks.countPersonalSyncConflicts(ownerId);
+    return {ownerId,deviceId:device.deviceId,pushed,pulled,pullPages,conflicts,pushConflicts,
+      rejected,retryableFailures,pushDeferred,recoveredPages,pending:pendingTasks+pendingCalendar,cursor,hasMore};
+  }
+
+  /** Each page is written to task SQLite before touching either local store.
+   * A partial crash leaves the same immutable page for bounded replay. */
+  private applyStagedPull(ownerId:string,deviceId:string,fromCursor:string,
+    page:PersonalSyncPullPage):void{
+    this.assertOwner(ownerId);
+    const existing=this.tasks.getPendingPersonalSyncPull(ownerId);
+    if(!existing)this.tasks.beginPersonalSyncPullPage(ownerId,deviceId,fromCursor,page);
+    else if(existing.deviceId!==deviceId||existing.fromCursor!==fromCursor||
+      JSON.stringify(existing.page)!==JSON.stringify(page))
+      throw Error("Interrupted sync checkpoint does not match this pull page");
+    this.assertOwner(ownerId);
+    const ready:PersonalSyncChange[]=[];
+    const held:PersonalSyncConflict[]=[];
       for(const change of page.changes){
         const conflict=this.tasks.getPersonalSyncConflict(ownerId,change.entityType,change.entityId);
         if(!conflict){ready.push(change);continue;}
@@ -286,21 +327,9 @@ export class PersonalSyncService{
         ...this.calendar.applyRemoteManualCalendarChanges(ownerId,calendarChanges),
       ];
       if(conflicts.length)this.tasks.recordPersonalSyncConflicts(ownerId,conflicts);
-      // Cursor advancement happens only after both local stores and conflict records
-      // have committed. Replaying a page is safe because applying snapshots is idempotent.
-      this.tasks.advancePersonalSyncCursor(ownerId,page.nextCursor);
-      cursor=page.nextCursor;
-      pulled+=page.changes.length;
-      pullPages++;
-      hasMore=page.hasMore;
-      if(!page.hasMore)break;
-      if(pageNumber===MAX_PULL_PAGES_PER_RUN-1)hasMore=true;
-    }
-
-    const pendingTasks=this.tasks.countPersonalSyncOutbox(ownerId);
-    const pendingCalendar=this.calendar.countManualCalendarSyncOutbox(ownerId);
-    const conflicts=this.tasks.countPersonalSyncConflicts(ownerId);
-    return {ownerId,deviceId:device.deviceId,pushed,pulled,pullPages,conflicts,pushConflicts,
-      rejected,retryableFailures,pushDeferred,pending:pendingTasks+pendingCalendar,cursor,hasMore};
+    this.assertOwner(ownerId);
+    // The cursor advance and checkpoint deletion occur in one task-DB transaction.
+    // If either local store or conflict recording failed, keep the checkpoint.
+    this.tasks.finishPersonalSyncPullPage(ownerId,deviceId,fromCursor,page.nextCursor);
   }
 }
