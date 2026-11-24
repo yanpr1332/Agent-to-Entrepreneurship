@@ -51,7 +51,8 @@ W5/W6 共 15 个切片已落地。工程结构、版本、开发命令和安全�
 - PR #41 已合并：校验本地设备身份/Cursor，对有待发送内容的账号执行只读拉取预检；远端有新变更时本轮延后上传。
 - PR #42 已合并：只在任务/日历 Outbox 与冲突均为空时，经二次确认撤销旧设备、轮换本机 UUID 并保留 Cursor；Cursor 0 也需要上传前只读预检。
 - PR #43 已合并：任务库 schema v10 新增持久 Pull 页检查点；两库中断时下次手动同步优先重放，损坏检查点阻断上传。
-- 当前 ALPHA-SYNC-002H：新增当前账号的只读设备/Cursor 健康诊断，以及人工触发的精确 operationId 回执核对；只核销已证实被服务端接受的本地待发送操作，不自动上传、轮换 ID 或重置 Cursor。需要隔离 Supabase 项目安装新的只读 RPC 才能使用新按钮。
+- PR #44 已合并：当前账号只读设备/Cursor 健康诊断，及人工预览、二次确认后严格匹配的 operationId 回执核销；新只读 RPC 未在真实项目部署。
+- 当前 ALPHA-SYNC-003A：团队消息/共享任务增加用户 JWT 保护的 Main-only Realtime 提示、成员复核、断线回退、最新 100 条 REST/RLS 补拉和撤权时清理旧内容。Realtime SQL publication 仅保存在仓库，需隔离项目人工授权；完整持久历史游标及五账号真机验收未完成。
 
 详见 [29 本地 Outbox](docs/w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30 服务端协议基础](docs/w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31 本地账号隔离迁移](docs/w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md) 、[32 Push/Pull 实施](docs/w5/32_ALPHA_SYNC_002D_PUSH_PULL.md) 、[33 冲突解决](docs/w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md) 、[34 旧数据审查](docs/w5/34_ALPHA_SYNC_002E_LEGACY_REVIEW.md) 、[35 Cursor 预检](docs/w5/35_ALPHA_SYNC_002F_CURSOR_PREFLIGHT.md) 、[36 设备安全更换](docs/w5/36_ALPHA_SYNC_002F_DEVICE_REPLACEMENT.md) 、[37 崩溃安全拉取](docs/w5/37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md) 与 [38 同步诊断和回执对账](docs/w5/38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
 
@@ -80,6 +81,18 @@ npm run build
 ```
 
 本轮新增只读 Supabase RPC 的 SQL 文件：`supabase/migrations/20261124_ate_personal_sync_recovery_inspect.sql`。**CI 不部署或调用生产数据库**；在隔离测试项目由管理员明确授权执行迁移前，新 UI 中的云端诊断和回执核对会因 RPC 不可用而失败，不影响旧“立即同步”。详见 [38](docs/w5/38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
+
+### ALPHA-SYNC-003A 团队 Realtime / 断线补拉测试
+
+```sh
+npm ci
+npm run typecheck
+node node_modules/vitest/vitest.mjs run src/main/cloud/workspace-realtime.test.ts src/main/cloud/workspace-snapshot.test.ts src/main/cloud/workspace-realtime-sql.test.ts src/main/cloud/supabase-client.test.ts src/shared/ipc-channels.test.ts
+npm test
+npm run build
+```
+
+如需在**用户单独批准的隔离 Supabase 项目**验证实时订阅，请先审查并运行既有 `20261110_ate_workspace_poc.sql`，再审查 `supabase/migrations/20261124_ate_workspace_realtime_hints.sql`；本仓库 CI **不部署云端**。未完成五账号 RLS 反向测试、30 秒安全补拉 GUI 与历史游标验收之前，不视为完整 Realtime 发布。详见 [39 团队实时提示验收](docs/w5/39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
 
 ## Windows / macOS 本地 Alpha 验收指南
 
