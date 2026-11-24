@@ -7,6 +7,7 @@ import { KnowledgeStore } from "./knowledge-store";
 import { LocalStore } from "./local-store";
 import { PlanningStore } from "./planning-store";
 import { WorkspaceHistoryStore } from "./cloud/workspace-history-store";
+import {testHistoryCipher} from "./cloud/workspace-history-crypto.test-helper";
 import { createLocalBackup, backupBeforeMigration } from "./local-backup";
 
 const directories:string[]=[];
@@ -79,7 +80,7 @@ describe("verified online SQLite snapshots",()=>{
 
   it("backs up full team history v1 before opening the checkpoint-capable v2 database",async()=>{
     const dir=fixture(),path=join(dir,"study-anchor-team-history.sqlite");
-    const history=new WorkspaceHistoryStore(path);
+    const history=new WorkspaceHistoryStore(path,testHistoryCipher);
     const owner="aae9ac05-b37d-4898-aee4-5848fa28e01b";
     const workspace="3babcb78-c10d-4f4e-ab3e-f47f6ad72447";
     const entity="7c2cb69c-8b50-419c-8966-e8a55c397a11";
@@ -101,7 +102,7 @@ describe("verified online SQLite snapshots",()=>{
     expect((saved.prepare("SELECT count(*) AS n FROM records").get() as {n:number}).n)
       .toBe(1);
     saved.close();
-    const migrated=new WorkspaceHistoryStore(path);
+    const migrated=new WorkspaceHistoryStore(path,testHistoryCipher);
     expect(migrated.getCursor(owner,workspace)).toBe("1");
     expect(migrated.getCheckpoint(owner,workspace)).toBeNull();
     migrated.close();
