@@ -80,6 +80,14 @@ PR #35 已合并：两个本机 SQLite 库分别新增逐条授权 enrollment �
 
 ## 8. 进度更新：ALPHA-SYNC-002B 个人云端协议基础（2026-11-24）
 
-当前开发轮新增个人同步 Supabase schema 与 owner-scoped RLS：设备注册/撤销、只允许 personal-task/manual-calendar-event 的严格 RPC、服务端版本检查、operationId 幂等回执、每个 owner 串行分配的增量 cursor 和分页 pull。桌面端 SharedCloudClient 增加使用当前用户 JWT 的 RPC 包装与严格响应解析；本地 ate-local.sqlite schema v7 为每个 owner 持久保存 deviceId/cursor。
+PR #36 已合并：新增个人同步 Supabase schema/RLS、设备注册/撤销、personal-task/manual-calendar-event 严格 RPC、服务端版本检查、operationId 幂等回执、按 owner 串行分配的增量 cursor 和分页 pull。SharedCloudClient 使用当前用户 JWT；本地 ate-local.sqlite schema v7 按 owner 保存 deviceId/cursor。
 
-**这仍是协议和传输端点基础，不是可用的双向同步**：没有部署迁移、没有真实联机；Outbox 尚未按 owner 隔离/上传，pull 变更尚未应用到本地，冲突 UI 与逐条授权 UI 尚未完成。不得用离线 mock、静态 SQL 检查或 CI 代替真实 Supabase RLS/多设备验收。下一阶段先完成 owner-scoped Outbox 与上传确认，再实现增量应用和冲突处理。详见 [30](30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)。
+**这仍不是可用的双向同步**：迁移未部署、没有真实联机；Outbox 尚未按 owner 隔离/上传，pull 变更尚未应用到本地，冲突 UI 与逐条授权 UI 尚未完成。详见 [30](30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)。
+
+## 9. 进度更新：ALPHA-SYNC-002C 本地账号隔离迁移（2026-11-24）
+
+当前开发轮为个人任务与手动日历的 enrollment/Outbox 增加 owner_id 作用域：每个账号独立队列、独立版本基线和 owner-scoped acknowledgement；同一实体可被多个账号分别显式授权。编辑仅为已授权的 owner 生成队列；删除时为每个已确认的远端副本生成各自墓碑，未确认的本地创建仅撤销对应账号的待发送意图。
+
+本机任务数据库升至 schema v8，手动日历数据库升至 v5。旧版无 owner_id 的 enrollment/outbox 不会猜测归属，而是保留在 legacy quarantine 表中；只有用户明确确认后，仍存在且符合来源白名单的个人任务/手动事件才可重新授权，并以当前本地快照和 null baseVersion 生成新操作。旧删除墓碑、已删除实体、Canvas/邮件/ICS 数据不会自动认领或上传。
+
+**本轮仍不包含上传器、pull 本地应用、冲突 UI、逐条授权 UI、真实 Supabase 部署或多设备验收。** 详见 [31](31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md)。

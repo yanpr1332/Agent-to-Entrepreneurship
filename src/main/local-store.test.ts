@@ -5,6 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+const OWNER_A="aae9ac05-b37d-4898-aee4-5848fa28e01b";
+const OWNER_B="9db8a5cb-1d6c-4e93-807e-e18be4b482a1";
+
 const stores: LocalStore[] = [];
 function memory(): LocalStore {
   const store = new LocalStore(":memory:");
@@ -32,19 +35,68 @@ describe("local-first SQLite store", () => {
     expect(()=>db.getOrCreatePersonalSyncDevice("not-a-user")).toThrow("owner");
   });
 
-  it("migrates schema v6 by adding per-account device and cursor storage without changing tasks",()=>{
-    const directory=mkdtempSync(join(tmpdir(),"ate-sync-device-v6-"));
+  it("migrates v6 ownerless sync data into quarantined legacy tables without auto-assigning an account",()=>{
+    const directory=mkdtempSync(join(tmpdir(),"ate-sync-owner-migration-"));
     const file=join(directory,"local.sqlite");
     try{
       const initial=new LocalStore(file);
-      const task=initial.createTask({title:"Keep during sync metadata migration"});
+      const task=initial.createTask({title:"Keep during account migration"});
       initial.close();
       const raw=new DatabaseSync(file);
-      raw.exec("DROP TABLE personal_sync_devices; PRAGMA user_version=6");
+      raw.exec(`
+        DROP TABLE personal_task_sync_enrollment;
+        DROP TABLE personal_sync_outbox;
+        DROP TABLE personal_task_sync_legacy_enrollment;
+        DROP TABLE personal_sync_legacy_outbox;
+        DROP TABLE personal_sync_devices;
+        CREATE TABLE personal_task_sync_enrollment(
+          task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+          server_version INTEGER,enabled_at TEXT NOT NULL
+        );
+        CREATE TABLE personal_sync_outbox(
+          operation_id TEXT PRIMARY KEY,
+          entity_type TEXT NOT NULL CHECK(entity_type IN ('personal-task','manual-calendar-event')),
+          entity_id TEXT NOT NULL,action TEXT NOT NULL CHECK(action IN ('upsert','delete')),
+          base_version INTEGER,payload TEXT,created_at TEXT NOT NULL,UNIQUE(entity_type,entity_id),
+          CHECK((action='upsert' AND payload IS NOT NULL) OR (action='delete' AND payload IS NULL))
+        );
+      `);
+      raw.prepare("INSERT INTO personal_task_sync_enrollment VALUES(?,?,?)")
+        .run(task.id,4,"2026-11-20T10:00:00.000Z");
+      raw.prepare("INSERT INTO personal_sync_outbox VALUES(?,?,?,?,?,?,?)")
+        .run("11111111-1111-4111-8111-111111111111","personal-task",task.id,"upsert",4,
+          JSON.stringify({title:"stale",description:"",dueDate:null,priority:"normal",completed:false}),
+          "2026-11-20T10:01:00.000Z");
+      raw.prepare("INSERT INTO personal_sync_outbox VALUES(?,?,?,?,?,?,?)")
+        .run("22222222-2222-4222-8222-222222222222","manual-calendar-event",
+          "33333333-3333-4333-8333-333333333333","delete",9,null,"2026-11-20T10:02:00.000Z");
+      raw.prepare("INSERT INTO personal_sync_outbox VALUES(?,?,?,?,?,?,?)")
+        .run("66666666-6666-4666-8666-666666666666","personal-task",
+          "77777777-7777-4777-8777-777777777777","delete",5,null,"2026-11-20T10:03:00.000Z");
+      raw.exec("PRAGMA user_version=6");
       raw.close();
+
       const upgraded=new LocalStore(file);
       expect(upgraded.listTasks()).toMatchObject([{id:task.id,title:task.title}]);
-      expect(upgraded.getOrCreatePersonalSyncDevice("aae9ac05-b37d-4898-aee4-5848fa28e01b").cursor).toBe("0");
+      expect(upgraded.getOrCreatePersonalSyncDevice(OWNER_A).cursor).toBe("0");
+      expect(upgraded.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
+      expect(upgraded.listPersonalSyncOutbox(OWNER_B)).toEqual([]);
+      expect(upgraded.listLegacyPersonalSyncItems()).toEqual(expect.arrayContaining([
+        expect.objectContaining({entityId:task.id,action:"upsert",canReauthorize:true}),
+        expect.objectContaining({entityType:"manual-calendar-event",action:"delete",canReauthorize:false}),
+        expect.objectContaining({entityId:"77777777-7777-4777-8777-777777777777",entityType:"personal-task",action:"delete",canReauthorize:false}),
+      ]));
+      expect(()=>upgraded.adoptLegacyPersonalTaskSync(OWNER_A,task.id,false)).toThrow("Explicit confirmation");
+      upgraded.adoptLegacyPersonalTaskSync(OWNER_A,task.id,true);
+      const fresh=upgraded.listPersonalSyncOutbox(OWNER_A);
+      expect(fresh).toHaveLength(1);
+      expect(fresh[0]).toMatchObject({entityId:task.id,action:"upsert",baseVersion:null});
+      expect(JSON.parse(fresh[0].payload!)).toMatchObject({title:task.title});
+      expect(upgraded.listPersonalSyncOutbox(OWNER_B)).toEqual([]);
+      expect(upgraded.listLegacyPersonalSyncItems()).toHaveLength(2);
+      expect(()=>upgraded.adoptLegacyPersonalTaskSync(OWNER_B,task.id,true)).toThrow("No unclaimed");
+      expect(()=>upgraded.adoptLegacyPersonalTaskSync(OWNER_B,"77777777-7777-4777-8777-777777777777",true))
+        .toThrow("existing personal task");
       upgraded.close();
     }finally{rmSync(directory,{recursive:true,force:true});}
   });
@@ -52,55 +104,92 @@ describe("local-first SQLite store", () => {
   it("enrolls only one explicitly selected personal task and persists its outbox intent", () => {
     const db = memory();
     const task = db.createTask({title:"跨设备任务", description:"用户主动选择"});
-    expect(db.listPersonalSyncOutbox()).toEqual([]);
-    db.setTaskSyncEnabled(task.id, true);
-    const queued = db.listPersonalSyncOutbox();
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
+    db.setTaskSyncEnabled(task.id, true, OWNER_A);
+    const queued = db.listPersonalSyncOutbox(OWNER_A);
     expect(queued).toHaveLength(1);
     expect(queued[0]).toMatchObject({entityType:"personal-task",entityId:task.id,action:"upsert",baseVersion:null});
     expect(JSON.parse(queued[0].payload!)).toEqual({title:"跨设备任务",description:"用户主动选择",dueDate:null,priority:"normal",completed:false});
   });
 
+  it("isolates task enrollment, outbox, acknowledgements and disable actions by cloud owner",()=>{
+    const db=memory();
+    const task=db.createTask({title:"Two account task"});
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    db.setTaskSyncEnabled(task.id,true,OWNER_B);
+    const a=db.listPersonalSyncOutbox(OWNER_A)[0];
+    const b=db.listPersonalSyncOutbox(OWNER_B)[0];
+    expect(a.operationId).not.toBe(b.operationId);
+    expect(()=>db.acknowledgePersonalSyncOperation(OWNER_B,a.operationId,3)).toThrow("no longer pending");
+    db.updateTask({id:task.id,title:"Edited for both explicitly enrolled accounts"});
+    expect(db.listPersonalSyncOutbox(OWNER_A)[0].operationId).not.toBe(a.operationId);
+    expect(db.listPersonalSyncOutbox(OWNER_B)[0].operationId).not.toBe(b.operationId);
+    db.acknowledgePersonalSyncOperation(OWNER_A,db.listPersonalSyncOutbox(OWNER_A)[0].operationId,4);
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
+    expect(db.listPersonalSyncOutbox(OWNER_B)).toHaveLength(1);
+    db.setTaskSyncEnabled(task.id,false,OWNER_B);
+    expect(db.listPersonalSyncOutbox(OWNER_B)).toEqual([]);
+    expect(db.listPersonalSyncEnrollments(OWNER_A)).toHaveLength(1);
+    expect(db.listPersonalSyncEnrollments(OWNER_B)).toEqual([]);
+    db.updateTask({id:task.id,completed:true});
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toMatchObject([{baseVersion:4}]);
+  });
+
+  it("creates one delete tombstone per acknowledged owner and cancels unacknowledged creates",()=>{
+    const db=memory();
+    const task=db.createTask({title:"Owner scoped deletion"});
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    db.setTaskSyncEnabled(task.id,true,OWNER_B);
+    const a=db.listPersonalSyncOutbox(OWNER_A)[0];
+    db.acknowledgePersonalSyncOperation(OWNER_A,a.operationId,7);
+    expect(db.removeTask(task.id)).toBe(true);
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toMatchObject([
+      {entityType:"personal-task",entityId:task.id,action:"delete",baseVersion:7,payload:null},
+    ]);
+    expect(db.listPersonalSyncOutbox(OWNER_B)).toEqual([]);
+  });
+
   it("coalesces repeated edits into the same pending intent and preserves server version after acknowledgement", () => {
     const db = memory();
     const task = db.createTask({title:"初始标题"});
-    db.setTaskSyncEnabled(task.id, true);
-    const first = db.listPersonalSyncOutbox()[0];
+    db.setTaskSyncEnabled(task.id, true, OWNER_A);
+    const first = db.listPersonalSyncOutbox(OWNER_A)[0];
     db.updateTask({id:task.id,title:"更新标题"});
     db.updateTask({id:task.id,completed:true});
-    const latest = db.listPersonalSyncOutbox()[0];
+    const latest = db.listPersonalSyncOutbox(OWNER_A)[0];
     expect(latest.operationId).toBe(first.operationId);
     expect(JSON.parse(latest.payload!)).toMatchObject({title:"更新标题",completed:true});
-    db.acknowledgePersonalSyncOperation(latest.operationId, 4);
-    expect(db.listPersonalSyncOutbox()).toEqual([]);
+    db.acknowledgePersonalSyncOperation(OWNER_A,latest.operationId, 4);
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
     db.updateTask({id:task.id,title:"版本四之后"});
-    expect(db.listPersonalSyncOutbox()[0].baseVersion).toBe(4);
+    expect(db.listPersonalSyncOutbox(OWNER_A)[0].baseVersion).toBe(4);
   });
 
   it("creates a versioned delete tombstone only after a server acknowledgement", () => {
     const db = memory();
     const task = db.createTask({title:"远端任务"});
-    db.setTaskSyncEnabled(task.id,true);
-    const create = db.listPersonalSyncOutbox()[0];
-    db.acknowledgePersonalSyncOperation(create.operationId,2);
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    const create = db.listPersonalSyncOutbox(OWNER_A)[0];
+    db.acknowledgePersonalSyncOperation(OWNER_A,create.operationId,2);
     expect(db.removeTask(task.id)).toBe(true);
-    expect(db.listPersonalSyncOutbox()).toMatchObject([{entityType:"personal-task",entityId:task.id,action:"delete",baseVersion:2,payload:null}]);
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toMatchObject([{entityType:"personal-task",entityId:task.id,action:"delete",baseVersion:2,payload:null}]);
   });
 
   it("cancels an unacknowledged local create when the enrolled task is deleted", () => {
     const db = memory();
     const task = db.createTask({title:"还未上传"});
-    db.setTaskSyncEnabled(task.id,true);
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
     expect(db.removeTask(task.id)).toBe(true);
-    expect(db.listPersonalSyncOutbox()).toEqual([]);
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
   });
 
   it("disabling sync clears pending intents without deleting the local task", () => {
     const db = memory();
     const task = db.createTask({title:"保留在本机"});
-    db.setTaskSyncEnabled(task.id,true);
-    db.setTaskSyncEnabled(task.id,false);
+    db.setTaskSyncEnabled(task.id,true,OWNER_A);
+    db.setTaskSyncEnabled(task.id,false,OWNER_A);
     expect(db.listTasks()).toHaveLength(1);
-    expect(db.listPersonalSyncOutbox()).toEqual([]);
+    expect(db.listPersonalSyncOutbox(OWNER_A)).toEqual([]);
   });
 
   it("creates, updates and deletes personal tasks", () => {

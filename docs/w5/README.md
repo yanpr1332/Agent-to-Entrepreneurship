@@ -190,3 +190,9 @@ Windows 安装包：npm run dist:win。macOS 安装包必须在 macOS 主机/CI 
 当前开发轮增加个人同步服务端 SQL/RLS、owner 认证的设备注册/撤销、幂等 apply、版本冲突回执、增量 Cursor pull RPC，以及本机 per-owner deviceId/cursor 持久化。详细边界、数据表、RPC 与未完成项见 [30](30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)。
 
 此阶段不自动部署 Supabase，不发起真实账号请求，不自动上传本地 Outbox；RPC 的单测与静态 SQL 检查不是 RLS 真实验收。
+
+## ALPHA-SYNC-002C 本地 Outbox 账号隔离（2026-11-24）
+
+当前开发轮将个人任务与手动日历的 enrollment/Outbox 改为 owner-scoped。旧版 ownerless 队列保留在 legacy quarantine 表，绝不自动归属当前登录账号；重新授权需要明确确认，并从当前本地实体生成新快照。任务库 schema v8、手动日历库 schema v5。详细设计、迁移规则、测试边界与未完成项见 [31](31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md)。
+
+本阶段不上传旧数据、不自动部署 Supabase、不实现网络上传/pull 或冲突解决；不能把本地 schema/单元测试通过称为跨设备同步可用。

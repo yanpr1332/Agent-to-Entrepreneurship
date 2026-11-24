@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync,backup } from "node:sqlite";
 import { LocalStore } from "./local-store";
+import { requireUuid } from "../shared/cloud-model";
 import { dayOffset } from "../shared/planning-model";
 import { toLocalCanvasSlot,type CanvasCalendarEvent,type CanvasCalendarFixedEvent,
   type CanvasCalendarSyncResult } from "../shared/canvas-calendar-model";
@@ -23,6 +24,7 @@ function fromRow(row:EventRow):FixedEvent{
     source:row.source,createdAt:row.created_at};
 }
 const MAX_EVENTS=2000;
+function syncOwnerId(input:unknown):string{return requireUuid(input).toLowerCase();}
 
 /** Independent, local-only authority for fixed classes and imported calendar events. */
 export class FixedCalendarStore {
@@ -34,7 +36,8 @@ export class FixedCalendarStore {
     this.db.exec("PRAGMA foreign_keys=ON; PRAGMA busy_timeout=3000");
     if(path!==":memory:")this.db.exec("PRAGMA journal_mode=WAL");
     const version=(this.db.prepare("PRAGMA user_version").get() as {user_version:number}).user_version;
-    if(version>4)throw Error("Calendar database is from a newer version");
+    if(version>5)throw Error("Calendar database is from a newer version");
+    if(version===5)return;
     if(version===0)this.db.exec(
       "BEGIN IMMEDIATE;"+
       "CREATE TABLE fixed_events("+
@@ -94,11 +97,49 @@ export class FixedCalendarStore {
         this.db.exec("COMMIT");
       }catch(error){this.db.exec("ROLLBACK");throw error;}
     }
+    if(version<=4){
+      this.db.exec("BEGIN IMMEDIATE");
+      try{
+        this.db.exec(`
+          ALTER TABLE manual_calendar_sync_enrollment RENAME TO manual_calendar_sync_legacy_enrollment;
+          ALTER TABLE manual_calendar_sync_outbox RENAME TO manual_calendar_sync_legacy_outbox;
+          ALTER TABLE manual_calendar_sync_legacy_enrollment ADD COLUMN claimed_by_owner_id TEXT;
+          ALTER TABLE manual_calendar_sync_legacy_enrollment ADD COLUMN claimed_at TEXT;
+          ALTER TABLE manual_calendar_sync_legacy_outbox ADD COLUMN claimed_by_owner_id TEXT;
+          ALTER TABLE manual_calendar_sync_legacy_outbox ADD COLUMN claimed_at TEXT;
+          CREATE TABLE manual_calendar_sync_enrollment(
+            owner_id TEXT NOT NULL CHECK(length(owner_id)=36),
+            event_id TEXT NOT NULL REFERENCES fixed_events(id) ON DELETE CASCADE,
+            server_version INTEGER CHECK(server_version IS NULL OR server_version>0),
+            enabled_at TEXT NOT NULL,
+            PRIMARY KEY(owner_id,event_id)
+          );
+          CREATE TABLE manual_calendar_sync_outbox(
+            owner_id TEXT NOT NULL CHECK(length(owner_id)=36),
+            operation_id TEXT PRIMARY KEY,
+            entity_id TEXT NOT NULL,
+            action TEXT NOT NULL CHECK(action IN('upsert','delete')),
+            base_version INTEGER CHECK(base_version IS NULL OR base_version>=0),
+            payload TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(owner_id,entity_id),
+            CHECK((action='upsert' AND payload IS NOT NULL) OR (action='delete' AND payload IS NULL))
+          );
+          CREATE INDEX manual_calendar_sync_outbox_owner_created
+            ON manual_calendar_sync_outbox(owner_id,created_at,operation_id);
+          CREATE INDEX manual_calendar_sync_enrollment_owner
+            ON manual_calendar_sync_enrollment(owner_id,enabled_at);
+          PRAGMA user_version=5;
+        `);
+        this.db.exec("COMMIT");
+      }catch(error){this.db.exec("ROLLBACK");throw error;}
+    }
   }
   close():void{this.db.close();}
   async backupTo(path:string):Promise<number>{return backup(this.db,path);}
-  /** Enroll exactly one manually created event; ICS and Canvas events are excluded. */
-  setManualEventSyncEnabled(id:string,enabled:boolean,now=new Date()):void{
+  /** Enroll exactly one manually created event for one authenticated owner. */
+  setManualEventSyncEnabled(id:string,enabled:boolean,ownerInput:unknown,now=new Date()):void{
+    const ownerId=syncOwnerId(ownerInput);
     if(typeof id!=="string"||!/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(id)||typeof enabled!=="boolean")
       throw Error("Invalid calendar sync preference");
     const event=this.list().find(item=>item.id===id);
@@ -107,57 +148,156 @@ export class FixedCalendarStore {
     this.db.exec("BEGIN IMMEDIATE");
     try{
       if(!enabled){
-        this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE entity_id=?").run(id);
-        this.db.prepare("DELETE FROM manual_calendar_sync_enrollment WHERE event_id=?").run(id);
+        this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE owner_id=? AND entity_id=?").run(ownerId,id);
+        this.db.prepare("DELETE FROM manual_calendar_sync_enrollment WHERE owner_id=? AND event_id=?").run(ownerId,id);
       }else{
-        this.db.prepare("INSERT INTO manual_calendar_sync_enrollment(event_id,server_version,enabled_at) VALUES(?,NULL,?) ON CONFLICT(event_id) DO NOTHING")
-          .run(id,now.toISOString());
-        this.enqueueManualEvent(id,now);
+        this.db.prepare("INSERT INTO manual_calendar_sync_enrollment(owner_id,event_id,server_version,enabled_at) VALUES(?,?,NULL,?) ON CONFLICT(owner_id,event_id) DO NOTHING")
+          .run(ownerId,id,now.toISOString());
+        this.enqueueManualEventForOwner(id,ownerId,now);
       }
       this.db.exec("COMMIT");
     }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
+
   private enqueueManualEvent(id:string,now=new Date()):void{
+    const enrollments=this.db.prepare(
+      "SELECT owner_id FROM manual_calendar_sync_enrollment WHERE event_id=? ORDER BY owner_id"
+    ).all(id) as {owner_id:string}[];
+    for(const enrollment of enrollments)this.enqueueManualEventForOwner(id,enrollment.owner_id,now);
+  }
+
+  private enqueueManualEventForOwner(id:string,ownerId:string,now=new Date()):void{
     const event=this.list().find(item=>item.id===id);
-    if(!event||event.source!=="manual"||event.sourceUid!==null) throw Error("Only manual events can be queued");
-    const enrollment=this.db.prepare("SELECT server_version FROM manual_calendar_sync_enrollment WHERE event_id=?")
-      .get(id) as {server_version:number|null}|undefined;
+    if(!event||event.source!=="manual"||event.sourceUid!==null)
+      throw Error("Only manual events can be queued");
+    const enrollment=this.db.prepare(
+      "SELECT server_version FROM manual_calendar_sync_enrollment WHERE owner_id=? AND event_id=?"
+    ).get(ownerId,id) as {server_version:number|null}|undefined;
     if(!enrollment)return;
     const payload=JSON.stringify({title:event.title,day:event.day,startMinute:event.startMinute,
       durationMinutes:event.durationMinutes,seriesId:event.seriesId});
     this.db.prepare(`
-      INSERT INTO manual_calendar_sync_outbox(operation_id,entity_id,action,base_version,payload,created_at)
-      VALUES(?,?,'upsert',?,?,?)
-      ON CONFLICT(entity_id) DO UPDATE SET action='upsert',base_version=excluded.base_version,
-        payload=excluded.payload,created_at=excluded.created_at
-    `).run(randomUUID(),id,enrollment.server_version,payload,now.toISOString());
+      INSERT INTO manual_calendar_sync_outbox(owner_id,operation_id,entity_id,action,base_version,payload,created_at)
+      VALUES(?,?,?,'upsert',?,?,?)
+      ON CONFLICT(owner_id,entity_id) DO UPDATE SET operation_id=excluded.operation_id,
+        action='upsert',base_version=excluded.base_version,payload=excluded.payload,created_at=excluded.created_at
+    `).run(ownerId,randomUUID(),id,enrollment.server_version,payload,now.toISOString());
   }
-  listManualCalendarSyncOutbox(limit=100):{
+
+  listManualCalendarSyncOutbox(ownerInput:unknown,limit=100):{
     operationId:string;entityId:string;action:"upsert"|"delete";baseVersion:number|null;
     payload:string|null;createdAt:string;
   }[]{
+    const ownerId=syncOwnerId(ownerInput);
     if(!Number.isSafeInteger(limit)||limit<1||limit>500)throw Error("Invalid outbox limit");
-    return (this.db.prepare("SELECT operation_id,entity_id,action,base_version,payload,created_at FROM manual_calendar_sync_outbox ORDER BY created_at,operation_id LIMIT ?")
-      .all(limit) as unknown as {operation_id:string;entity_id:string;action:"upsert"|"delete";
-        base_version:number|null;payload:string|null;created_at:string}[])
+    return (this.db.prepare(
+      "SELECT operation_id,entity_id,action,base_version,payload,created_at "+
+      "FROM manual_calendar_sync_outbox WHERE owner_id=? ORDER BY created_at,operation_id LIMIT ?"
+    ).all(ownerId,limit) as unknown as {operation_id:string;entity_id:string;action:"upsert"|"delete";
+      base_version:number|null;payload:string|null;created_at:string}[])
       .map(row=>({operationId:row.operation_id,entityId:row.entity_id,action:row.action,
         baseVersion:row.base_version,payload:row.payload,createdAt:row.created_at}));
   }
-  acknowledgeManualCalendarSyncOperation(operationId:string,serverVersion:number):void{
-    if(typeof operationId!=="string"||!/^[a-f0-9-]{36}$/i.test(operationId)||
-      !Number.isSafeInteger(serverVersion)||serverVersion<1)throw Error("Invalid sync acknowledgement");
-    const row=this.db.prepare("SELECT entity_id,action FROM manual_calendar_sync_outbox WHERE operation_id=?")
-      .get(operationId) as {entity_id:string;action:string}|undefined;
-    if(!row)throw Error("Sync operation is no longer pending");
+
+  listManualCalendarSyncEnrollments(ownerInput:unknown):{
+    eventId:string;title:string;serverVersion:number|null;enabledAt:string;
+  }[]{
+    const ownerId=syncOwnerId(ownerInput);
+    return (this.db.prepare(`
+      SELECT e.event_id,f.title,e.server_version,e.enabled_at
+      FROM manual_calendar_sync_enrollment e JOIN fixed_events f ON f.id=e.event_id
+      WHERE e.owner_id=? ORDER BY e.enabled_at,e.event_id
+    `).all(ownerId) as unknown as {event_id:string;title:string;server_version:number|null;enabled_at:string}[])
+      .map(row=>({eventId:row.event_id,title:row.title,serverVersion:row.server_version,enabledAt:row.enabled_at}));
+  }
+
+  listLegacyManualCalendarSyncItems(limit=100):{
+    operationId:string|null;entityId:string;action:"upsert"|"delete"|"enrolled";
+    title:string|null;createdAt:string;canReauthorize:boolean;
+  }[]{
+    if(!Number.isSafeInteger(limit)||limit<1||limit>500)throw Error("Invalid legacy sync item limit");
+    const rows=this.db.prepare(`
+      SELECT o.operation_id,o.entity_id,o.action,f.title,o.created_at,
+        CASE WHEN o.action='upsert' AND f.id IS NOT NULL AND f.source='manual' AND f.source_uid IS NULL
+          THEN 1 ELSE 0 END AS can_reauthorize
+      FROM manual_calendar_sync_legacy_outbox o LEFT JOIN fixed_events f ON f.id=o.entity_id
+      WHERE o.claimed_by_owner_id IS NULL
+      UNION ALL
+      SELECT NULL AS operation_id,e.event_id AS entity_id,'enrolled' AS action,f.title,e.enabled_at AS created_at,
+        CASE WHEN f.id IS NOT NULL AND f.source='manual' AND f.source_uid IS NULL THEN 1 ELSE 0 END AS can_reauthorize
+      FROM manual_calendar_sync_legacy_enrollment e LEFT JOIN fixed_events f ON f.id=e.event_id
+      WHERE e.claimed_by_owner_id IS NULL
+        AND NOT EXISTS(SELECT 1 FROM manual_calendar_sync_legacy_outbox o WHERE o.entity_id=e.event_id)
+      ORDER BY created_at,entity_id LIMIT ?
+    `).all(limit) as unknown as {operation_id:string|null;entity_id:string;action:"upsert"|"delete"|"enrolled";
+      title:string|null;created_at:string;can_reauthorize:number}[];
+    return rows.map(row=>({operationId:row.operation_id,entityId:row.entity_id,action:row.action,
+      title:row.title,createdAt:row.created_at,canReauthorize:row.can_reauthorize===1}));
+  }
+
+  /** Re-authorize one surviving legacy manual event; old versions are never trusted across accounts. */
+  adoptLegacyManualEventSync(ownerInput:unknown,eventInput:unknown,confirmation:unknown,now=new Date()):void{
+    const ownerId=syncOwnerId(ownerInput);
+    if(confirmation!==true)throw Error("Explicit confirmation is required to re-authorize a legacy event");
+    if(typeof eventInput!=="string"||!/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(eventInput))
+      throw Error("Invalid calendar event identifier");
+    const eventId=eventInput;
     this.db.exec("BEGIN IMMEDIATE");
     try{
-      this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE operation_id=?").run(operationId);
-      if(row.action==="upsert")this.db.prepare("UPDATE manual_calendar_sync_enrollment SET server_version=? WHERE event_id=?")
-        .run(serverVersion,row.entity_id);
-      if(row.action==="delete")this.db.prepare("DELETE FROM manual_calendar_sync_enrollment WHERE event_id=?").run(row.entity_id);
+      const event=this.list().find(item=>item.id===eventId);
+      if(!event||event.source!=="manual"||event.sourceUid!==null)
+        throw Error("Only an existing manual event can be re-authorized");
+      const legacyEnrollment=this.db.prepare(
+        "SELECT 1 AS found FROM manual_calendar_sync_legacy_enrollment WHERE event_id=? AND claimed_by_owner_id IS NULL"
+      ).get(eventId);
+      const legacyOutbox=this.db.prepare(
+        "SELECT action FROM manual_calendar_sync_legacy_outbox WHERE entity_id=? AND claimed_by_owner_id IS NULL"
+      ).get(eventId) as {action:string}|undefined;
+      if(!legacyEnrollment&&!legacyOutbox)throw Error("No unclaimed legacy sync preference exists for this event");
+      if(legacyOutbox?.action==="delete")
+        throw Error("Legacy delete tombstones remain quarantined for manual review");
+      const existing=this.db.prepare(
+        "SELECT 1 AS found FROM manual_calendar_sync_enrollment WHERE owner_id=? AND event_id=?"
+      ).get(ownerId,eventId);
+      if(existing)throw Error("This event is already enrolled for this account");
+      this.db.prepare(
+        "INSERT INTO manual_calendar_sync_enrollment(owner_id,event_id,server_version,enabled_at) VALUES(?,?,NULL,?)"
+      ).run(ownerId,eventId,now.toISOString());
+      this.enqueueManualEventForOwner(eventId,ownerId,now);
+      this.db.prepare(
+        "UPDATE manual_calendar_sync_legacy_enrollment SET claimed_by_owner_id=?,claimed_at=? "+
+        "WHERE event_id=? AND claimed_by_owner_id IS NULL"
+      ).run(ownerId,now.toISOString(),eventId);
+      this.db.prepare(
+        "UPDATE manual_calendar_sync_legacy_outbox SET claimed_by_owner_id=?,claimed_at=? "+
+        "WHERE entity_id=? AND action='upsert' AND claimed_by_owner_id IS NULL"
+      ).run(ownerId,now.toISOString(),eventId);
       this.db.exec("COMMIT");
     }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
+
+  acknowledgeManualCalendarSyncOperation(ownerInput:unknown,operationId:string,serverVersion:number):void{
+    const ownerId=syncOwnerId(ownerInput);
+    if(typeof operationId!=="string"||!/^[a-f0-9-]{36}$/i.test(operationId)||
+      !Number.isSafeInteger(serverVersion)||serverVersion<1)throw Error("Invalid sync acknowledgement");
+    const row=this.db.prepare(
+      "SELECT entity_id,action FROM manual_calendar_sync_outbox WHERE owner_id=? AND operation_id=?"
+    ).get(ownerId,operationId) as {entity_id:string;action:string}|undefined;
+    if(!row)throw Error("Sync operation is no longer pending for this account");
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE owner_id=? AND operation_id=?")
+        .run(ownerId,operationId);
+      if(row.action==="upsert")this.db.prepare(
+        "UPDATE manual_calendar_sync_enrollment SET server_version=? WHERE owner_id=? AND event_id=?"
+      ).run(serverVersion,ownerId,row.entity_id);
+      if(row.action==="delete")this.db.prepare(
+        "DELETE FROM manual_calendar_sync_enrollment WHERE owner_id=? AND event_id=?"
+      ).run(ownerId,row.entity_id);
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+
   list():FixedEvent[]{
     return (this.db.prepare("SELECT * FROM fixed_events ORDER BY day,start_minute,id")
       .all() as unknown as EventRow[]).map(fromRow);
@@ -322,19 +462,24 @@ export class FixedCalendarStore {
   delete(input:unknown):boolean{
     if(typeof input!=="string"||!/^[a-f0-9]{8}-[a-f0-9-]{27,}$/i.test(input))
       throw Error("Invalid calendar event identifier");
-    const enrolled=this.db.prepare("SELECT server_version FROM manual_calendar_sync_enrollment WHERE event_id=?")
-      .get(input) as {server_version:number|null}|undefined;
     this.db.exec("BEGIN IMMEDIATE");
     try{
-      if(enrolled?.server_version!==null&&enrolled?.server_version!==undefined){
-        this.db.prepare(`
-          INSERT INTO manual_calendar_sync_outbox(operation_id,entity_id,action,base_version,payload,created_at)
-          VALUES(?,?,'delete',?,NULL,?)
-          ON CONFLICT(entity_id) DO UPDATE SET operation_id=excluded.operation_id,
-            action='delete',base_version=excluded.base_version,payload=NULL,created_at=excluded.created_at
-        `).run(randomUUID(),input,enrolled.server_version,new Date().toISOString());
-      }else{
-        this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE entity_id=?").run(input);
+      const enrollments=this.db.prepare(
+        "SELECT owner_id,server_version FROM manual_calendar_sync_enrollment WHERE event_id=? ORDER BY owner_id"
+      ).all(input) as {owner_id:string;server_version:number|null}[];
+      const stamp=new Date().toISOString();
+      for(const enrolled of enrollments){
+        if(enrolled.server_version!==null){
+          this.db.prepare(`
+            INSERT INTO manual_calendar_sync_outbox(owner_id,operation_id,entity_id,action,base_version,payload,created_at)
+            VALUES(?,?,?,'delete',?,NULL,?)
+            ON CONFLICT(owner_id,entity_id) DO UPDATE SET operation_id=excluded.operation_id,
+              action='delete',base_version=excluded.base_version,payload=NULL,created_at=excluded.created_at
+          `).run(enrolled.owner_id,randomUUID(),input,enrolled.server_version,stamp);
+        }else{
+          this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE owner_id=? AND entity_id=?")
+            .run(enrolled.owner_id,input);
+        }
       }
       const removed=Number(this.db.prepare("DELETE FROM fixed_events WHERE id=?").run(input).changes)===1;
       this.db.exec("COMMIT");
@@ -426,19 +571,22 @@ export class FixedCalendarStore {
     this.db.exec("BEGIN IMMEDIATE");
     try{
       const enrolled=this.db.prepare(`
-        SELECT e.event_id,e.server_version FROM manual_calendar_sync_enrollment e
+        SELECT e.owner_id,e.event_id,e.server_version FROM manual_calendar_sync_enrollment e
         JOIN fixed_events f ON f.id=e.event_id WHERE f.series_id=?
-      `).all(row.series_id) as unknown as {event_id:string;server_version:number|null}[];
+        ORDER BY e.owner_id,e.event_id
+      `).all(row.series_id) as unknown as {owner_id:string;event_id:string;server_version:number|null}[];
+      const stamp=new Date().toISOString();
       for(const item of enrolled){
         if(item.server_version!==null){
           this.db.prepare(`
-            INSERT INTO manual_calendar_sync_outbox(operation_id,entity_id,action,base_version,payload,created_at)
-            VALUES(?,?,'delete',?,NULL,?)
-            ON CONFLICT(entity_id) DO UPDATE SET operation_id=excluded.operation_id,
+            INSERT INTO manual_calendar_sync_outbox(owner_id,operation_id,entity_id,action,base_version,payload,created_at)
+            VALUES(?,?,?,'delete',?,NULL,?)
+            ON CONFLICT(owner_id,entity_id) DO UPDATE SET operation_id=excluded.operation_id,
               action='delete',base_version=excluded.base_version,payload=NULL,created_at=excluded.created_at
-          `).run(randomUUID(),item.event_id,item.server_version,new Date().toISOString());
+          `).run(item.owner_id,randomUUID(),item.event_id,item.server_version,stamp);
         }else{
-          this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE entity_id=?").run(item.event_id);
+          this.db.prepare("DELETE FROM manual_calendar_sync_outbox WHERE owner_id=? AND entity_id=?")
+            .run(item.owner_id,item.event_id);
         }
       }
       // Series deletion applies to ICS imports as before; only manually enrolled

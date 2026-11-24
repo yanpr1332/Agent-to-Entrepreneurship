@@ -6,6 +6,7 @@ import type { CanvasAssignment, CanvasImportResult, CanvasSyncResult } from "../
 import type { MailCandidateAction, MailCandidateChoiceResult, MailCandidateDecision } from "../shared/mail-candidates";
 import { suggestedTaskTitle } from "../shared/mail-candidates";
 import type { MailRecord } from "../shared/mail-model";
+import { requireUuid } from "../shared/cloud-model";
 import {
   parseCreateTask, parseFocusCompletion, parseFocusTitleUpdate, parseTaskId, parseUpdateTask,
   type FocusSession, type FocusSummary, type LocalTask, type TaskPriority,
@@ -63,6 +64,8 @@ function taskFromRow(row: TaskRow): LocalTask {
   };
 }
 
+function syncOwnerId(input: unknown): string { return requireUuid(input).toLowerCase(); }
+
 function focusFromRow(row: FocusRow): FocusSession {
   return {
     id: row.id, title: row.title, plannedMinutes: row.planned_minutes,
@@ -90,8 +93,8 @@ export class LocalStore {
 
   private migrate(): void {
     const version = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (version > 7) throw new Error("Database created by a newer application; refusing to downgrade");
-    if (version === 7) return;
+    if (version > 8) throw new Error("Database created by a newer application; refusing to downgrade");
+    if (version === 8) return;
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -216,7 +219,39 @@ export class LocalStore {
           CREATE INDEX IF NOT EXISTS personal_sync_devices_created ON personal_sync_devices(created_at);
         `);
       }
-      this.db.exec("PRAGMA user_version = 7");
+      if (version <= 7) {
+        // Legacy rows have no trustworthy account identity: preserve but quarantine them.
+        this.db.exec(`
+          ALTER TABLE personal_task_sync_enrollment RENAME TO personal_task_sync_legacy_enrollment;
+          ALTER TABLE personal_sync_outbox RENAME TO personal_sync_legacy_outbox;
+          ALTER TABLE personal_task_sync_legacy_enrollment ADD COLUMN claimed_by_owner_id TEXT;
+          ALTER TABLE personal_task_sync_legacy_enrollment ADD COLUMN claimed_at TEXT;
+          ALTER TABLE personal_sync_legacy_outbox ADD COLUMN claimed_by_owner_id TEXT;
+          ALTER TABLE personal_sync_legacy_outbox ADD COLUMN claimed_at TEXT;
+          CREATE TABLE personal_task_sync_enrollment (
+            owner_id TEXT NOT NULL CHECK(length(owner_id)=36),
+            task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+            server_version INTEGER CHECK(server_version IS NULL OR server_version > 0),
+            enabled_at TEXT NOT NULL,
+            PRIMARY KEY(owner_id,task_id)
+          );
+          CREATE TABLE personal_sync_outbox (
+            owner_id TEXT NOT NULL CHECK(length(owner_id)=36),
+            operation_id TEXT PRIMARY KEY,
+            entity_type TEXT NOT NULL CHECK(entity_type IN ('personal-task','manual-calendar-event')),
+            entity_id TEXT NOT NULL,
+            action TEXT NOT NULL CHECK(action IN ('upsert','delete')),
+            base_version INTEGER CHECK(base_version IS NULL OR base_version >= 0),
+            payload TEXT,
+            created_at TEXT NOT NULL,
+            UNIQUE(owner_id,entity_type,entity_id),
+            CHECK((action='upsert' AND payload IS NOT NULL) OR (action='delete' AND payload IS NULL))
+          );
+          CREATE INDEX personal_sync_outbox_owner_created ON personal_sync_outbox(owner_id,created_at,operation_id);
+          CREATE INDEX personal_task_sync_enrollment_owner ON personal_task_sync_enrollment(owner_id,enabled_at);
+        `);
+      }
+      this.db.exec("PRAGMA user_version = 8");
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -293,9 +328,10 @@ export class LocalStore {
     return row ? taskFromRow(row) : null;
   }
 
-  /** Explicitly enroll one eligible personal task; no bulk opt-in is provided. */
-  setTaskSyncEnabled(idInput: unknown, enabled: boolean, now = new Date()): void {
+  /** Explicitly enroll one eligible personal task for one authenticated owner. */
+  setTaskSyncEnabled(idInput: unknown, enabled: boolean, ownerInput: unknown, now = new Date()): void {
     const id = parseTaskId(idInput);
+    const ownerId = syncOwnerId(ownerInput);
     if (typeof enabled !== "boolean") throw new Error("Sync preference must be boolean");
     const task = this.findTask(id);
     if (!task || task.source !== null) throw new Error("Only personal tasks can be enrolled");
@@ -305,71 +341,170 @@ export class LocalStore {
     this.db.exec("BEGIN IMMEDIATE");
     try {
       if (!enabled) {
-        this.db.prepare("DELETE FROM personal_sync_outbox WHERE entity_type='personal-task' AND entity_id=?").run(id);
-        this.db.prepare("DELETE FROM personal_task_sync_enrollment WHERE task_id=?").run(id);
+        this.db.prepare("DELETE FROM personal_sync_outbox WHERE owner_id=? AND entity_type='personal-task' AND entity_id=?").run(ownerId,id);
+        this.db.prepare("DELETE FROM personal_task_sync_enrollment WHERE owner_id=? AND task_id=?").run(ownerId,id);
       } else {
-        this.db.prepare("INSERT INTO personal_task_sync_enrollment(task_id,server_version,enabled_at) VALUES(?,NULL,?) ON CONFLICT(task_id) DO NOTHING")
-          .run(id, now.toISOString());
-        this.enqueuePersonalTask(id, now);
+        this.db.prepare("INSERT INTO personal_task_sync_enrollment(owner_id,task_id,server_version,enabled_at) VALUES(?,?,NULL,?) ON CONFLICT(owner_id,task_id) DO NOTHING")
+          .run(ownerId,id,now.toISOString());
+        this.enqueuePersonalTaskForOwner(id,ownerId,now);
       }
       this.db.exec("COMMIT");
     } catch (error) { this.db.exec("ROLLBACK"); throw error; }
   }
 
   private enqueuePersonalTask(id: string, now = new Date()): void {
-    // Most tasks (including Canvas imports) are not enrolled. Return before
-    // validating provenance so ordinary edits never become sync operations.
-    const enrolled = this.db.prepare("SELECT server_version FROM personal_task_sync_enrollment WHERE task_id=?")
-      .get(id) as {server_version:number|null}|undefined;
-    if (!enrolled) return;
-    const task = this.findTask(id);
-    if (!task || task.source !== null) throw new Error("Only personal tasks can be queued");
-    const mail = this.db.prepare("SELECT 1 AS found FROM mail_candidate_reviews WHERE task_id=? AND decision='accepted'")
-      .get(id);
-    if (mail) throw new Error("Mail-derived tasks cannot be queued");
-    const payload = JSON.stringify({
-      title: task.title, description: task.description, dueDate: task.dueDate,
-      priority: task.priority, completed: task.completed,
-    });
-    this.db.prepare(`
-      INSERT INTO personal_sync_outbox(operation_id,entity_type,entity_id,action,base_version,payload,created_at)
-      VALUES(?, 'personal-task', ?, 'upsert', ?, ?, ?)
-      ON CONFLICT(entity_type,entity_id) DO UPDATE SET
-        action='upsert', base_version=excluded.base_version,
-        payload=excluded.payload, created_at=excluded.created_at
-    `).run(randomUUID(), id, enrolled.server_version, payload, now.toISOString());
+    const enrollments=this.db.prepare(
+      "SELECT owner_id FROM personal_task_sync_enrollment WHERE task_id=? ORDER BY owner_id"
+    ).all(id) as {owner_id:string}[];
+    for(const enrollment of enrollments)
+      this.enqueuePersonalTaskForOwner(id,enrollment.owner_id,now);
   }
 
-  /** Returns pending local intents only; no network request is made by this store. */
-  listPersonalSyncOutbox(limit = 100): {
-    operationId:string; entityType:"personal-task"|"manual-calendar-event"; entityId:string;
-    action:"upsert"|"delete"; baseVersion:number|null; payload:string|null; createdAt:string;
-  }[] {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error("Invalid outbox limit");
-    return (this.db.prepare("SELECT operation_id,entity_type,entity_id,action,base_version,payload,created_at FROM personal_sync_outbox ORDER BY created_at,operation_id LIMIT ?")
-      .all(limit) as unknown as {operation_id:string;entity_type:"personal-task"|"manual-calendar-event";entity_id:string;
-        action:"upsert"|"delete";base_version:number|null;payload:string|null;created_at:string}[])
+  private enqueuePersonalTaskForOwner(id:string,ownerId:string,now=new Date()):void {
+    const enrolled=this.db.prepare(
+      "SELECT server_version FROM personal_task_sync_enrollment WHERE owner_id=? AND task_id=?"
+    ).get(ownerId,id) as {server_version:number|null}|undefined;
+    if(!enrolled)return;
+    const task=this.findTask(id);
+    if(!task||task.source!==null)throw new Error("Only personal tasks can be queued");
+    const mail=this.db.prepare(
+      "SELECT 1 AS found FROM mail_candidate_reviews WHERE task_id=? AND decision='accepted'"
+    ).get(id);
+    if(mail)throw new Error("Mail-derived tasks cannot be queued");
+    const payload=JSON.stringify({
+      title:task.title,description:task.description,dueDate:task.dueDate,
+      priority:task.priority,completed:task.completed,
+    });
+    this.db.prepare(`
+      INSERT INTO personal_sync_outbox(owner_id,operation_id,entity_type,entity_id,action,base_version,payload,created_at)
+      VALUES(?,?,'personal-task',?,'upsert',?,?,?)
+      ON CONFLICT(owner_id,entity_type,entity_id) DO UPDATE SET
+        operation_id=excluded.operation_id,action='upsert',base_version=excluded.base_version,
+        payload=excluded.payload,created_at=excluded.created_at
+    `).run(ownerId,randomUUID(),id,enrolled.server_version,payload,now.toISOString());
+  }
+
+  /** Pending intents are visible only inside the authenticated owner's scope. */
+  listPersonalSyncOutbox(ownerInput:unknown,limit=100):{
+    operationId:string;entityType:"personal-task"|"manual-calendar-event";entityId:string;
+    action:"upsert"|"delete";baseVersion:number|null;payload:string|null;createdAt:string;
+  }[]{
+    const ownerId=syncOwnerId(ownerInput);
+    if(!Number.isSafeInteger(limit)||limit<1||limit>500)throw new Error("Invalid outbox limit");
+    return (this.db.prepare(
+      "SELECT operation_id,entity_type,entity_id,action,base_version,payload,created_at "+
+      "FROM personal_sync_outbox WHERE owner_id=? ORDER BY created_at,operation_id LIMIT ?"
+    ).all(ownerId,limit) as unknown as {operation_id:string;entity_type:"personal-task"|"manual-calendar-event";
+      entity_id:string;action:"upsert"|"delete";base_version:number|null;payload:string|null;created_at:string}[])
       .map(row=>({operationId:row.operation_id,entityType:row.entity_type,entityId:row.entity_id,
         action:row.action,baseVersion:row.base_version,payload:row.payload,createdAt:row.created_at}));
   }
 
-  /** Acknowledge only the exact operation ID; future transport must call this after server confirmation. */
-  acknowledgePersonalSyncOperation(operationId: string, serverVersion: number): void {
-    if (typeof operationId !== "string" || !/^[a-f0-9-]{36}$/i.test(operationId) ||
-        !Number.isSafeInteger(serverVersion) || serverVersion < 1) throw new Error("Invalid sync acknowledgement");
-    const row = this.db.prepare("SELECT entity_id,entity_type,action FROM personal_sync_outbox WHERE operation_id=?")
-      .get(operationId) as {entity_id:string;entity_type:string;action:string}|undefined;
-    if (!row) throw new Error("Sync operation is no longer pending");
+  listPersonalSyncEnrollments(ownerInput:unknown):{
+    taskId:string;title:string;serverVersion:number|null;enabledAt:string;
+  }[]{
+    const ownerId=syncOwnerId(ownerInput);
+    return (this.db.prepare(`
+      SELECT e.task_id,t.title,e.server_version,e.enabled_at
+      FROM personal_task_sync_enrollment e JOIN tasks t ON t.id=e.task_id
+      WHERE e.owner_id=? ORDER BY e.enabled_at,e.task_id
+    `).all(ownerId) as unknown as {task_id:string;title:string;server_version:number|null;enabled_at:string}[])
+      .map(row=>({taskId:row.task_id,title:row.title,serverVersion:row.server_version,enabledAt:row.enabled_at}));
+  }
+
+  listLegacyPersonalSyncItems(limit=100):{
+    operationId:string|null;entityType:"personal-task"|"manual-calendar-event";entityId:string;
+    action:"upsert"|"delete"|"enrolled";title:string|null;createdAt:string;canReauthorize:boolean;
+  }[]{
+    if(!Number.isSafeInteger(limit)||limit<1||limit>500)throw new Error("Invalid legacy sync item limit");
+    const rows=this.db.prepare(`
+      SELECT o.operation_id,o.entity_type,o.entity_id,o.action,t.title,o.created_at,
+        CASE WHEN o.entity_type='personal-task' AND o.action='upsert' AND t.id IS NOT NULL
+          AND l.task_id IS NULL AND NOT EXISTS(SELECT 1 FROM mail_candidate_reviews m
+            WHERE m.task_id=t.id AND m.decision='accepted') THEN 1 ELSE 0 END AS can_reauthorize
+      FROM personal_sync_legacy_outbox o LEFT JOIN tasks t ON t.id=o.entity_id
+        LEFT JOIN canvas_assignment_links l ON l.task_id=t.id
+      WHERE o.claimed_by_owner_id IS NULL
+      UNION ALL
+      SELECT NULL AS operation_id,'personal-task' AS entity_type,e.task_id AS entity_id,
+        'enrolled' AS action,t.title,e.enabled_at AS created_at,
+        CASE WHEN t.id IS NOT NULL AND l.task_id IS NULL AND NOT EXISTS(
+          SELECT 1 FROM mail_candidate_reviews m WHERE m.task_id=t.id AND m.decision='accepted')
+          THEN 1 ELSE 0 END AS can_reauthorize
+      FROM personal_task_sync_legacy_enrollment e LEFT JOIN tasks t ON t.id=e.task_id
+        LEFT JOIN canvas_assignment_links l ON l.task_id=t.id
+      WHERE e.claimed_by_owner_id IS NULL
+        AND NOT EXISTS(SELECT 1 FROM personal_sync_legacy_outbox o
+          WHERE o.entity_type='personal-task' AND o.entity_id=e.task_id)
+      ORDER BY created_at,entity_id LIMIT ?
+    `).all(limit) as unknown as {operation_id:string|null;entity_type:"personal-task"|"manual-calendar-event";
+      entity_id:string;action:"upsert"|"delete"|"enrolled";title:string|null;created_at:string;can_reauthorize:number}[];
+    return rows.map(row=>({operationId:row.operation_id,entityType:row.entity_type,entityId:row.entity_id,
+      action:row.action,title:row.title,createdAt:row.created_at,canReauthorize:row.can_reauthorize===1}));
+  }
+
+  /** Re-authorize one surviving legacy personal task for one explicit account. */
+  adoptLegacyPersonalTaskSync(ownerInput:unknown,taskInput:unknown,confirmation:unknown,now=new Date()):void{
+    const ownerId=syncOwnerId(ownerInput),taskId=parseTaskId(taskInput);
+    if(confirmation!==true)throw Error("Explicit confirmation is required to re-authorize a legacy task");
     this.db.exec("BEGIN IMMEDIATE");
-    try {
-      this.db.prepare("DELETE FROM personal_sync_outbox WHERE operation_id=?").run(operationId);
-      if (row.entity_type === "personal-task" && row.action === "upsert")
-        this.db.prepare("UPDATE personal_task_sync_enrollment SET server_version=? WHERE task_id=?")
-          .run(serverVersion,row.entity_id);
-      if (row.entity_type === "personal-task" && row.action === "delete")
-        this.db.prepare("DELETE FROM personal_task_sync_enrollment WHERE task_id=?").run(row.entity_id);
+    try{
+      const task=this.findTask(taskId);
+      if(!task||task.source!==null)throw Error("Only an existing personal task can be re-authorized");
+      const mail=this.db.prepare(
+        "SELECT 1 AS found FROM mail_candidate_reviews WHERE task_id=? AND decision='accepted'"
+      ).get(taskId);
+      if(mail)throw Error("Mail-derived tasks cannot be re-authorized");
+      const legacyEnrollment=this.db.prepare(
+        "SELECT 1 AS found FROM personal_task_sync_legacy_enrollment WHERE task_id=? AND claimed_by_owner_id IS NULL"
+      ).get(taskId);
+      const legacyOutbox=this.db.prepare(
+        "SELECT action FROM personal_sync_legacy_outbox WHERE entity_type='personal-task' AND entity_id=? AND claimed_by_owner_id IS NULL"
+      ).get(taskId) as {action:string}|undefined;
+      if(!legacyEnrollment&&!legacyOutbox)throw Error("No unclaimed legacy sync preference exists for this task");
+      if(legacyOutbox?.action==="delete")
+        throw Error("Legacy delete tombstones remain quarantined for manual review");
+      const existing=this.db.prepare(
+        "SELECT 1 AS found FROM personal_task_sync_enrollment WHERE owner_id=? AND task_id=?"
+      ).get(ownerId,taskId);
+      if(existing)throw Error("This task is already enrolled for this account");
+      this.db.prepare(
+        "INSERT INTO personal_task_sync_enrollment(owner_id,task_id,server_version,enabled_at) VALUES(?,?,NULL,?)"
+      ).run(ownerId,taskId,now.toISOString());
+      this.enqueuePersonalTaskForOwner(taskId,ownerId,now);
+      this.db.prepare(
+        "UPDATE personal_task_sync_legacy_enrollment SET claimed_by_owner_id=?,claimed_at=? "+
+        "WHERE task_id=? AND claimed_by_owner_id IS NULL"
+      ).run(ownerId,now.toISOString(),taskId);
+      this.db.prepare(
+        "UPDATE personal_sync_legacy_outbox SET claimed_by_owner_id=?,claimed_at=? "+
+        "WHERE entity_type='personal-task' AND entity_id=? AND action='upsert' AND claimed_by_owner_id IS NULL"
+      ).run(ownerId,now.toISOString(),taskId);
       this.db.exec("COMMIT");
-    } catch(error) { this.db.exec("ROLLBACK"); throw error; }
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+
+  /** Acknowledge only the exact pending operation within the same account. */
+  acknowledgePersonalSyncOperation(ownerInput:unknown,operationId:string,serverVersion:number):void{
+    const ownerId=syncOwnerId(ownerInput);
+    if(typeof operationId!=="string"||!/^[a-f0-9-]{36}$/i.test(operationId)||
+      !Number.isSafeInteger(serverVersion)||serverVersion<1)throw Error("Invalid sync acknowledgement");
+    const row=this.db.prepare(
+      "SELECT entity_id,entity_type,action FROM personal_sync_outbox WHERE owner_id=? AND operation_id=?"
+    ).get(ownerId,operationId) as {entity_id:string;entity_type:string;action:string}|undefined;
+    if(!row)throw Error("Sync operation is no longer pending for this account");
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      this.db.prepare("DELETE FROM personal_sync_outbox WHERE owner_id=? AND operation_id=?")
+        .run(ownerId,operationId);
+      if(row.entity_type==="personal-task"&&row.action==="upsert")
+        this.db.prepare("UPDATE personal_task_sync_enrollment SET server_version=? WHERE owner_id=? AND task_id=?")
+          .run(serverVersion,ownerId,row.entity_id);
+      if(row.entity_type==="personal-task"&&row.action==="delete")
+        this.db.prepare("DELETE FROM personal_task_sync_enrollment WHERE owner_id=? AND task_id=?")
+          .run(ownerId,row.entity_id);
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
 
   createTask(input: unknown): LocalTask {
@@ -421,20 +556,26 @@ export class LocalStore {
     const id = parseTaskId(idInput);
     const linked = this.db.prepare("SELECT task_id FROM canvas_assignment_links WHERE task_id=?").get(id);
     if (linked) return this.setCanvasTaskVisibility(id, false);
-    const enrolled = this.db.prepare("SELECT server_version FROM personal_task_sync_enrollment WHERE task_id=?")
-      .get(id) as {server_version:number|null}|undefined;
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      if (enrolled?.server_version !== null && enrolled?.server_version !== undefined) {
-        this.db.prepare(`
-          INSERT INTO personal_sync_outbox(operation_id,entity_type,entity_id,action,base_version,payload,created_at)
-          VALUES(?, 'personal-task', ?, 'delete', ?, NULL, ?)
-          ON CONFLICT(entity_type,entity_id) DO UPDATE SET
-            operation_id=excluded.operation_id, action='delete',
-            base_version=excluded.base_version, payload=NULL, created_at=excluded.created_at
-        `).run(randomUUID(),id,enrolled.server_version,new Date().toISOString());
-      } else {
-        this.db.prepare("DELETE FROM personal_sync_outbox WHERE entity_type='personal-task' AND entity_id=?").run(id);
+      const enrollments=this.db.prepare(
+        "SELECT owner_id,server_version FROM personal_task_sync_enrollment WHERE task_id=? ORDER BY owner_id"
+      ).all(id) as {owner_id:string;server_version:number|null}[];
+      const stamp=new Date().toISOString();
+      for(const enrolled of enrollments){
+        if(enrolled.server_version!==null){
+          this.db.prepare(`
+            INSERT INTO personal_sync_outbox(owner_id,operation_id,entity_type,entity_id,action,base_version,payload,created_at)
+            VALUES(?,?,'personal-task',?,'delete',?,NULL,?)
+            ON CONFLICT(owner_id,entity_type,entity_id) DO UPDATE SET
+              operation_id=excluded.operation_id,action='delete',
+              base_version=excluded.base_version,payload=NULL,created_at=excluded.created_at
+          `).run(enrolled.owner_id,randomUUID(),id,enrolled.server_version,stamp);
+        }else{
+          this.db.prepare(
+            "DELETE FROM personal_sync_outbox WHERE owner_id=? AND entity_type='personal-task' AND entity_id=?"
+          ).run(enrolled.owner_id,id);
+        }
       }
       const removed = this.db.prepare("DELETE FROM tasks WHERE id = ?").run(id).changes === 1;
       this.db.exec("COMMIT");
