@@ -217,6 +217,12 @@ export class WorkspaceHistoryStore {
         WHERE owner_id=? AND workspace_id=?`).get(id,workspace) as {n:number};
       if(BigInt(count.n)!==BigInt(stage.totalItems))
         throw Error("Workspace checkpoint row count mismatch");
+      // New devices may have no progress row yet. Establish the parent
+      // before INSERT...SELECT into FK-protected records; all three steps
+      // still COMMIT atomically, so no premature cursor publication.
+      this.db.prepare(`INSERT INTO progress(owner_id,workspace_id,cursor)
+        VALUES(?,?,?) ON CONFLICT(owner_id,workspace_id)
+        DO UPDATE SET cursor=excluded.cursor`).run(id,workspace,stage.checkpointCursor);
       this.db.prepare("DELETE FROM records WHERE owner_id=? AND workspace_id=?")
         .run(id,workspace);
       this.db.prepare(`INSERT INTO records(
@@ -224,9 +230,6 @@ export class WorkspaceHistoryStore {
       ) SELECT owner_id,workspace_id,kind,entity_id,created_at,json
         FROM checkpoint_records WHERE owner_id=? AND workspace_id=?`)
         .run(id,workspace);
-      this.db.prepare(`INSERT INTO progress(owner_id,workspace_id,cursor)
-        VALUES(?,?,?) ON CONFLICT(owner_id,workspace_id)
-        DO UPDATE SET cursor=excluded.cursor`).run(id,workspace,stage.checkpointCursor);
       this.db.prepare("DELETE FROM checkpoint_progress WHERE owner_id=? AND workspace_id=?")
         .run(id,workspace);
       this.db.exec("COMMIT");
