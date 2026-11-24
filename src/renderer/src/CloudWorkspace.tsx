@@ -5,7 +5,7 @@ import type {
 import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncConflictReason, PersonalSyncRunResult,
   PersonalSyncResolutionRequest, PersonalSyncLegacyReview, PersonalSyncLegacyAdoptionRequest,
-  PersonalSyncDeviceReplacementReview,
+  PersonalSyncDeviceReplacementReview, PersonalSyncRecoveryHealth, PersonalSyncReceiptReconcileResult,
 } from "../../shared/personal-sync-contract";
 
 const empty:CloudSessionStatus={configured:false,authenticated:false,userId:null,email:null};
@@ -69,6 +69,8 @@ export default function CloudWorkspace() {
   });
   const [legacySelection,setLegacySelection]=useState<PersonalSyncLegacyAdoptionRequest|null>(null);
   const [deviceReplacement,setDeviceReplacement]=useState<PersonalSyncDeviceReplacementReview|null>(null);
+  const [recoveryHealth,setRecoveryHealth]=useState<PersonalSyncRecoveryHealth|null>(null);
+  const [receiptReconciliation,setReceiptReconciliation]=useState<PersonalSyncReceiptReconcileResult|null>(null);
 
   useEffect(()=>{
     let active=true;
@@ -108,6 +110,7 @@ export default function CloudWorkspace() {
       setLegacyReview({items:[],taskLimitReached:false,calendarLimitReached:false});
       setLegacySelection(null);
       setDeviceReplacement(null);
+      setRecoveryHealth(null);setReceiptReconciliation(null);
       return;
     }
     let active=true;
@@ -174,6 +177,7 @@ export default function CloudWorkspace() {
       setPersonalCandidates([]);setPersonalConflicts([]);setPersonalSyncResult(null);
       setLegacyReview({items:[],taskLimitReached:false,calendarLimitReached:false});
       setLegacySelection(null);setResolutionReview(null);setDeviceReplacement(null);
+      setRecoveryHealth(null);setReceiptReconciliation(null);
       setNotice("已退出云端账号；个人本地任务与其他连接器不受影响。");
     });
   }
@@ -213,6 +217,24 @@ export default function CloudWorkspace() {
       const code=await window.desktop.cloud.createInvite(selected);
       setInvite(code);
       setNotice("此邀请码 48 小时内有效，最多还能用于 4 人加入。只分享给要邀请的成员。");
+    });
+  }
+
+  async function inspectRecovery():Promise<void>{
+    await run(async()=>{
+      const health=await window.desktop.cloud.inspectPersonalSyncRecovery();
+      setRecoveryHealth(health);
+      setNotice("只读检查完成：没有注册设备、上传数据或更改本地 Cursor。");
+    });
+  }
+
+  async function reconcileReceipts():Promise<void>{
+    await run(async()=>{
+      const result=await window.desktop.cloud.reconcilePersonalSyncReceipts();
+      setReceiptReconciliation(result);
+      setRecoveryHealth(null);
+      await refreshPersonalSync();
+      setNotice("回执核对已完成：仅核销云端已确认接受且请求内容完全一致的本地待发送操作；没有上传任何内容。");
     });
   }
 
@@ -391,6 +413,34 @@ export default function CloudWorkspace() {
           {personalSyncResult.recoveredPages ? " · 已恢复上次中断的拉取 "+personalSyncResult.recoveredPages+" 页" : ""}
           {personalSyncResult.pushDeferred ? (personalSyncResult.recoveredPages?" · 本轮恢复后暂缓上传":" · 本轮因云端存在新变更已暂缓上传") : ""}
         </div>}
+        <div className="cloud-sync-recovery-diagnostics">
+          <h3>同步健康检查与发送回执对账</h3>
+          <p className="privacy-note">检查只读取当前账号的本机和云端设备状态，不会修复、清零或上传。
+            “核对发送回执”会向云端查询当前待发送操作的<strong>精确请求回执</strong>，仅对已接受且完全匹配的记录更新本地待发送状态；
+            不会重发、删除云端项目，未知或冲突的操作继续保留。须先在隔离 Supabase 项目部署 002H 只读 RPC。</p>
+          <div className="button-row">
+            <button type="button" className="secondary-button" disabled={busy}
+              onClick={()=>void inspectRecovery()}>只读检查同步状态</button>
+            <button type="button" className="secondary-button" disabled={busy}
+              onClick={()=>void reconcileReceipts()}>仅核对未确认发送回执</button>
+          </div>
+          {recoveryHealth && <div className="connector-notice" role="status">
+            <strong>状态：{recoveryHealth.status}</strong>
+            {" · "}任务待发送 {recoveryHealth.taskPending} · 日历待发送 {recoveryHealth.calendarPending}
+            {" · "}冲突 {recoveryHealth.conflicts}
+            {recoveryHealth.localCursor!==null?" · 本机 Cursor "+recoveryHealth.localCursor:""}
+            {recoveryHealth.serverCursor!==null?" · 云端 Cursor "+recoveryHealth.serverCursor:""}
+            {recoveryHealth.pendingReplay?" · 有未完成的拉取页":""}
+            <p>{recoveryHealth.detail}</p>
+          </div>}
+          {receiptReconciliation && <div className="connector-notice" role="status">
+            本轮检查 {receiptReconciliation.inspected} · 已确认并核销 {receiptReconciliation.acknowledged}
+            {" · "}云端未找到 {receiptReconciliation.notFound}
+            {" · "}其他回执未核销 {receiptReconciliation.unresolved}
+            {" · "}本机仍待发送 {receiptReconciliation.pending}
+            {receiptReconciliation.hasMore?" · 仍有未检查项目，请再次执行":""}
+          </div>}
+        </div>
         <div className="cloud-sync-device-recovery">
           <h3>设备身份恢复（需人工确认）</h3>
           <p className="privacy-note">如果本机同步设备被云端撤销，可以在没有待发送项目和冲突时更换身份。
