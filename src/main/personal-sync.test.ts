@@ -265,7 +265,10 @@ describe("ALPHA-SYNC-002D manual personal transfer orchestration",()=>{
     await idle;
     expect(service.hasInFlightRun()).toBe(false);
     expect(tasks.listPersonalSyncOutbox(OWNER)).toHaveLength(1);
-    expect(cloud.pullPersonalSyncChanges).not.toHaveBeenCalled();
+    // A read-only preflight now runs before upload even when cursor is zero.
+    expect(cloud.pullPersonalSyncChanges).toHaveBeenCalledTimes(1);
+    expect(cloud.pullPersonalSyncChanges).toHaveBeenCalledWith(
+      tasks.getOrCreatePersonalSyncDevice(OWNER).deviceId,"0",1);
   });
 
   it("does not advance the cursor when remote changes cannot be applied locally",async()=>{
