@@ -16,7 +16,10 @@ import { CanvasCredentialVault } from "./connectors/canvas-credentials";
 import { CanvasSyncService } from "./connectors/canvas-sync";
 import { SharedCloudClient } from "./cloud/supabase-client";
 import { PersonalSyncService } from "./personal-sync";
-import { parsePersonalSyncResolutionRequest } from "../shared/personal-sync-contract";
+import {
+  parsePersonalSyncResolutionRequest,parsePersonalSyncLegacyAdoptionRequest,
+} from "../shared/personal-sync-contract";
+import {listLegacySyncReview,adoptReviewedLegacySync} from "./personal-sync-legacy";
 import { parseCanvasCourseId, parseCanvasPersonalTokenInput } from "../shared/canvas-model";
 import { CampusMailStore } from "./connectors/mail-store";
 import { CampusMailVault } from "./connectors/mail-vault";
@@ -704,6 +707,24 @@ function registerIpcHandlers(): void {
   handle(IPC_CHANNELS.cloudPersonalSyncConflicts, (event) => {
     requireTrustedSender(event);
     return personalSyncService().listConflicts();
+  });
+  handle(IPC_CHANNELS.cloudPersonalSyncLegacyReview, (event) => {
+    requireTrustedSender(event);
+    // Listing is local-only; require a signed-in owner so the UI never
+    // presents ownerless rows as already belonging to a selected account.
+    sharedCloud.currentUserId();
+    return listLegacySyncReview(localStore(),fixedCalendar());
+  });
+  handle(IPC_CHANNELS.cloudAdoptPersonalSyncLegacy, (event,input:unknown) => {
+    requireTrustedSender(event);
+    const ownerId=sharedCloud.currentUserId();
+    const request=parsePersonalSyncLegacyAdoptionRequest(input);
+    if(personalSyncService().hasInFlightRun())
+      throw Error("Wait for personal sync to finish before re-authorizing old data");
+    adoptReviewedLegacySync(localStore(),fixedCalendar(),ownerId,request);
+    // Adoption creates an owner-scoped *local pending operation* only.
+    // There is no network request until the user separately clicks sync.
+    return {saved:true as const};
   });
   handle(IPC_CHANNELS.cloudResolvePersonalSyncConflict, async (event,input:unknown) => {
     requireTrustedSender(event);

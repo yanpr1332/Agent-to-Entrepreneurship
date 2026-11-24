@@ -4,7 +4,7 @@ import type {
 } from "../../shared/cloud-model";
 import type {
   PersonalSyncCandidate, PersonalSyncConflictRecord, PersonalSyncConflictReason, PersonalSyncRunResult,
-  PersonalSyncResolutionRequest,
+  PersonalSyncResolutionRequest, PersonalSyncLegacyReview, PersonalSyncLegacyAdoptionRequest,
 } from "../../shared/personal-sync-contract";
 
 const empty:CloudSessionStatus={configured:false,authenticated:false,userId:null,email:null};
@@ -63,6 +63,10 @@ export default function CloudWorkspace() {
   const [personalConflicts,setPersonalConflicts]=useState<PersonalSyncConflictRecord[]>([]);
   const [personalSyncResult,setPersonalSyncResult]=useState<PersonalSyncRunResult|null>(null);
   const [resolutionReview,setResolutionReview]=useState<PersonalSyncResolutionRequest|null>(null);
+  const [legacyReview,setLegacyReview]=useState<PersonalSyncLegacyReview>({
+    items:[],taskLimitReached:false,calendarLimitReached:false,
+  });
+  const [legacySelection,setLegacySelection]=useState<PersonalSyncLegacyAdoptionRequest|null>(null);
 
   useEffect(()=>{
     let active=true;
@@ -72,12 +76,14 @@ export default function CloudWorkspace() {
   },[]);
 
   const refreshPersonalSync=useCallback(async()=>{
-    const [candidates,conflicts]=await Promise.all([
+    const [candidates,conflicts,legacy]=await Promise.all([
       window.desktop.cloud.personalSyncCandidates(),
       window.desktop.cloud.personalSyncConflicts(),
+      window.desktop.cloud.personalSyncLegacyReview(),
     ]);
     setPersonalCandidates(candidates);
     setPersonalConflicts(conflicts);
+    setLegacyReview(legacy);
   },[]);
 
   const refreshSelected=useCallback(async (workspaceId:string)=>{
@@ -97,6 +103,8 @@ export default function CloudWorkspace() {
       setPersonalConflicts([]);
       setPersonalSyncResult(null);
       setResolutionReview(null);
+      setLegacyReview({items:[],taskLimitReached:false,calendarLimitReached:false});
+      setLegacySelection(null);
       return;
     }
     let active=true;
@@ -161,6 +169,8 @@ export default function CloudWorkspace() {
       setStatus(next);setWorkspaces([]);setSelected(null);
       setMembers([]);setMessages([]);setTasks([]);setInvite("");
       setPersonalCandidates([]);setPersonalConflicts([]);setPersonalSyncResult(null);
+      setLegacyReview({items:[],taskLimitReached:false,calendarLimitReached:false});
+      setLegacySelection(null);setResolutionReview(null);
       setNotice("已退出云端账号；个人本地任务与其他连接器不受影响。");
     });
   }
@@ -220,6 +230,18 @@ export default function CloudWorkspace() {
         await window.desktop.cloud.setManualEventSync(item.entityId,enabled);
       await refreshPersonalSync();
       setNotice(enabled?"已授权此条目同步到当前云账号。":"已停止此条目的后续同步；云端已有副本不会因此删除。");
+    });
+  }
+
+  async function adoptLegacyItem():Promise<void>{
+    if(!legacySelection)return;
+    const request=legacySelection;
+    await run(async()=>{
+      await window.desktop.cloud.adoptPersonalSyncLegacy(request);
+      setLegacySelection(null);
+      setPersonalSyncResult(null);
+      await refreshPersonalSync();
+      setNotice("已将选定的历史记录重新授权给当前账号，仅在本机生成新的待发送快照。没有上传旧内容；如需上传请另外点击“立即同步”。");
     });
   }
 
@@ -351,6 +373,55 @@ export default function CloudWorkspace() {
                 {item.detail ? " · "+item.detail : ""}</small></span>
             </label>)}
         </div>
+        {legacyReview.items.length>0 && <section className="cloud-sync-legacy" aria-label="历史同步数据隔离区">
+          <h3>历史同步记录隔离区（{legacyReview.items.length} 项）</h3>
+          <p className="privacy-note">这些记录来自旧版没有账号归属的同步队列，并不代表属于当前登录账号。
+            它们不会自动上传，也不会自动执行旧删除操作。只有仍存在、来源允许的任务或手动课程，
+            才能逐条重新授权；重新授权使用<strong>本机当前内容</strong>生成新待发送操作，
+            旧 payload、旧云端版本和旧 operationId 一律不会继承。</p>
+          {(legacyReview.taskLimitReached||legacyReview.calendarLimitReached)&&
+            <p className="privacy-note">当前每个本地数据库最多显示前 100 条；部分历史记录仍未显示，也不会自动处理。</p>}
+          <div className="cloud-sync-legacy-list">
+            {legacyReview.items.map(item=>{
+              const actionLabel=item.action==="delete"?"历史删除墓碑":
+                item.action==="enrolled"?"旧版同步授权":"历史待上传修改";
+              const key=item.legacyStore+":"+item.entityId+":"+(item.operationId??"enrollment");
+              const eligible=item.canReauthorize&&
+                (item.action==="upsert"||item.action==="enrolled")&&
+                ((item.entityType==="personal-task"&&item.legacyStore==="task-database")||
+                 (item.entityType==="manual-calendar-event"&&item.legacyStore==="calendar-database"));
+              const chosen=legacySelection?.entityType===item.entityType&&
+                legacySelection?.entityId===item.entityId&&
+                legacySelection?.expectedAction===item.action&&
+                legacySelection?.expectedOperationId===item.operationId;
+              return <article className="cloud-sync-legacy-item" key={key}>
+                <strong>{item.title??"本机内容已不存在"}</strong>
+                <small>{item.entityType==="personal-task"?"个人任务":"手动日历"} · {actionLabel}
+                  {" · "}{timestamp(item.createdAt)}</small>
+                <small>本地记录 ID：{item.entityId}</small>
+                {eligible?<>
+                  <button type="button" className="secondary-button" disabled={busy}
+                    onClick={()=>setLegacySelection({entityType:item.entityType,
+                      entityId:item.entityId,expectedAction:item.action as "upsert"|"enrolled",
+                      expectedOperationId:item.operationId,confirmation:true})}>检查并重新授权</button>
+                  {chosen&&legacySelection&&<div className="cloud-sync-confirm" role="group"
+                    aria-label="确认历史同步记录重新授权">
+                    <p><strong>确认绑定到当前登录账号 {status.email??"未知账号"}？</strong>
+                      这会将当前本机记录加入此账号的新待发送队列。旧版数据无法证明原本属于此账号；
+                      如果有重复记录或不同账号版本，后续上传可能发生冲突。此操作不会立即上传。</p>
+                    <div className="button-row">
+                      <button type="button" className="primary-button" disabled={busy}
+                        onClick={()=>void adoptLegacyItem()}>确认重新授权该条目</button>
+                      <button type="button" className="secondary-button" disabled={busy}
+                        onClick={()=>setLegacySelection(null)}>取消</button>
+                    </div>
+                  </div>}
+                </>:<p className="privacy-note">保持隔离：历史删除、来源不明或本机已不存在的记录，
+                  不支持重新授权或远端删除；本轮仅供查看，不会清除记录。</p>}
+              </article>;
+            })}
+          </div>
+        </section>}
         {personalConflicts.length>0 && <div className="cloud-sync-conflicts">
           <h3>需要人工处理的同步冲突（{personalSyncResult?.conflicts??personalConflicts.length}）</h3>
           <p className="privacy-note">冲突会阻止该条目的自动上传或远端覆盖。请检查两份内容，明确选择一方。
