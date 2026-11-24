@@ -15,8 +15,8 @@ afterEach(()=>{for(const dir of directories.splice(0))rmSync(dir,{recursive:true
 describe("verified online SQLite snapshots",()=>{
   it("backs up WAL-backed tasks and knowledge into userData/backups with integrity checks",async()=>{
     const dir=fixture();
-    const tasks=new LocalStore(join(dir,"ate-local.sqlite"));
-    const kb=new KnowledgeStore(join(dir,"ate-knowledge.sqlite"));
+    const tasks=new LocalStore(join(dir,"study-anchor-tasks.sqlite"));
+    const kb=new KnowledgeStore(join(dir,"study-anchor-knowledge.sqlite"));
     tasks.createTask({title:"Must survive"});
     kb.importText({sourcePath:"/tmp/study.md",title:"study.md",
       format:"markdown",text:"Never discard original evidence"});
@@ -37,7 +37,7 @@ describe("verified online SQLite snapshots",()=>{
   });
 
   it("snapshots v3 before opening/upgrading the owner-scoped v10 local database",async()=>{
-    const dir=fixture(),path=join(dir,"ate-local.sqlite");
+    const dir=fixture(),path=join(dir,"study-anchor-tasks.sqlite");
     const db=new LocalStore(path);
     db.createTask({title:"Original before schema upgrade"});
     db.close();
@@ -47,37 +47,37 @@ describe("verified online SQLite snapshots",()=>{
       "DROP TABLE personal_sync_devices; DROP TABLE personal_sync_conflicts; "+
       "DROP TABLE personal_sync_pull_checkpoints; PRAGMA user_version=3");
     older.close();
-    const snapshot=await backupBeforeMigration(dir,"ate-local.sqlite",10);
+    const snapshot=await backupBeforeMigration(dir,"study-anchor-tasks.sqlite",10);
     expect(snapshot).toBeTruthy();
-    const pre=new DatabaseSync(join(snapshot!,"ate-local.sqlite"),{readOnly:true});
+    const pre=new DatabaseSync(join(snapshot!,"study-anchor-tasks.sqlite"),{readOnly:true});
     expect((pre.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(3);
     expect((pre.prepare("SELECT COUNT(*) AS count FROM tasks").get() as {count:number}).count).toBe(1);
     pre.close();
     const migrated=new LocalStore(path);
     expect(migrated.listTasks()).toHaveLength(1);
     migrated.close();
-    expect(await backupBeforeMigration(dir,"ate-local.sqlite",10)).toBeNull();
+    expect(await backupBeforeMigration(dir,"study-anchor-tasks.sqlite",10)).toBeNull();
   });
 
   it("snapshots a v1 planning database before the v2 migration",async()=>{
-    const dir=fixture(),path=join(dir,"ate-plans.sqlite");
+    const dir=fixture(),path=join(dir,"study-anchor-planning.sqlite");
     const planner=new PlanningStore(path);
     planner.close();
     const prior=new DatabaseSync(path);
     prior.exec("ALTER TABLE plan_proposals DROP COLUMN source; PRAGMA user_version=1");
     prior.close();
-    const snapshot=await backupBeforeMigration(dir,"ate-plans.sqlite",2);
+    const snapshot=await backupBeforeMigration(dir,"study-anchor-planning.sqlite",2);
     expect(snapshot).toBeTruthy();
-    const saved=new DatabaseSync(join(snapshot!,"ate-plans.sqlite"),{readOnly:true});
+    const saved=new DatabaseSync(join(snapshot!,"study-anchor-planning.sqlite"),{readOnly:true});
     expect((saved.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(1);
     saved.close();
     const upgraded=new PlanningStore(path);
     upgraded.close();
-    expect(await backupBeforeMigration(dir,"ate-plans.sqlite",2)).toBeNull();
+    expect(await backupBeforeMigration(dir,"study-anchor-planning.sqlite",2)).toBeNull();
   });
 
   it("does not replace originals or silently overwrite existing backups",async()=>{
-    const dir=fixture(),db=new LocalStore(join(dir,"ate-local.sqlite"));
+    const dir=fixture(),db=new LocalStore(join(dir,"study-anchor-tasks.sqlite"));
     const a=await createLocalBackup(dir,[{name:"tasks",store:db}]);
     const b=await createLocalBackup(dir,[{name:"tasks",store:db}]);
     expect(a.folder).not.toBe(b.folder);
