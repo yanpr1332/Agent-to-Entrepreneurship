@@ -486,6 +486,19 @@ function registerIpcHandlers(): void {
       throw Error("Explicit local model removal confirmation required");
     return localModels().remove();
   });
+  handle(IPC_CHANNELS.knowledgeEvaluateOfflineModel,async(event,consent:unknown)=>{
+    requireTrustedSender(event);
+    if(consent!==true)throw Error("Explicit local evaluation consent required");
+    const owner=BrowserWindow.fromWebContents(event.sender);
+    if(!owner||owner.isDestroyed())throw Error("Evaluation requires trusted window");
+    const selection=await dialog.showOpenDialog(owner,{
+      title:"选择你本地编写的检索相关性标签 JSON（只在本机使用）",
+      properties:["openFile"],
+      filters:[{name:"本地检索标注",extensions:["json"]}],
+    });
+    if(selection.canceled||!selection.filePaths.length)return null;
+    return localModels().evaluateFile(selection.filePaths[0]);
+  });
   handle(IPC_CHANNELS.knowledgeSearch, (event,query:unknown) => {
     requireTrustedSender(event);
     return localModels().search(query);
