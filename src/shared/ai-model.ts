@@ -62,6 +62,8 @@ export function parseAIConnect(input:unknown):AIPrivateSettings{
   const provider=parseAIProvider(fields.provider??"openai");
   if(typeof fields.apiKey!=="string"||!/^[A-Za-z0-9_./+=:-]{12,512}$/.test(fields.apiKey))
     throw Error("Invalid personal AI provider key format");
+  if(provider==="openai"&&!/^sk-[A-Za-z0-9_-]{20,}$/.test(fields.apiKey))
+    throw Error("Invalid OpenAI API key format");
   const model=parseAIModel(fields.model);
   if(provider==="openai"&&!/^gpt-[a-z0-9._-]+$/i.test(model))
     throw Error("Select an OpenAI GPT model ID");
