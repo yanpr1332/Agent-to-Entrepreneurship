@@ -113,11 +113,11 @@ declare global {
         markTask: (workspaceId: string, taskId: string, completed: boolean) => Promise<SharedTask>;
         filesOverview:() => Promise<PersonalFilesOverview>;
         stageFile:(replace?:{fileId:string;version:number}|null) => Promise<StagedPersonalFile|null>;
-        uploadFile:(fileId:string) => Promise<{status:"uploaded"|"conflict";version:number|null}>;
+        uploadFile:(fileId:string) => Promise<{status:"uploaded"|"conflict"|"cancelled";version:number|null}>;
         stopLocalFile:(fileId:string) => Promise<{stopped:true}>;
         downloadFile:(fileId:string,version:number) => Promise<{path:string;bytes:number}>;
         deleteRemoteFile:(fileId:string,version:number) =>
-          Promise<{status:"deleted"|"conflict";version:number|null}>;
+          Promise<{status:"deleted"|"conflict"|"cancelled";version:number|null}>;
         syncPersonalNow: () => Promise<PersonalSyncRunResult>;
         personalSyncCandidates: () => Promise<PersonalSyncCandidate[]>;
         setPersonalTaskSync: (id:string,enabled:boolean) => Promise<{saved:true}>;
