@@ -108,6 +108,22 @@ describe("ALPHA-KB-005C user-labelled local search evaluation",()=>{
     expect(JSON.stringify(report)).not.toContain("Mitochondria use energy");
   });
 
+  it("exports a bounded citation-only catalog without source disk paths",()=>{
+    const {store}=fixture();
+    const a=store.importText({sourcePath:"/private/home/family-notes.md",
+      title:"Study notes",format:"markdown",text:"Mitochondria and ATP energy"}).document;
+    store.importText({sourcePath:"/second.md",title:"Second",format:"markdown",
+      text:"calculus examples"});
+    const catalog=store.localEvidenceCatalog(1);
+    expect(catalog.total).toBe(2);
+    expect(catalog.items).toHaveLength(1);
+    expect(catalog.items[0].evidenceKey).toMatch(/^[a-f0-9-]+:1:0$/);
+    expect(catalog.items[0]).not.toHaveProperty("sourcePath");
+    expect(JSON.stringify(catalog)).not.toContain("/private/home/");
+    expect(store.getDocument(a.id).revision).toBe(1);
+    expect(()=>store.localEvidenceCatalog(501)).toThrow("limit");
+  });
+
   it("refuses stale revision labels instead of publishing misleading metrics",async()=>{
     const {dir,store,manager,modelPath}=fixture();
     const doc=store.importText({sourcePath:"/old.md",title:"Old",
