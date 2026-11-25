@@ -209,6 +209,12 @@
 - **CAN-002 / CAN-007：** 新 Token 同时验证课程读取和当前账号；遇 401 暂停重复请求、用户主动重新授权、保留本机任务并防旧请求竞态；OAuth 仍需学校审批，真实 Token 未验收。[57](../w5/57_ALPHA_CLOSE_07_TEAM_CANVAS_RELEASE.md)
 - **REL-001/002：** 新增下载后 EXE/DMG/ZIP、哈希与独立 Git SHA 的只读复检和篡改测试；与数字签名、真实安装及 GUI/数据恢复验收有严格区别。[57](../w5/57_ALPHA_CLOSE_07_TEAM_CANVAS_RELEASE.md)
 
+## ALPHA-RC-01（2026-11-25）集成冻结补充
+
+- **QA-001/002/006/007 + CAL/KB/FOC/AI/MAIL/CAN/TEAM/DASH：** 增加八模块本地真实 SQLite/受控服务综合回归（合成课程/邮件/团队数据，人工批准语义，五库备份 SHA/quick_check/隔离恢复、重启读取、敏感库排除）；待最新 Windows/macOS CI，外部真实账号仍按 W5 [58](../w5/58_ALPHA_RC_01_INTEGRATION_RELEASE_GATE.md) 验收。
+- **REL-001/002/003 + QA-003/004/005：** 新增 20 项 Alpha 手工验收的不可自动勾选证据门禁。全部 20 项默认 Blocked、Blocker/Critical 未核查且 Windows/macOS CI 未填写；只有独立 Review 后的真实证据才可作为发布判断。严禁以 CI 或 Mock 覆盖真实联机和系统安装门槛。
+- **状态**：代码已提交不代表已实测。Windows/macOS GUI、隔离云端五账号、真实 Canvas、IMAP/SMTP 和个人付费 AI 请求均尚未提供真实验收，仍待用户授权。
+
 ## 任务领取与冲突控制
 - 本表不把任务永久分配给具体成员。团队按当周时间、能力和兴趣动态认领。
 - 每项进入“进行中”的任务必须记录一名临时 Driver、一名 Reviewer、关联 Issue/PR、负责文件/目录、依赖和验收人；这不是永久岗位。

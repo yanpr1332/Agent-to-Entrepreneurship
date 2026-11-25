@@ -312,3 +312,8 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 ## ALPHA-CLOSE-07：团队撤权、Canvas 恢复和离线安装包核验（2026-11-25）
 
 [57 代码与验收步骤](57_ALPHA_CLOSE_07_TEAM_CANVAS_RELEASE.md)：成员撤销 RPC 与五账号 RLS 的旧 JWT/旧邀请码反向用例、Canvas API 身份验证及 Token 过期后的手动重连、Windows/macOS 未签名安装包完整性复检。**未部署 SQL、未触发真实邮件/模型调用、未在真实电脑下载和安装。**
+
+
+## ALPHA-RC-01：V0.1 一次性集成与发布候选证据门禁（2026-11-25）
+
+[58 发布候选集中演练与人工验收](58_ALPHA_RC_01_INTEGRATION_RELEASE_GATE.md)：真实五 SQLite 的合成八模块跨流程、在线备份/隔离恢复/重启回读、敏感存储排除，以及对 ALPHA-01～20 默认阻塞的严格证据完整性检查。CI/模拟通过 != 真实外部账号、双平台 GUI 或五人 RLS 验收通过。运行 `npm run alpha:rehearsal`，再按需初始化本地私人证据文件；不要把真实验收文件提交 GitHub。

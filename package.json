@@ -13,7 +13,7 @@
     "dev": "electron-vite dev",
     "dev:compat": "electron-vite dev --noSandbox",
     "typecheck": "tsc -b",
-    "test": "vitest run && node --test scripts/sync-rls-acceptance.node.mjs scripts/supabase-alpha-preflight.node.mjs && node --test scripts/verify-downloaded-alpha.node.mjs",
+    "test": "vitest run && node --test scripts/sync-rls-acceptance.node.mjs scripts/supabase-alpha-preflight.node.mjs && node --test scripts/verify-downloaded-alpha.node.mjs && node --test scripts/alpha-readiness.node.mjs",
     "test:sync-rls": "node --test scripts/sync-rls-acceptance.node.mjs",
     "test:watch": "vitest",
     "build": "npm run typecheck && npm test && electron-vite build && node scripts/verify-offline-worker.mjs",
@@ -21,7 +21,10 @@
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac",
     "preflight:supabase": "node scripts/supabase-alpha-preflight.mjs",
-    "verify:alpha-artifact": "node scripts/verify-downloaded-alpha.mjs"
+    "verify:alpha-artifact": "node scripts/verify-downloaded-alpha.mjs",
+    "alpha:evidence:init": "node scripts/alpha-readiness.mjs init",
+    "alpha:evidence:check": "node scripts/alpha-readiness.mjs check",
+    "alpha:rehearsal": "vitest run src/main/alpha-release-rehearsal.test.ts"
   },
   "dependencies": {
     "pdfjs-dist": "6.5.438",

@@ -40,6 +40,14 @@
 
 ## 3. 切片状态
 
+### ALPHA-RC-01 八模块集成与 20 项人工验收门禁（2026-11-25）
+
+- **本轮代码**：[58](58_ALPHA_RC_01_INTEGRATION_RELEASE_GATE.md)：新增合成数据、真实五 SQLite 存储的跨模块流程测试（Canvas/邮件/知识复习/专注/规划/本地 AI 确认和团队历史），完整在线快照→隔离恢复→重启读取与数据/凭据排除校验；`npm run alpha:rehearsal` 为专用回归命令。
+- **安全发布判断**：新增默认全 `blocked` 的 `ALPHA-01..20` 严格本地证据模板/检查工具。自动化 CI 不得生成通过记录；完整填写仍只代表待独立人类复核，并非已验证。真实环境证据目前未提供，不能宣称 V0.1 Alpha Ready。
+- **尚未完成**：Windows/macOS 真实安装+恢复、五个独立账号的 Supabase 真实 RLS/撤权、真实 Canvas/交大邮箱/模型 API 调用及真人 GUI 结果；所有项继续 Blocked/待验收，不能用模拟集成测试冒充。
+
+
+
 ### ALPHA-CLOSE-07 团队撤权、Canvas 恢复与安装包校验（2026-11-25）
 
 - **代码开发中，CI 必须以最新提交为准**：[57](57_ALPHA_CLOSE_07_TEAM_CANVAS_RELEASE.md)。新增 owner-only 撤销成员、RLS 旧 JWT/旧邀请链接负向验收、任务解除指派；Canvas Token 身份验证、401 暂停轮询与人工重新授权；内部安装包下载后 SHA256/commit/平台复检的纯离线工具。

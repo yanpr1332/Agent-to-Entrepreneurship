@@ -427,3 +427,10 @@ node node_modules/vitest/vitest.mjs run --pool=threads
 ## 贡献
 
 参阅 [CONTRIBUTING.md](CONTRIBUTING.md)。所有功能经独立分支和 PR 进入 main；任务认领、文件范围和验收证据记录在 W4 Backlog。
+
+
+### V0.1 Alpha 集中演练与发布候选门禁
+
+如需在本机使用**纯合成数据**检查八模块的本地 SQLite 流程、备份/隔离恢复、重启与敏感存储排除，请执行 `npm ci && npm run alpha:rehearsal`。这些测试不需要 Canvas Token、学校邮箱、Supabase 或 AI Key，不对外联网。
+
+真实五人 Alpha 放行须另按 [W5 发布候选核验手册](docs/w5/58_ALPHA_RC_01_INTEGRATION_RELEASE_GATE.md) 完成 20 项独立真人/真机验收并记录缺陷。门禁模板可通过 `npm run alpha:evidence:init -- alpha-evidence/v01-internal.json <完整40位SHA>` 创建（默认全部阻塞），运行 `npm run alpha:evidence:check -- alpha-evidence/v01-internal.json <完整40位SHA>` 检查格式和完整性；**没有自动标绿/自动执行真实外部操作的捷径**。
