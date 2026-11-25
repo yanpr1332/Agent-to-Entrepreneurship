@@ -76,3 +76,7 @@
 ### ALPHA-CLOSE-05/06 代码集中交付（2026-11-25）
 
 邮件按需只读正文、OS 加密草稿跨重启恢复、回复邮件预览/确认发送及来源引文的 AI 可编辑复习卡候选，统一放在当前唯一 PR。没有用户授权的真实 Canvas、交大 IMAP/SMTP、API Key 或 Supabase 五账号外部证据；双平台实际 GUI 与安装验收仍未完成。完整边界与手工步骤见 [56](56_ALPHA_CLOSE_05_06_MAIL_AI_CARDS.md)。
+
+### ALPHA-CLOSE-07 集中交付（2026-11-25，开发 PR 以最新 CI 为准）
+
+在已合并的邮箱/AI 卡片批次之后，本轮集中补上：Supabase owner-only 成员撤权 RPC、旧邀请码作废与任务解除指派、五账号旧 JWT/RLS 反向验收、Canvas 身份双重验证与 Token 失效后显式重新授权、内部安装包下载后独立 SHA/commit 校验。代码、单测、锁顺序及人工验收参见 [57](57_ALPHA_CLOSE_07_TEAM_CANVAS_RELEASE.md)。**真实 Supabase 部署与五人 E2E、Canvas Token、学校邮箱、AI API Key、Windows/macOS 安装和 Keychain 验收尚未取得证据，全部保持 Blocked/待验收。**
