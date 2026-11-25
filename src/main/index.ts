@@ -1279,7 +1279,7 @@ app.whenReady().then(async () => {
       personalFiles=new PersonalFileSyncService(sharedCloud,app.getPath("userData"));
     }catch{
       personalFiles=null;
-      report("FILE_SYNC_INIT_DEGRADED","storage");
+      report("STORAGE_OPEN_FAILED","storage");
     }
     // The optional cloud history cache must never make offline tasks,
     // calendar, mail or knowledge unavailable if its file is damaged.
