@@ -13,11 +13,12 @@ const kindLabel={
   event:"活动/会议",none:"未发现可靠待办",
 } as const;
 
-/** Explicit, two-stage paid extraction from at most three selected headers.
- * Mail body, attachments, and other messages never enter the preview. */
+/** Explicitly selected headers or individually selected messages' consented plain text.
+ * Attachments, HTML, and other messages never enter the preview. */
 export default function MailAIReviewPanel({messages}:Props){
   const [configured,setConfigured]=useState(false);
   const [chosen,setChosen]=useState<MailAIRef[]>([]);
+  const [includeBodies,setIncludeBodies]=useState(false);
   const [preview,setPreview]=useState<AIPreview|null>(null);
   const [review,setReview]=useState<MailAIReview|null>(null);
   const [edits,setEdits]=useState<Record<string,Draft>>({});
@@ -46,7 +47,14 @@ export default function MailAIReviewPanel({messages}:Props){
     if(!chosen.length||busy)return;
     setBusy(true);setError("");setNotice("");setReview(null);
     try{
-      setPreview(await window.desktop.mail.aiPrepare({sources:chosen}));
+      if(includeBodies){
+        const titles=chosen.map(ref=>messages.find(x=>mailAIKey(x)===mailAIKey(ref))?.subject)
+          .filter(Boolean).join("\n• ");
+        if(!window.confirm("仅本次读取下列已选邮件的纯文本正文（每封截取最多 1100 字符）。"+
+          "不会读取附件或 HTML，不保存正文；下一步还会显示实际外发文本，需再次确认才发送给所选 AI 服务商。"+
+          "\n• "+titles+"\n确认本次授权读取正文？"))return;
+      }
+      setPreview(await window.desktop.mail.aiPrepare({sources:chosen,includeBodies}));
     }catch(e){setError(reason(e));}
     finally{setBusy(false);}
   }
@@ -70,7 +78,7 @@ export default function MailAIReviewPanel({messages}:Props){
     try{await window.desktop.mail.aiCancel();}
     catch(e){setError(reason(e));}
     finally{
-      setPreview(null);setReview(null);setChosen([]);setEdits({});
+      setPreview(null);setReview(null);setChosen([]);setIncludeBodies(false);setEdits({});
       setAccepted([]);setBusy(false);
     }
   }
@@ -97,8 +105,8 @@ export default function MailAIReviewPanel({messages}:Props){
     <div className="eyebrow">OPTIONAL MAIL AI · TWO-STEP CONSENT</div>
     <h2>邮件 AI 识别 · 人工确认建任务</h2>
     <p className="privacy-note">
-      不会自动分析任何邮件，也不会读取邮件正文或附件。你最多选择 3 封当前已同步邮件的基本信息；
-      先预览完整请求，再明确确认后，才把邮件主题、发件人、发送日期及用于匹配本机邮件的内部编号发往所选 AI 服务商。
+      默认只使用邮件基本信息，不会自动读取正文或附件。你最多选择 3 封当前已同步的邮件；
+      选择“包含正文”并明确授权后，才会读取这几封邮件的纯文本正文（限长、不含附件或 HTML）。      所有待发送内容都先完整预览，再二次确认后发往所选 AI 服务商。
       这会使用你的个人 API Key 和当日请求额度，可能产生费用。邮件日期不是任务截止日期。
       AI 建议不会自动创建任务或发送邮件。
     </p>
@@ -126,10 +134,15 @@ export default function MailAIReviewPanel({messages}:Props){
           <div className="mail-meta">{item.from} · {item.date??"日期未提供"}</div>
         </li>)}
       </ul>
-      <p className="privacy-note">这里列出最近 30 封已缓存邮件的基本信息（主题、发件人、发送时间）供主动选择，不会自动发送全部收件箱。</p>
+      <p className="privacy-note">这里列出最近 30 封已缓存邮件基本信息供主动选择，不会自动分析收件箱。</p>
+      <label><input type="checkbox" checked={includeBodies} disabled={busy}
+        onChange={e=>setIncludeBodies(e.target.checked)}/>
+        本次仅对已选邮件读取纯文本正文供 AI 提取（每封最多 1100 字符，另行确认授权）
+      </label>
+      <p className="privacy-note">正文仅在本次授权后按需从邮箱只读获取，不能离线读取；不会保存在本机邮件数据库，附件和 HTML 不会提供给 AI。</p>
       <button type="button" className="primary-button" disabled={
         busy||!configured||chosen.length===0}
-        onClick={()=>void prepare()}>预览所选邮件的 AI 外发内容（不收费）</button>
+        onClick={()=>void prepare()}>{includeBodies?"先授权读取正文，再预览 AI 外发内容":"预览所选邮件基本信息的 AI 外发内容"}</button>
     </>}
     {preview&&<div role="region" aria-label="邮件 AI 付费请求确认" className="ai-preview">
       <h3>发送前逐字核对</h3>
