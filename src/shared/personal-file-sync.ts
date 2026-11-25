@@ -59,6 +59,7 @@ export interface StagedPersonalFile{
 export interface PersonalFilesOverview{
   pending:StagedPersonalFile[];
   remote:RemotePersonalFile[];
+  cloudAvailable:boolean;
 }
 export function parsePersonalFileList(raw:unknown):RemotePersonalFile[]{
   if(!Array.isArray(raw)||raw.length>MAX_SYNC_FILE_COUNT)
