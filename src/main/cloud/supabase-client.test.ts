@@ -64,6 +64,33 @@ describe("Supabase candidate: individual JWT + RLS REST boundaries",()=>{
     expect(fetcher).toHaveBeenCalledTimes(3);
   });
 
+  it("member revocation uses only a signed-in owner JWT and validates exact RPC success",async()=>{
+    const calls:string[]=[];
+    let reply:unknown=true;
+    const cloud=new SharedCloudClient(async(url,init)=>{
+      if(url.includes("/auth/v1/"))return new Response(JSON.stringify({
+        access_token:"signed-in-user-jwt",refresh_token:"refresh",expires_in:3600,
+        user:{id:userId,email:"owner@example.edu"},
+      }));
+      expect(url).toBe(projectUrl+"/rest/v1/rpc/ate_revoke_workspace_member");
+      expect((init.headers as Record<string,string>).Authorization).toBe("Bearer signed-in-user-jwt");
+      expect(JSON.parse(init.body as string)).toEqual({
+        p_workspace:workspace,p_user:memberId,
+      });
+      calls.push("revoke");
+      return new Response(JSON.stringify(reply));
+    });
+    cloud.configure({projectUrl,publishableKey});
+    await expect(cloud.revokeWorkspaceMember(workspace,memberId)).rejects.toThrow("Log in");
+    await cloud.login({email:"owner@example.edu",password:"strong-password"});
+    expect(await cloud.revokeWorkspaceMember(workspace,memberId)).toEqual({revoked:true});
+    reply=false;
+    await expect(cloud.revokeWorkspaceMember(workspace,memberId))
+      .rejects.toThrow("did not confirm");
+    await expect(cloud.revokeWorkspaceMember(workspace,"not-uuid")).rejects.toThrow();
+    expect(calls).toEqual(["revoke","revoke"]);
+  });
+
   it("shared task mutation sends only user-owned fields via RLS-protected REST",async()=>{
     const fetcher=vi.fn(async(url:string,init:RequestInit)=>{
       if(url.includes("/auth/v1/"))return new Response(JSON.stringify({
