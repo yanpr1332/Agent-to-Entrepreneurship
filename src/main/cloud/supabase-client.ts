@@ -156,6 +156,11 @@ export class SharedCloudClient {
         {refresh_token:refreshToken},{},false);
       if(this.authEpoch!==epoch||this.session!==oldSession)
         throw Error("Cloud account changed during session refresh");
+      // A rotated refresh token must never silently switch to a different
+      // account. In that case fail closed and require an explicit new login.
+      const subject=(updated as AuthPayload|null)?.user?.id;
+      if(typeof subject!=="string"||requireUuid(subject)!==oldSession.userId)
+        throw Error("Cloud refresh identity does not match the signed-in user");
       this.acceptAuth(updated);
     })().catch(()=>{
       // Failure of an OLD refresh must never sign out a new account/project.
@@ -328,13 +333,16 @@ export class SharedCloudClient {
   /** Main-only credentials; no user secret ever reaches Renderer. */
   async realtimeCredentials():Promise<{url:string;accessToken:string;userId:string;expiresAt:number}>{
     if(!this.project)throw Error("Configure a Supabase test project first");
+    const epoch=this.authEpoch,project=this.project;
     await this.requireSession();
-    const session=this.session!;
-    const host=new URL(this.project.projectUrl);
+    if(this.authEpoch!==epoch||this.project!==project||!this.session)
+      throw Error("Cloud account or project changed during realtime authorization");
+    const session=this.session;
+    const host=new URL(project.projectUrl);
     if(host.protocol!=="https:"||!/^[a-z0-9-]+\.supabase\.co$/i.test(host.hostname))
       throw Error("Realtime project host is not allowlisted");
     return {url:"wss://"+host.hostname+"/realtime/v1/websocket?apikey="+
-      encodeURIComponent(this.project.publishableKey)+"&vsn=1.0.0",
+      encodeURIComponent(project.publishableKey)+"&vsn=1.0.0",
       accessToken:session.accessToken,userId:session.userId,expiresAt:session.expiresAt};
   }
 
