@@ -152,6 +152,7 @@ function mailAI():MailAIReviewCoordinator{
   if(!mailAIService){
     mailAIService=new MailAIReviewCoordinator(assistant(),{
       list:()=>campusMail().list(),
+      readBody:record=>campusMail().readApprovedBody(record),
       decisions:account=>localStore().mailCandidateDecisions(account),
       accept:(record,draft)=>localStore().reviewMailCandidate(record,"accept",draft),
     });
