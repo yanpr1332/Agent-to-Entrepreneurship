@@ -17,7 +17,7 @@
     "doctor:electron": "node scripts/electron-dev-preflight.mjs",
     "setup:electron": "install-electron --no",
     "typecheck": "tsc -b",
-    "test": "vitest run && node --test scripts/sync-rls-acceptance.node.mjs scripts/supabase-alpha-preflight.node.mjs && node --test scripts/verify-downloaded-alpha.node.mjs && node --test scripts/alpha-readiness.node.mjs && node --test scripts/electron-dev-preflight.node.mjs",
+    "test": "vitest run && node --test scripts/sync-rls-acceptance.node.mjs scripts/supabase-alpha-preflight.node.mjs && node --test scripts/verify-downloaded-alpha.node.mjs && node --test scripts/alpha-readiness.node.mjs && node --test scripts/electron-dev-preflight.node.mjs && node --test scripts/file-sync-rls-acceptance.node.mjs",
     "test:sync-rls": "node --test scripts/sync-rls-acceptance.node.mjs",
     "test:watch": "vitest",
     "build": "npm run typecheck && npm test && electron-vite build && node scripts/verify-offline-worker.mjs",
@@ -28,7 +28,9 @@
     "verify:alpha-artifact": "node scripts/verify-downloaded-alpha.mjs",
     "alpha:evidence:init": "node scripts/alpha-readiness.mjs init",
     "alpha:evidence:check": "node scripts/alpha-readiness.mjs check",
-    "alpha:rehearsal": "vitest run src/main/alpha-release-rehearsal.test.ts"
+    "alpha:rehearsal": "vitest run src/main/alpha-release-rehearsal.test.ts",
+    "test:file-rls:offline": "node --test scripts/file-sync-rls-acceptance.node.mjs",
+    "test:file-rls:live": "node scripts/file-sync-rls-acceptance.mjs"
   },
   "dependencies": {
     "pdfjs-dist": "6.5.438",
