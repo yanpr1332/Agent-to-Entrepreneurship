@@ -48,6 +48,12 @@ export interface KnowledgeRetrievalScores {
   recallAt10:number;
   mrrAt10:number;
 }
+export interface KnowledgeEvidenceExportResult {
+  path:string;
+  exported:number;
+  total:number;
+  truncated:boolean;
+}
 export interface KnowledgeEvaluationReport {
   cases:number;
   modelId:string;
