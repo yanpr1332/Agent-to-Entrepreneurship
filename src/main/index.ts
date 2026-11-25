@@ -1088,9 +1088,23 @@ function registerIpcHandlers(): void {
     if(result.canceled||result.filePaths.length!==1)return null;
     return personalFileService().stagePickedFile(result.filePaths[0],replacement);
   });
-  handle(IPC_CHANNELS.cloudFileUpload,(event,id:unknown)=>{
+  handle(IPC_CHANNELS.cloudFileUpload,async(event,id:unknown)=>{
     requireTrustedSender(event);
-    return personalFileService().upload(id);
+    const fileId=typeof id==="string"?id:"";
+    const item=personalFileService().pending().find(row=>row.fileId===fileId);
+    if(!item)throw Error("No staged personal file for the current account");
+    // A forged Renderer IPC cannot bypass this native OS confirmation.
+    const answer=await dialog.showMessageBox({
+      type:"warning",buttons:["同意上传到当前测试云项目","取消，不上传"],
+      defaultId:1,cancelId:1,noLink:true,
+      title:"确认上传个人文件",
+      message:"是否上传「"+item.filename+"」？",
+      detail:"文件大小："+item.byteLength+" 字节。将发送完整原文到当前 Supabase 项目。"+
+        "此 Beta 不提供端到端加密，项目管理员可能访问内容。"+
+        "只有明确确认才会进行网络写入。",
+    });
+    if(answer.response!==0)return {status:"cancelled" as const,version:null};
+    return personalFileService().upload(fileId);
   });
   handle(IPC_CHANNELS.cloudFileStopLocal,(event,id:unknown)=>{
     requireTrustedSender(event);
@@ -1100,9 +1114,22 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return personalFileService().download(id,version);
   });
-  handle(IPC_CHANNELS.cloudFileDelete,(event,id:unknown,version:unknown)=>{
+  handle(IPC_CHANNELS.cloudFileDelete,async(event,id:unknown,version:unknown)=>{
     requireTrustedSender(event);
-    return personalFileService().deleteRemote(id,version);
+    const fileId=typeof id==="string"?id:"";
+    const item=(await personalFileService().overview()).remote
+      .find(row=>row.fileId===fileId&&row.version===version);
+    if(!item)throw Error("Remote file version changed; refresh before deleting");
+    const answer=await dialog.showMessageBox({
+      type:"warning",buttons:["确认删除该云端文件内容","取消，保留文件"],
+      defaultId:1,cancelId:1,noLink:true,
+      title:"确认删除当前云端文件内容",
+      message:"从 Supabase 删除「"+item.filename+"」v"+item.version+" 的原文？",
+      detail:"这会按版本核对并清空当前云端记录的文件内容。"+
+        "其他电脑已经下载的副本和云服务历史备份不会自动清除。",
+    });
+    if(answer.response!==0)return {status:"cancelled" as const,version:null};
+    return personalFileService().deleteRemote(fileId,version);
   });
   handle(IPC_CHANNELS.cloudPersonalSyncNow, async (event) => {
     requireTrustedSender(event);
