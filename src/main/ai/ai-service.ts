@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
-  AI_DEFAULT_MODEL, AI_DAILY_REQUEST_CAP, AI_OUTPUT_TOKEN_CAP, AI_PREVIEW_TTL_MS,
+  AI_DEFAULT_MODEL, AI_MODEL_DEFAULTS, AI_DAILY_REQUEST_CAP, AI_OUTPUT_TOKEN_CAP, AI_PREVIEW_TTL_MS,
+  parseAIProvider,
   parseAIPrompt, parseAIApprovalId, parseAIConnect,
   type AIAnswer, type AIStatus, type AIPreview, type AIPrivateSettings, type AIKeySource,
+  type AIProvider,
 } from "../../shared/ai-model";
 import { AIKeyVault } from "./ai-vault";
 import { AIUsageLedger } from "./ai-usage";
@@ -26,11 +28,11 @@ export class AIService {
     private readonly client:Pick<OpenAIResponsesClient,"ask">=new OpenAIResponsesClient(),
     /** Read only in Electron Main. Never expose process.env to Renderer/Preload. */
     private readonly environmentKey:()=>string|undefined=()=>process.env.OPENAI_API_KEY,
+    private readonly environment:()=>NodeJS.ProcessEnv=()=>process.env,
   ){}
 
   private fingerprint(settings:AIPrivateSettings):string{
-    return createHash("sha256").update(settings.apiKey).update("\u0000")
-      .update(settings.model).digest("hex");
+    return createHash("sha256").update(JSON.stringify(settings)).digest("hex");
   }
 
   /** Explicitly saved OS-encrypted credentials take precedence. The environment
@@ -42,16 +44,31 @@ export class AIService {
       this.configurationWarning=null;
       return {settings:saved,source:"saved"};
     }
-    const raw=this.environmentKey();
-    if(raw===undefined||raw.trim()===""){
-      this.configurationWarning=null;
-      return null;
-    }
+    const env=this.environment();
+    const explicit=env.STUDY_ANCHOR_AI_PROVIDER;
+    let provider:AIProvider;
+    let raw:string|undefined;
     try{
-      const active={
-        settings:parseAIConnect({apiKey:raw.trim(),model:AI_DEFAULT_MODEL}),
-        source:"environment" as const,
-      };
+      provider=explicit?parseAIProvider(explicit):"openai";
+      if(explicit){
+        raw=provider==="openai"?this.environmentKey():
+          provider==="anthropic"?env.ANTHROPIC_API_KEY:
+          provider==="gemini"?env.GEMINI_API_KEY:env.STUDY_ANCHOR_AI_API_KEY;
+      }else{
+        raw=this.environmentKey();
+        if(!raw){raw=env.ANTHROPIC_API_KEY;provider="anthropic";}
+        if(!raw){raw=env.GEMINI_API_KEY;provider="gemini";}
+      }
+      if(!raw?.trim()){
+        this.configurationWarning=explicit?"invalid_environment_key":null;
+        return null;
+      }
+      const model=env.STUDY_ANCHOR_AI_MODEL||
+        (provider==="compatible"?"":AI_MODEL_DEFAULTS[provider]);
+      const endpoint=provider==="compatible"?env.STUDY_ANCHOR_AI_ENDPOINT:null;
+      const active={settings:parseAIConnect({
+        apiKey:raw.trim(),model,provider,endpoint,
+      }),source:"environment" as const};
       this.configurationWarning=null;
       return active;
     }catch{
@@ -69,7 +86,7 @@ export class AIService {
     const quota=this.ledger.today();
     return {
       connected:this.active!==null,running:this.inflight!==null,
-      provider:"openai",model:this.active?.settings.model??null,
+      provider:this.active?.settings.provider??null,model:this.active?.settings.model??null,
       keySource:this.active?.source??null,
       configurationWarning:this.configurationWarning,
       usedToday:quota.used,remainingToday:quota.remaining,
@@ -116,6 +133,10 @@ export class AIService {
       credentialFingerprint:this.fingerprint(this.active.settings),
     };
     return {approvalId:id,prompt,model:this.active.settings.model,
+      provider:this.active.settings.provider,
+      endpointLabel:this.active.settings.endpoint?
+        new URL(this.active.settings.endpoint).origin:
+        this.active.settings.provider,
       expiresAt:new Date(expires).toISOString(),maxOutputTokens:AI_OUTPUT_TOKEN_CAP};
   }
 
