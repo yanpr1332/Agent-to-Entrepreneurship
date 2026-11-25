@@ -43,7 +43,9 @@ export class CampusMailDraftVault {
           throw Error("Invalid draft metadata");
         return { ...parsed, account, id: item.id, updatedAt: item.updatedAt };
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("Saved drafts belong to a different mailbox"))
+        throw error;
       throw Error("Cannot decrypt or validate saved drafts; existing file was preserved");
     }
   }
