@@ -106,6 +106,7 @@ export class OpenAIResponsesClient {
       url=settings.provider==="deepseek"?"https://api.deepseek.com/chat/completions":settings.endpoint!;
       headers={Authorization:"Bearer "+settings.apiKey};
       body={model:settings.model,max_tokens:AI_OUTPUT_TOKEN_CAP,stream:false,
+        ...(settings.provider==="deepseek"?{thinking:{type:"disabled"}}:{}),
         messages:[{role:"system",content:instructions},{role:"user",content:prompt}]};
     }
     let response:Response;
