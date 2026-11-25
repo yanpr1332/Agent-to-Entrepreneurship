@@ -15,6 +15,7 @@ export const MIGRATIONS = Object.freeze([
   "20261124_ate_workspace_durable_history.sql",
   "20261124_ate_workspace_checkpoint_recovery.sql",
   "20261125_ate_workspace_member_revoke.sql",
+  "20261125_ate_personal_file_sync.sql",
 ]);
 const DANGEROUS = [
   [/\bdrop\s+schema\s+public\b/i, "DROP SCHEMA public"],
