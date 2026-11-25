@@ -303,3 +303,8 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 ## ALPHA-KB-005C：词表覆盖率、断点续建与本地真实相关性评测（2026-11-25）
 
 [45 本机索引恢复与标注检索评测](45_ALPHA_KB_005C_INDEX_COVERAGE_EVALUATION.md)：SQLite v5 持久保存“词表外”跳过条目，避免任一无法编码原文块堵塞后续索引；UI 展示 indexed/skipped/pending 总览。用户明确确认后导出私有证据引用目录，并使用自己标注的 JSON，离线对比原检索与混合检索的 P@5/Recall@10/MRR@10 和 P50/P95 延迟。**仍未运行 E5/BGE ONNX 神经模型，也未取得真实多语质量验收证据。**
+
+
+## ALPHA-CLOSE-05/06 邮箱人工回复与 AI 证据闪卡（2026-11-25）
+
+[56 邮箱完整工作流和来源复习卡](56_ALPHA_CLOSE_05_06_MAIL_AI_CARDS.md)：邮箱头默认只读、正文逐封授权预览、系统密钥加密本机草稿与回复 SMTP 单次发送；知识库选定单片段经授权的 AI JSON 候选，人工核对引用/版本后保存可编辑复习卡。真实交大 IMAP/SMTP、合法 AI Key、Windows/macOS GUI 仍待验收，不能由模拟加密或 CI 冒充。

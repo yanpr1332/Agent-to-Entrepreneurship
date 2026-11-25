@@ -40,6 +40,11 @@
 
 ## 3. 切片状态
 
+### ALPHA-CLOSE-05/06 集中开发：邮箱正文/草稿/回复及 AI 来源复习卡（2026-11-25）
+
+- **代码开发中，最新 CI 需另行核对**：[56](56_ALPHA_CLOSE_05_06_MAIL_AI_CARDS.md)。邮件逐封确认只读正文，OS safeStorage 加密草稿、账户隔离、重启恢复、回复头、完整 SMTP 二次确认与不确定投递不可重试；知识库严格 JSON + 原文连续证据的 AI 候选，人工编辑/核对后才保存。
+- **明确未验收**：尚未提供真实交大邮箱账号/IMAP/SMTP 收发、Canvas 授权账号、个人 AI API Key 真调用证据；Windows/macOS GUI、系统 Keychain/DPAPI、五账号 Supabase RLS 和团队撤权仍 Blocked/未验证。现有 Mock 测试和 CI 不代表真实邮箱或 AI 成功。
+
 ### ALPHA-CLOSE-04A Supabase 只读部署预检（2026-11-25）
 
 - **代码待 CI**：[55](55_ALPHA_CLOSE_04_SUPABASE_PREFLIGHT.md) 新增独立 Node 预检、SQL 迁移完整性/危险权限回归测试、npm 脚本与人工部署顺序。检查不访问网络、不读取密码或 API Key、不执行 SQL。

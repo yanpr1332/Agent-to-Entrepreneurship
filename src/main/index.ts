@@ -31,6 +31,7 @@ import {listLegacySyncReview,adoptReviewedLegacySync} from "./personal-sync-lega
 import { parseCanvasCourseId, parseCanvasPersonalTokenInput } from "../shared/canvas-model";
 import { CampusMailStore } from "./connectors/mail-store";
 import { CampusMailVault } from "./connectors/mail-vault";
+import { CampusMailDraftVault } from "./connectors/mail-drafts";
 import { CampusMailService } from "./connectors/mail-service";
 import { classifyMailSubject, parseMailCandidateChoice } from "../shared/mail-candidates";
 import type { MailCandidate } from "../shared/mail-candidates";
@@ -768,6 +769,23 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return campusMail().list();
   });
+  handle(IPC_CHANNELS.mailReadBody, async (event, record: unknown) => {
+    requireTrustedSender(event);
+    return campusMail().readApprovedBody(record as import("../shared/mail-model").MailRecord);
+  });
+  handle(IPC_CHANNELS.mailSavedDrafts, async (event) => {
+    requireTrustedSender(event);
+    return campusMail().listSavedDrafts();
+  });
+  handle(IPC_CHANNELS.mailSaveDraft, async (event, input: unknown) => {
+    requireTrustedSender(event);
+    return campusMail().saveDraft(input);
+  });
+  handle(IPC_CHANNELS.mailDeleteDraft, async (event, id: unknown) => {
+    requireTrustedSender(event);
+    await campusMail().deleteDraft(id);
+    return {deleted:true as const};
+  });
   handle(IPC_CHANNELS.mailSyncNow, async (event) => {
     requireTrustedSender(event);
     return campusMail().sync();
@@ -1232,12 +1250,13 @@ app.whenReady().then(async () => {
     canvasVault = new CanvasCredentialVault(join(app.getPath("userData"), "study-anchor-canvas.enc"), safeStorage);
     mailStore = new CampusMailStore(join(app.getPath("userData"), "study-anchor-mail.sqlite"));
     const mailVault = new CampusMailVault(join(app.getPath("userData"), "study-anchor-campus-mail.enc"), safeStorage);
+    const mailDraftVault = new CampusMailDraftVault(join(app.getPath("userData"), "study-anchor-mail-drafts.enc"), safeStorage);
     mailService = new CampusMailService(mailVault, mailStore, undefined, undefined, () => {
       if(mailService?.snapshot().lastError)report("MAIL_SYNC_FAILED","mail");
       for (const window of BrowserWindow.getAllWindows()) {
         if (!window.isDestroyed()) window.webContents.send(MAIL_SYNC_UPDATED);
       }
-    });
+    }, mailDraftVault);
     store.purgeExpiredHiddenCanvasTasks();
     canvasSync = new CanvasSyncService(store, async () => {
       const saved = await credentials().load();

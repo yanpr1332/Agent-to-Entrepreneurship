@@ -10,6 +10,7 @@ import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPers
 
 import type {
   CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
+  MailDraftSaveInput, MailSavedDraft,
 } from "../shared/mail-model";
 import type {MailAISelection,MailAIApply,MailAIReview} from "../shared/mail-ai";
 import type {RecoveryPreview,RecoveryResult,RecoveryConfirmation} from "../shared/recovery-model";
@@ -73,6 +74,12 @@ const desktopApi = Object.freeze({
     connect: (input: CampusMailConnectInput) =>
       ipcRenderer.invoke(IPC_CHANNELS.mailConnect, input) as Promise<MailSyncState>,
     list: () => ipcRenderer.invoke(IPC_CHANNELS.mailList) as Promise<MailRecord[]>,
+    readBody: (record: MailRecord) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailReadBody, record) as Promise<string>,
+    savedDrafts: () => ipcRenderer.invoke(IPC_CHANNELS.mailSavedDrafts) as Promise<MailSavedDraft[]>,
+    saveDraft: (draft: MailDraftSaveInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailSaveDraft, draft) as Promise<MailSavedDraft>,
+    deleteDraft: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.mailDeleteDraft, id) as Promise<{deleted:true}>,
     candidates: () => ipcRenderer.invoke(IPC_CHANNELS.mailCandidates) as Promise<MailCandidate[]>,
     aiPrepare: (selection:MailAISelection) =>
       ipcRenderer.invoke(IPC_CHANNELS.mailAIPrepare,selection) as Promise<AIPreview>,

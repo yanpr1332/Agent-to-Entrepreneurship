@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { SJTU_MAIL_HOST, SJTU_SMTP_PORT, type CampusMailCredentials, type MailDraft } from "../../shared/mail-model";
+import { SJTU_MAIL_HOST, SJTU_SMTP_PORT, parseMailDraft, type CampusMailCredentials, type MailDraft } from "../../shared/mail-model";
 import { connectMailTls, type MailWire, type MailWireFactory } from "./mail-wire";
 
 function base64Lines(text: string): string {
@@ -8,14 +8,16 @@ function base64Lines(text: string): string {
 
 /** A plain-text SMTP MIME message: no HTML execution or attachment support. */
 export function formatSmtpMessage(from: string, draft: MailDraft): string {
+  draft = parseMailDraft(draft);
   const subject = Buffer.from(draft.subject, "utf8").toString("base64");
   const messageId = randomUUID();
   return [
     `Date: ${new Date().toUTCString()}`,
-    `Message-ID: <${messageId}@agent-to-entrepreneurship.local>`,
+    `Message-ID: <${messageId}@study-anchor.local>`,
     `From: <${from}>`,
     `To: ${draft.to.map(address => `<${address}>`).join(", ")}`,
     `Subject: =?UTF-8?B?${subject}?=`,
+    ...(draft.replyMessageId ? [`In-Reply-To: ${draft.replyMessageId}`, `References: ${draft.replyMessageId}`] : []),
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: base64",

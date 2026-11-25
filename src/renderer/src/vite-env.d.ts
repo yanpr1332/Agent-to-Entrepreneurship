@@ -10,6 +10,7 @@ import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPers
 
 import type {
   CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
+  MailDraftSaveInput, MailSavedDraft,
 } from "../../shared/mail-model";
 import type {MailAISelection,MailAIApply,MailAIReview} from "../../shared/mail-ai";
 import type {RecoveryPreview,RecoveryResult,RecoveryConfirmation} from "../../shared/recovery-model";
@@ -70,6 +71,10 @@ declare global {
         status: () => Promise<MailSyncState>;
         connect: (input: CampusMailConnectInput) => Promise<MailSyncState>;
         list: () => Promise<MailRecord[]>;
+        readBody: (record: MailRecord) => Promise<string>;
+        savedDrafts: () => Promise<MailSavedDraft[]>;
+        saveDraft: (draft: MailDraftSaveInput) => Promise<MailSavedDraft>;
+        deleteDraft: (id: string) => Promise<{deleted:true}>;
         candidates: () => Promise<MailCandidate[]>;
         aiPrepare: (selection:MailAISelection) => Promise<AIPreview>;
         aiConfirm: (approvalId:string) => Promise<MailAIReview>;

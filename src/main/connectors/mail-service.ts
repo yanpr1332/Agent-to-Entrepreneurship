@@ -3,11 +3,13 @@ import {
   parseCampusMailCredentials, parseMailDraft,
   type CampusMailCredentials, type MailDraft,
   type MailRecord, type MailSendPreview, type MailSyncState,
+  type MailDraftSaveInput, type MailSavedDraft,
 } from "../../shared/mail-model";
 import { ImapInboxReader } from "./mail-imap";
 import { SmtpSender } from "./mail-smtp";
 import { CampusMailVault } from "./mail-vault";
 import { CampusMailStore } from "./mail-store";
+import { CampusMailDraftVault } from "./mail-drafts";
 
 const POLL_MINUTES = 10;
 const SEND_CONFIRM_WINDOW_MS = 2 * 60 * 1000;
@@ -32,6 +34,7 @@ export class CampusMailService {
     private readonly reader: Pick<ImapInboxReader,"readRecent"> & Partial<Pick<ImapInboxReader,"readBody">> = new ImapInboxReader(),
     private readonly sender: Pick<SmtpSender,"send"> = new SmtpSender(),
     private readonly notify: () => void = () => {},
+    private readonly drafts: CampusMailDraftVault | null = null,
   ) {}
 
   snapshot(): MailSyncState {
@@ -122,6 +125,9 @@ export class CampusMailService {
   /** Only called after UI consent. Fetches one approved cached UID in read-only
    * mode, validates the original envelope and drops body after the preview. */
   async readApprovedBody(record:MailRecord):Promise<string>{
+    if (!record || typeof record !== "object" ||
+        typeof record.account !== "string" || !Number.isSafeInteger(record.uid) ||
+        !Number.isSafeInteger(record.uidValidity)) throw Error("Invalid mail body selection");
     const generation=this.generation;
     const credentials=await this.vault.load();
     if(!credentials||credentials.email!==record.account)
@@ -156,10 +162,43 @@ export class CampusMailService {
     this.pending=null;
     this.sendIntent=null;
     await this.vault.clear();
-    if (saved) this.store.clear(saved.email);
+    // Draft bodies are separate from mail headers and must be purged explicitly.
+    try { await this.drafts?.clear(); }
+    finally { if (saved) this.store.clear(saved.email); }
     this.state={connected:false,email:null,running:false,
       lastAttempt:null,lastSuccess:null,lastError:null,messageCount:0};
     this.notify();
+  }
+
+  /** Drafts are encrypted locally and never synced or sent automatically. */
+  async listSavedDrafts(): Promise<MailSavedDraft[]> {
+    const generation = this.generation;
+    const credentials = await this.vault.load();
+    if (!credentials || generation !== this.generation) return [];
+    const saved = await this.drafts?.list(credentials.email) ?? [];
+    if (generation !== this.generation) throw Error("Mailbox authorization changed");
+    return saved;
+  }
+
+  async saveDraft(input: unknown): Promise<MailSavedDraft> {
+    const generation = this.generation;
+    const credentials = await this.vault.load();
+    if (!credentials || generation !== this.generation)
+      throw Error("Connect your mailbox before saving a draft");
+    if (!this.drafts) throw Error("Encrypted draft storage is unavailable");
+    const saved = await this.drafts.save(credentials.email, input as MailDraftSaveInput);
+    if (generation !== this.generation) throw Error("Mailbox authorization changed");
+    return saved;
+  }
+
+  async deleteDraft(id: unknown): Promise<void> {
+    const generation = this.generation;
+    const credentials = await this.vault.load();
+    if (!credentials || generation !== this.generation)
+      throw Error("Connect your mailbox before deleting a draft");
+    if (!this.drafts) throw Error("Encrypted draft storage is unavailable");
+    await this.drafts.remove(credentials.email, id);
+    if (generation !== this.generation) throw Error("Mailbox authorization changed");
   }
 
   /** Preview is a required manual step before the confirmation nonce is valid. */
