@@ -11,6 +11,7 @@ import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPers
 import type {
   CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
 } from "../shared/mail-model";
+import type {MailAISelection,MailAIApply,MailAIReview} from "../shared/mail-ai";
 import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } from "../shared/mail-candidates";
 
 import type {WorkspaceHistoryItems,WorkspaceHistoryMarker} from "../shared/workspace-history-contract";
@@ -72,6 +73,14 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.mailConnect, input) as Promise<MailSyncState>,
     list: () => ipcRenderer.invoke(IPC_CHANNELS.mailList) as Promise<MailRecord[]>,
     candidates: () => ipcRenderer.invoke(IPC_CHANNELS.mailCandidates) as Promise<MailCandidate[]>,
+    aiPrepare: (selection:MailAISelection) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailAIPrepare,selection) as Promise<AIPreview>,
+    aiConfirm: (approvalId:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailAIConfirm,approvalId) as Promise<MailAIReview>,
+    aiApply: (input:MailAIApply) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailAIApply,input) as Promise<MailCandidateChoiceResult>,
+    aiCancel: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailAICancel) as Promise<{canceled:true}>,
     reviewCandidate: (choice: MailCandidateChoice) =>
       ipcRenderer.invoke(IPC_CHANNELS.mailReviewCandidate, choice) as Promise<MailCandidateChoiceResult>,
     syncNow: () => ipcRenderer.invoke(IPC_CHANNELS.mailSyncNow) as Promise<MailSyncState>,
