@@ -26,7 +26,8 @@
 - **手动输入**：在 AI 学习助手填写个人项目 API Key，使用 Electron 系统凭据加密存储；不明文写入 SQLite 或普通配置文件。
 - **环境变量**：在启动 Study Anchor 前设置 `OPENAI_API_KEY`。Electron Main 进程直接读取，Preload/Renderer 不接触密钥；环境变量 Key 不写入凭据库、SQLite 或日志。
 - **优先级**：本机已加密保存的 Key 优先；没有本机 Key 时才使用环境变量。AI 设置页显示当前来源。删除本机 Key 后，如果环境变量存在会自动切换；环境变量本身由用户在操作系统中管理。
-- Windows 安装版：在“系统属性 → 高级 → 环境变量”中创建当前用户变量 `OPENAI_API_KEY`，保存后完全退出并重新启动 Study Anchor（必要时重新登录 Windows）。开发时也可在 PowerShell 当前会话先设置 `$env:OPENAI_API_KEY = "sk-..."` 再运行 `npm run dev`；注意不要把真实 Key 提交到脚本或终端历史。\n- macOS 开发时可从终端用 `OPENAI_API_KEY="sk-..." npm run dev` 启动。Finder 启动的安装版通常不会继承 shell profile 中的变量；当前登录会话可由用户 launchd 环境提供（例如 `launchctl setenv OPENAI_API_KEY "sk-..."`），然后重新打开应用；移除可用 `launchctl unsetenv OPENAI_API_KEY`。命令行设置可能留在 shell 历史中，谨慎使用。
+- Windows 安装版：在“系统属性 → 高级 → 环境变量”中创建当前用户变量 `OPENAI_API_KEY`，保存后完全退出并重新启动 Study Anchor（必要时重新登录 Windows）。开发时也可在 PowerShell 当前会话先设置 `$env:OPENAI_API_KEY = "sk-..."` 再运行 `npm run dev`；注意不要把真实 Key 提交到脚本或终端历史。
+- macOS 开发时可从终端用 `OPENAI_API_KEY="sk-..." npm run dev` 启动。Finder 启动的安装版通常不会继承 shell profile 中的变量；当前登录会话可由用户 launchd 环境提供（例如 `launchctl setenv OPENAI_API_KEY "sk-..."`），然后重新打开应用；移除可用 `launchctl unsetenv OPENAI_API_KEY`。命令行设置可能留在 shell 历史中，谨慎使用。
 - 环境变量通常以进程环境明文存在，便利性高于安全性；安装版日常使用优先建议手动输入并使用系统凭据加密。仓库不自动加载 `.env` 文件，禁止把 Key 写入 Git 或提交任何含 Key 的文件。环境变量只在应用启动时读取；运行中变更需要重启应用。
 
 ## 验证计划（不可混淆）
