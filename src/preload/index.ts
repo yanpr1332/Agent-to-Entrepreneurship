@@ -28,7 +28,8 @@ import type {
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport, KnowledgeEvidenceExportResult, KnowledgeEvidenceCatalogPage, KnowledgeLocalLabels, KnowledgeLabelsSaveResult,
+  KnowledgeReviewCard, ReviewCardInput, ReviewCardEditInput, ReviewCardRebindInput,
+  ReviewCardEvidenceHistory, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport, KnowledgeEvidenceExportResult, KnowledgeEvidenceCatalogPage, KnowledgeLocalLabels, KnowledgeLabelsSaveResult,
 } from "../shared/knowledge-model";
 
 import type {
@@ -267,6 +268,12 @@ const desktopApi = Object.freeze({
         Promise<KnowledgeLabelsSaveResult|null>,
     cards: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCards) as Promise<KnowledgeReviewCard[]>,
     createCard: (input: ReviewCardInput) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCreateCard,input) as Promise<KnowledgeReviewCard>,
+    editCard: (input:ReviewCardEditInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeEditCard,input) as Promise<KnowledgeReviewCard>,
+    rebindCard: (input:ReviewCardRebindInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeRebindCard,input) as Promise<KnowledgeReviewCard>,
+    cardEvidenceHistory: (id:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeCardEvidenceHistory,id) as Promise<ReviewCardEvidenceHistory[]>,
     removeCard: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeRemoveCard,id) as Promise<boolean>,
     reviewCard: (id: string, rating: ReviewRating) =>
       ipcRenderer.invoke(IPC_CHANNELS.knowledgeReviewCard,id,rating) as Promise<KnowledgeReviewCard>,

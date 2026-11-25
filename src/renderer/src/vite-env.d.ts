@@ -28,7 +28,8 @@ import type {
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport, KnowledgeEvidenceExportResult, KnowledgeEvidenceCatalogPage, KnowledgeLocalLabels, KnowledgeLabelsSaveResult,
+  KnowledgeReviewCard, ReviewCardInput, ReviewCardEditInput, ReviewCardRebindInput,
+  ReviewCardEvidenceHistory, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport, KnowledgeEvidenceExportResult, KnowledgeEvidenceCatalogPage, KnowledgeLocalLabels, KnowledgeLabelsSaveResult,
 } from "../../shared/knowledge-model";
 
 import type {
@@ -183,6 +184,9 @@ declare global {
         saveEvaluationLabels: (consent:boolean,labels:KnowledgeLocalLabels) => Promise<KnowledgeLabelsSaveResult|null>;
         cards: () => Promise<KnowledgeReviewCard[]>;
         createCard: (input: ReviewCardInput) => Promise<KnowledgeReviewCard>;
+        editCard: (input:ReviewCardEditInput) => Promise<KnowledgeReviewCard>;
+        rebindCard: (input:ReviewCardRebindInput) => Promise<KnowledgeReviewCard>;
+        cardEvidenceHistory: (id:string) => Promise<ReviewCardEvidenceHistory[]>;
         removeCard: (id: string) => Promise<boolean>;
         reviewCard: (id: string, rating: ReviewRating) => Promise<KnowledgeReviewCard>;
         progress: () => Promise<ReviewProgress>;

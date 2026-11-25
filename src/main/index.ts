@@ -566,6 +566,18 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return knowledge().createCard(body);
   });
+  handle(IPC_CHANNELS.knowledgeEditCard,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return knowledge().editCard(input);
+  });
+  handle(IPC_CHANNELS.knowledgeRebindCard,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return knowledge().rebindCardEvidence(input);
+  });
+  handle(IPC_CHANNELS.knowledgeCardEvidenceHistory,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return knowledge().cardEvidenceHistory(id);
+  });
   handle(IPC_CHANNELS.knowledgeRemoveCard, (event,id:unknown) => {
     requireTrustedSender(event);
     return knowledge().removeCard(id);
@@ -1007,7 +1019,7 @@ app.whenReady().then(async () => {
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
     await backupBeforeMigration(app.getPath("userData"),"study-anchor-tasks.sqlite",10);
-    await backupBeforeMigration(app.getPath("userData"),"study-anchor-knowledge.sqlite",5);
+    await backupBeforeMigration(app.getPath("userData"),"study-anchor-knowledge.sqlite",6);
     await backupBeforeMigration(app.getPath("userData"),"study-anchor-calendar.sqlite",5);
     await backupBeforeMigration(app.getPath("userData"),"study-anchor-planning.sqlite",2);
     store = new LocalStore(join(app.getPath("userData"), "study-anchor-tasks.sqlite"));
