@@ -158,7 +158,7 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
           <h1>Canvas 自动同步</h1>
           <p>连接后默认同步当前课程作业和近期日历事项，个人任务及 Canvas 日历项可单独显示或隐藏。</p>
         </div>
-        <span className="count-chip">{status.connected ? "Canvas 已连接" : "尚未连接"}</span>
+        <span className="count-chip" role="status">{syncStatus?.running ? "同步中…" : status.connected ? "Canvas 已连接" : "尚未连接"}</span>
       </div>
       <div className="connector-warning" role="note">
         <strong>个人 API Token 仅供开发者本人在本机验证。</strong>
@@ -169,7 +169,7 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
       {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={() => setError("")}>关闭</button></div>}
       {notice && <div className="connector-notice" role="status">{notice}</div>}
       <div className="connector-layout">
-        <section className="panel">
+        <section className="panel connector-settings">
           <div className="eyebrow">CONNECTION</div>
           <h2>连接设置</h2>
           {status.connected ? (
@@ -204,7 +204,7 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
             </form>
           )}
         </section>
-        <section className="panel">
+        <section className="panel connector-courses">
           <div className="eyebrow">COURSE SCOPE</div>
           <h2>当前课程同步范围</h2>
           {!status.connected ? <p className="empty-state">连接 Canvas 后将显示授权课程。</p> :
