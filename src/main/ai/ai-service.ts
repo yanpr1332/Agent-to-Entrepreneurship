@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
-  AI_DEFAULT_MODEL, AI_MODEL_DEFAULTS, AI_DAILY_REQUEST_CAP, AI_OUTPUT_TOKEN_CAP, AI_PREVIEW_TTL_MS,
+  AI_MODEL_DEFAULTS, AI_DAILY_REQUEST_CAP, AI_OUTPUT_TOKEN_CAP, AI_PREVIEW_TTL_MS,
   parseAIProvider,
   parseAIPrompt, parseAIApprovalId, parseAIConnect,
   type AIAnswer, type AIStatus, type AIPreview, type AIPrivateSettings, type AIKeySource,
@@ -126,7 +126,7 @@ export class AIService {
 
   prepare(promptInput:unknown,now=new Date()):AIPreview {
     const prompt=parseAIPrompt(promptInput);
-    if(!this.active)throw Error("Connect your own OpenAI project key or set OPENAI_API_KEY first");
+    if(!this.active)throw Error("Connect your own AI provider API key or set a supported API_KEY environment variable first");
     if(this.inflight)throw Error("An AI request is already in progress");
     if(this.ledger.today(now).remaining===0)throw Error("Daily AI request limit reached (UTC)");
     const id=randomUUID(),expires=now.getTime()+AI_PREVIEW_TTL_MS;
