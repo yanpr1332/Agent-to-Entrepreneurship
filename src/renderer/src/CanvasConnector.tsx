@@ -19,6 +19,7 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
   const [status, setStatus] = useState<CanvasConnectionStatus>(disconnected);
   const [baseUrl, setBaseUrl] = useState("https://oc.sjtu.edu.cn");
   const [token, setToken] = useState("");
+  const [showReconnect, setShowReconnect] = useState(false);
   const [courses, setCourses] = useState<CanvasCourse[]>([]);
   const [courseSettings, setCourseSettings] = useState<CanvasCourseSetting[]>([]);
   const [courseId, setCourseId] = useState<number | null>(null);
@@ -66,7 +67,7 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
       const connected = await window.desktop.canvas.connect({ baseUrl, token });
       setStatus(connected.status);
       setCourses(connected.courses);
-      setToken("");
+      setToken("");setShowReconnect(false);
       setCourseSettings(await window.desktop.canvas.courseSettings());
       setAssignments([]);
       setCourseId(null);
@@ -136,7 +137,7 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
       setCourseSettings([]);
       setCourses([]);
       setAssignments([]);
-      setToken("");
+      setToken("");setShowReconnect(false);
       setCourseId(null);
       setNotice("Canvas 已断开，本机加密 Token 已删除。本地已同步任务仍在。");
     } catch (reason) {
@@ -172,7 +173,7 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
         <section className="panel connector-settings">
           <div className="eyebrow">CONNECTION</div>
           <h2>连接设置</h2>
-          {status.connected ? (
+          {status.connected && !showReconnect ? (
             <>
               <p className="help-text">连接方式：开发者个人 Token（系统加密保存）</p>
               <p className="connector-host">{status.baseUrl}</p>
@@ -187,6 +188,10 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
               </div>
               <div className="runtime-line"><span>上次成功同步</span><strong>{dateText(syncStatus?.lastSuccess ?? null)}</strong></div>
               {syncStatus?.lastError && <p className="error-message" role="status">{syncStatus.lastError}</p>}
+              {syncStatus?.failureKind==="authentication" && <button type="button" className="primary-button"
+                disabled={loading} onClick={()=>{setToken("");setShowReconnect(true);}}>
+                使用新的个人 Token 重新授权
+              </button>}
             </>
           ) : (
             <form className="connector-form" onSubmit={(event) => void connect(event)}>
@@ -199,8 +204,11 @@ export default function CanvasConnector({ onTasksChanged }: { onTasksChanged: ()
                   onChange={(event) => setToken(event.target.value)} />
               </label>
               <button className="primary-button full-width" disabled={loading || !token.trim()}>
-                {loading ? "正在连接…" : "连接并自动同步作业"}
+                {loading ? "正在连接…" : showReconnect ? "验证并替换加密 Token" : "连接并自动同步作业"}
               </button>
+              {showReconnect&&<button className="secondary-button" type="button" disabled={loading}
+                onClick={()=>{setShowReconnect(false);setToken("");}}>取消重新授权</button>}
+              {showReconnect&&<p className="privacy-note">旧课程和任务保持不变；验证新 Token 的课程和身份均成功后才替换加密凭据。不会把个人 Token 分享给小组成员。</p>}
             </form>
           )}
         </section>
