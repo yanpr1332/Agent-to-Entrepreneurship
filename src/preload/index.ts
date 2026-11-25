@@ -28,7 +28,7 @@ import type {
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport, KnowledgeEvidenceExportResult,
+  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport, KnowledgeEvidenceExportResult, KnowledgeEvidenceCatalogPage, KnowledgeLocalLabels, KnowledgeLabelsSaveResult,
 } from "../shared/knowledge-model";
 
 import type {
@@ -259,6 +259,12 @@ const desktopApi = Object.freeze({
     exportEvidenceCatalog: (consent:boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.knowledgeExportEvidenceCatalog,consent) as
         Promise<KnowledgeEvidenceExportResult|null>,
+    evidencePage: (offset:number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeEvidencePage,offset) as
+        Promise<KnowledgeEvidenceCatalogPage>,
+    saveEvaluationLabels: (consent:boolean,labels:KnowledgeLocalLabels) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeSaveEvaluationLabels,consent,labels) as
+        Promise<KnowledgeLabelsSaveResult|null>,
     cards: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCards) as Promise<KnowledgeReviewCard[]>,
     createCard: (input: ReviewCardInput) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCreateCard,input) as Promise<KnowledgeReviewCard>,
     removeCard: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeRemoveCard,id) as Promise<boolean>,

@@ -55,6 +55,14 @@ npm run build
 
 **仍需单独手动验收：** 真实 Windows/macOS 安装包中通过系统文件选择器导出证据、加载非合成标注并比较词向量表现，观察持续索引下的 CPU/内存与长时间使用；真实双语检索的质量不能仅凭单元测试确认。
 
+## 新增：无需手写 JSON 的本机人工标注工具（005C 续篇）
+
+- 知识库页面提供「开始创建人工标注集」：用户输入自己的检索问题，分页（每页最多 50 条）浏览本机证据目录，**不是只能从模型已命中的搜索结果中选**。跨页勾选 1–20 条相关原文，最多 100 条案例；删除、重新编辑当前查询不更改数据库内容。
+- 前端预检，Main 再次严格校验同一 `schema:1/cases` 协议。新增只读、固定分页 `knowledge:embedding-evidence-page` 与确认后通过 Electron **原生保存对话框**导出标签的 `knowledge:embedding-save-labels`。Renderer 不接受任意文件路径/SQL；Main 对来源文档 revision+ordinal 逐一回读后写入。
+- 文件使用 Node `wx` 独占创建和仅当前用户模式（受 OS 权限语义限制）；拒绝已有文件、软链接、超 128 KiB、错误结构、失效原文。用户可以随后选择自己保存的 JSON 进行原有词向量/词法成对评测。已导出目录仍可作为离线审查和大批量人工标注的辅助文件。
+- **这不是自动生成真值或公开数据集**。用户必须自己判定、尽可能勾选全部相关证据；只选搜索命中的结果会造成评测偏差，尤其要审查漏召回证据。私有原文摘要、用户问题和标签不会上传；导出到用户选定的位置后，由用户保护文件。
+- 回归包括证据分页、规范化标签保存、重复/越权/格式错误/旧引用拦截、不覆盖已有文件及 Renderer 约束；Electron Windows/macOS 真实 SaveDialog 与用户标注质量仍须人工验收。
+
 ## 后续神经 Embedding 独立批次
 
 已研究的本机推理方案包括 Transformers.js 的 `env.allowRemoteModels=false` 和 `env.localModelPath`，以及 `intfloat/multilingual-e5-small` 的 ONNX 文件与 MIT 许可；但**本次没有给 npm 增加无法核验的依赖、没有提交不完整 package-lock、没有下载或打包权重**。后续提交必须独立审查 runtime/ONNX native binary 的 Windows/macOS 兼容性、离线 tokenizer/池化与前缀协议，固定所有模型文件 SHA-256 和权重许可证；在隔离 CI 中验证真实推理、资源上限、5–10 条基线和至少 30–100 条真实中英标签，再面向用户开放。
