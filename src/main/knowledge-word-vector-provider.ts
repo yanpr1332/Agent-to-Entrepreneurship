@@ -71,15 +71,26 @@ export class OfflineWordVectorWorker implements LocalEmbeddingProvider {
       this.worker.postMessage({...req,id});
     });
   }
-  async embed(texts:readonly string[],kind:"passage"|"query"):
-    Promise<readonly (readonly number[])[]>{
+  private async ask(texts:readonly string[],kind:"passage"|"query"):
+    Promise<readonly (readonly number[]|null)[]>{
     if(!Array.isArray(texts)||texts.length<1||texts.length>16||
       texts.some(x=>typeof x!=="string"||x.length<1||x.length>2200))
       throw Error("Invalid offline embedding batch");
     const reply=await this.request({type:"embed",texts,kind},EMBED_TIMEOUT);
     if(!Array.isArray(reply.values)||reply.values.length!==texts.length)
       throw Error("Offline model returned invalid embedding count");
-    return reply.values as number[][];
+    return reply.values as (number[]|null)[];
+  }
+  async embed(texts:readonly string[],kind:"passage"|"query"):
+    Promise<readonly (readonly number[])[]>{
+    const values=await this.ask(texts,kind);
+    if(values.some(v=>v===null))
+      throw Error("No known words in this offline embedding passage");
+    return values as number[][];
+  }
+  embedPassages(texts:readonly string[]):
+    Promise<readonly (readonly number[]|null)[]>{
+    return this.ask(texts,"passage");
   }
   close():void{this.abort("Offline embedding worker closed");}
 }
