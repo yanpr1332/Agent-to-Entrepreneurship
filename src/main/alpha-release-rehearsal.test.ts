@@ -94,6 +94,10 @@ describe("ALPHA-RC real local eight-module rehearsal and isolated recovery",()=>
 
     // Synthetic Canvas assignments and events enter the SAME task/calendar
     // stores as manual work. Repeated syncs must be idempotent.
+    // Canvas civil-calendar slots require exact full-minute boundaries.
+    const eventTime=new Date(now);
+    eventTime.setDate(eventTime.getDate()+1);
+    eventTime.setHours(9,0,0,0);
     const api={
       origin:"https://oc.sjtu.edu.cn",getCurrentUserId:async()=>91,
       listCourses:async()=>[{id:5,name:"Synthetic Course",courseCode:"SYN"}],
@@ -101,13 +105,13 @@ describe("ALPHA-RC real local eight-module rehearsal and isolated recovery",()=>
         dueAt:new Date(now.getTime()+3*86400000).toISOString(),
         htmlUrl:null,pointsPossible:50}],
       listCalendarEvents:async()=>[{id:23,courseId:5,title:"Synthetic lecture",
-        startAt:new Date(now.getTime()+86400000).toISOString(),
-        endAt:new Date(now.getTime()+86400000+3600000).toISOString(),
+        startAt:eventTime.toISOString(),
+        endAt:new Date(eventTime.getTime()+3600000).toISOString(),
         allDayDate:null}],
     } as unknown as CanvasApi;
     const canvas=new CanvasSyncService(f.tasks,async()=>api,()=>{},f.calendar);
     f.attachCanvas(canvas);
-    expect((await canvas.sync()).created).toBe(1);
+    expect(await canvas.sync()).toMatchObject({created:1,calendarCreated:1});
     expect((await canvas.sync()).created).toBe(0);
     expect(f.tasks.listTasks()).toHaveLength(3);
     expect(f.calendar.listCanvasEvents(api.origin,91)).toHaveLength(1);
