@@ -1,4 +1,3 @@
-import {isIP} from "node:net";
 export type AIProvider="openai"|"anthropic"|"gemini"|"deepseek"|"compatible";
 export type AIKeySource="saved"|"environment";
 export type AIConfigurationWarning="invalid_environment_key";
@@ -48,7 +47,7 @@ export function parseAIEndpoint(input:unknown):string{
      url.port||url.hostname.endsWith(".")||!host.includes(".")||
      host==="localhost"||host.endsWith(".localhost")||host.endsWith(".local")||
      host.endsWith(".internal")||host.endsWith(".test")||host.endsWith(".invalid")||
-     isIP(host)!==0||/^(?:0x|0[0-9])/.test(host)||!/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(host)||
+     /^[0-9.]+$/.test(host)||host.includes(":")||/^(?:0x|0[0-9])/.test(host)||!/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(host)||
      !/\/chat\/completions\/?$/.test(url.pathname))
     throw Error("Compatible endpoint must be a public HTTPS chat/completions URL");
   return url.toString();
