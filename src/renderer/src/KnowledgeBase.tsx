@@ -4,7 +4,7 @@ import SafeKnowledgePreview from "./SafeKnowledgePreview";
 import KnowledgeAIHelper from "./KnowledgeAIHelper";
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage, KnowledgeEmbeddingStatus,
+  KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport,
 } from "../../shared/knowledge-model";
 
 function detail(error:unknown):string{
@@ -20,6 +20,7 @@ export default function KnowledgeBase(){
   const [query,setQuery]=useState("");
   const [results,setResults]=useState<KnowledgeSearchHit[]>([]);
   const [embeddingStatus,setEmbeddingStatus]=useState<KnowledgeEmbeddingStatus|null>(null);
+  const [evaluation,setEvaluation]=useState<KnowledgeEvaluationReport|null>(null);
   const [cards,setCards]=useState<KnowledgeReviewCard[]>([]);
   const [progress,setProgress]=useState<ReviewProgress>(emptyProgress);
   const [sourceOrdinal,setSourceOrdinal]=useState<number|null>(null);
@@ -170,14 +171,14 @@ export default function KnowledgeBase(){
     await perform(async()=>{
       const status=await window.desktop.knowledge.importOfflineModel(true);
       if(!status)return;
-      setEmbeddingStatus(status);
+      setEmbeddingStatus(status);setEvaluation(null);
       setNotice("离线词向量模型已校验并导入。点击「构建本机语义索引」才会处理已导入的资料。");
     });
   }
   async function startOfflineIndex():Promise<void>{
     await perform(async()=>{
       const status=await window.desktop.knowledge.startOfflineIndex();
-      setEmbeddingStatus(status);
+      setEmbeddingStatus(status);setEvaluation(null);
       setNotice("已开始在本机逐批生成词向量；可取消，已写入的完整批次会保留。");
     });
   }
@@ -194,10 +195,37 @@ export default function KnowledgeBase(){
     await perform(async()=>{
       setEmbeddingStatus(await window.desktop.knowledge.removeOfflineModel(
         "REMOVE_LOCAL_MODEL_AND_VECTORS"));
-      setResults([]);
+      setResults([]);setEvaluation(null);
       setNotice("本机模型副本及当前向量索引已清除，原始知识库资料仍完整保留。");
     });
   }
+
+  async function exportEvidenceCatalog():Promise<void>{
+    if(!window.confirm(
+      "导出的本机 JSON 包含最多 500 个知识库原文片段的标题、引用 ID、PDF 页码和最多 240 字摘要。"+
+      "内容可能涉及你的私人学习资料，请妥善保管、不要上传公共仓库或聊天。"+
+      "文件只会保存到你在系统对话框中选择的位置，已存在文件不会被自动覆盖。继续？"))return;
+    await perform(async()=>{
+      const saved=await window.desktop.knowledge.exportEvidenceCatalog(true);
+      if(saved)setNotice("已将 "+saved.exported+"/"+saved.total+
+        " 条证据引用保存至本机："+saved.path+
+        (saved.truncated?"。超出上限的片段未导出。":"。")+
+        " 请人工填写标注查询与相关证据，不能直接把目录文件当成评测标签。");
+    });
+  }
+  async function evaluateOfflineModel():Promise<void>{
+    if(!window.confirm(
+      "只选择你自己创建的本机 JSON 检索相关性标注文件（最多 100 条查询、128 KiB）。"+
+      "本轮会在此设备上分别运行原始检索与混合检索，不会上传原文、查询或标签。"+
+      "模型需要先完成至少一部分索引，耗时随标注集和设备性能变化。继续？"))return;
+    await perform(async()=>{
+      const result=await window.desktop.knowledge.evaluateOfflineModel(true);
+      if(result){setEvaluation(result);
+        setNotice("本机评测已完成；显示的分数仅适用于所选标注集和当前模型版本，不代表通用多语准确率。");
+      }
+    });
+  }
+  const pct=(value:number)=>Math.round(value*1000)/10+"%";
 
   const dueCards=cards.filter(card=>card.nextDue<=day());
   const currentSource=passage?.body??null;
@@ -252,8 +280,10 @@ export default function KnowledgeBase(){
         <h3>本机词向量语义索引（可选）</h3>
         <p className="privacy-note" role="status">
           {embeddingStatus?.installed
-            ? "已安装静态词向量模型 · 索引 "+embeddingStatus.indexed+"/"+embeddingStatus.total+
-              " 个原文片段。搜索同时使用精确、容错及已建立的本机语义向量。"
+            ? "已安装静态词向量模型 · 已索引 "+embeddingStatus.indexed+
+              " / 不在词表内 "+(embeddingStatus.skipped??0)+
+              " / 待处理 "+(embeddingStatus.pending??0)+
+              " / 总片段 "+embeddingStatus.total+"。搜索保留精确、容错及有效语义证据。"
             : "未启用语义模型：当前只使用精确及容错搜索，不会自动下载任何模型。"}
           {embeddingStatus?.running?" · 正在构建索引，可随时取消。":""}
           {embeddingStatus?.error?" · "+embeddingStatus.error:""}
@@ -269,6 +299,11 @@ export default function KnowledgeBase(){
               disabled={busy||!embeddingStatus.running}
               onClick={()=>void cancelOfflineIndex()}>取消索引</button>
             <button type="button" className="secondary-button" disabled={busy}
+              onClick={()=>void exportEvidenceCatalog()}>导出证据目录（供手动标注）</button>
+            <button type="button" className="secondary-button"
+              disabled={busy||embeddingStatus.running||!embeddingStatus.indexed}
+              onClick={()=>void evaluateOfflineModel()}>用本地标注集评测检索</button>
+            <button type="button" className="secondary-button" disabled={busy}
               onClick={()=>void removeOfflineModel()}>卸载本机模型与向量</button>
           </>}
         </div>
@@ -276,7 +311,32 @@ export default function KnowledgeBase(){
           仅支持用户自备的有词表标题行的 UTF-8 静态词向量；不是 E5/BGE Transformer。
           中文词表覆盖率不足或未命中时自动保留原有搜索结果。权重来源与使用许可需你自行核对，
           文件不会被上传，也不会读取原始资料路径以外的文件。
+          不在词表里的片段会标为“跳过”，不会阻断后续资料，也不会填充伪造向量。
         </p>
+        {evaluation&&<div className="kb-evaluation" role="status">
+          <strong>本机标注检索评测 · {evaluation.cases} 条查询</strong>
+          <p>模型版本：{evaluation.modelRevision.slice(0,12)} ·
+            索引 {evaluation.indexed} · 跳过 {evaluation.skipped} · 待处理 {evaluation.pending}</p>
+          <table>
+            <thead><tr><th>指标</th><th>精确＋容错</th><th>混合检索</th></tr></thead>
+            <tbody>
+              <tr><td>Precision@5</td><td>{pct(evaluation.baseline.precisionAt5)}</td>
+                <td>{pct(evaluation.hybrid.precisionAt5)}</td></tr>
+              <tr><td>Recall@10</td><td>{pct(evaluation.baseline.recallAt10)}</td>
+                <td>{pct(evaluation.hybrid.recallAt10)}</td></tr>
+              <tr><td>MRR@10</td><td>{evaluation.baseline.mrrAt10.toFixed(3)}</td>
+                <td>{evaluation.hybrid.mrrAt10.toFixed(3)}</td></tr>
+              <tr><td>P50 查询延迟</td><td>{evaluation.latencyMs.lexicalP50} ms</td>
+                <td>{evaluation.latencyMs.hybridP50} ms</td></tr>
+              <tr><td>P95 查询延迟</td><td>{evaluation.latencyMs.lexicalP95} ms</td>
+                <td>{evaluation.latencyMs.hybridP95} ms</td></tr>
+            </tbody>
+          </table>
+          <p className="privacy-note">
+            含语义候选的查询：{evaluation.semanticCases}/{evaluation.cases}。
+            仅比较此标注集的证据命中，不能推断模型对所有中文/英文问题的准确率。
+          </p>
+        </div>}
       </div>
       {results.length>0&&<section className="panel kb-results">
         <div className="eyebrow">TRACEABLE EXCERPTS</div><h2>搜索结果 · {results.length} 条</h2>

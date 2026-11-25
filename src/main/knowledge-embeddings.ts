@@ -18,6 +18,11 @@ export interface LocalEmbeddingProvider {
    * user-installed, hash-verified on-disk model assets only. */
   embed(texts:readonly string[],kind:"passage"|"query"):
     Promise<readonly (readonly number[])[]>;
+  /** null means the passage has zero known vocabulary coverage. It must
+   * never be converted to a fabricated nonzero vector; Main records a
+   * revision-pinned skip instead. Query embeddings remain strict. */
+  embedPassages?(texts:readonly string[]):
+    Promise<readonly (readonly number[]|null)[]>;
 }
 export const MAX_LOCAL_EMBEDDINGS=6000;
 export const MAX_EMBED_BATCH=16;

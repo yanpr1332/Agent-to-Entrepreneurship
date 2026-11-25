@@ -29,7 +29,15 @@ port.on("message",(raw:unknown)=>{
       req.texts.some(x=>typeof x!=="string"||x.length>2200)||
       (req.kind!=="query"&&req.kind!=="passage"))
       throw Error("Invalid local inference request");
-    const values=req.texts.map(x=>staticWordVector(x,active!));
+    const values=req.texts.map(x=>{
+      try{return staticWordVector(x,active!);}
+      catch(error){
+        if(req.kind==="passage"&&error instanceof Error&&
+          error.message==="No known words in this offline embedding passage")
+          return null;
+        throw error;
+      }
+    });
     port.postMessage({id,ok:true,values});
   }catch{
     // Never send model paths, raw user passages, parsed content or stack traces

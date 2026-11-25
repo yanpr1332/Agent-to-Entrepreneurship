@@ -28,7 +28,7 @@ import type {
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus,
+  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport, KnowledgeEvidenceExportResult,
 } from "../shared/knowledge-model";
 
 import type {
@@ -253,6 +253,12 @@ const desktopApi = Object.freeze({
     removeOfflineModel: (confirmation:"REMOVE_LOCAL_MODEL_AND_VECTORS") =>
       ipcRenderer.invoke(IPC_CHANNELS.knowledgeRemoveOfflineModel,confirmation) as
         Promise<KnowledgeEmbeddingStatus>,
+    evaluateOfflineModel: (consent:boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeEvaluateOfflineModel,consent) as
+        Promise<KnowledgeEvaluationReport|null>,
+    exportEvidenceCatalog: (consent:boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeExportEvidenceCatalog,consent) as
+        Promise<KnowledgeEvidenceExportResult|null>,
     cards: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCards) as Promise<KnowledgeReviewCard[]>,
     createCard: (input: ReviewCardInput) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCreateCard,input) as Promise<KnowledgeReviewCard>,
     removeCard: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeRemoveCard,id) as Promise<boolean>,

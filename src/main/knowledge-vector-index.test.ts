@@ -70,7 +70,7 @@ describe("ALPHA-KB-005A persisted local vectors and revision-safe search",()=>{
     const header=sqlite.prepare("PRAGMA user_version").get() as {user_version:number};
     const saved=sqlite.prepare("SELECT vector,dimension FROM knowledge_vectors LIMIT 1")
       .get() as {vector:Buffer;dimension:number};
-    expect(header.user_version).toBe(4);
+    expect(header.user_version).toBe(5);
     expect(saved.dimension).toBe(3);
     expect(saved.vector).toHaveLength(12);
     sqlite.close();
@@ -165,7 +165,7 @@ describe("ALPHA-KB-005A persisted local vectors and revision-safe search",()=>{
     importText(store,"/archive.md","Archive","Local import survives");
     close(store);
     const old=new DatabaseSync(path);
-    old.exec("DROP TABLE knowledge_vectors; DROP TABLE knowledge_vector_config; PRAGMA user_version=3");
+    old.exec("DROP TABLE knowledge_vector_skips; DROP TABLE knowledge_vectors; DROP TABLE knowledge_vector_config; PRAGMA user_version=3");
     old.close();
     const reopened=new KnowledgeStore(path);stores.push(reopened);
     expect(reopened.embeddingStatus()).toMatchObject({model:null,indexed:0,total:1});

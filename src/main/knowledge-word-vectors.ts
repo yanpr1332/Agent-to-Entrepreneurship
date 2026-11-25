@@ -97,8 +97,25 @@ export function staticWordVector(text:string,model:StaticWordVectors):number[]{
 /** Useful for isolated tests and offline benchmarking; production inference
  * uses the same parser/algorithm inside a dedicated Node Worker. */
 export function staticWordVectorProvider(data:StaticWordVectors):LocalEmbeddingProvider{
-  return {model:modelForStaticVectors(data),async embed(texts){
-    if(texts.length<1||texts.length>16)throw Error("Offline embedding batch exceeds limit");
-    return texts.map(text=>staticWordVector(text,data));
-  }};
+  const check=(texts:readonly string[])=>{
+    if(texts.length<1||texts.length>16)
+      throw Error("Offline embedding batch exceeds limit");
+  };
+  return {model:modelForStaticVectors(data),
+    async embed(texts){
+      check(texts);
+      return texts.map(text=>staticWordVector(text,data));
+    },
+    async embedPassages(texts){
+      check(texts);
+      return texts.map(text=>{
+        try{return staticWordVector(text,data);}
+        catch(error){
+          if(error instanceof Error&&error.message==="No known words in this offline embedding passage")
+            return null;
+          throw error;
+        }
+      });
+    },
+  };
 }

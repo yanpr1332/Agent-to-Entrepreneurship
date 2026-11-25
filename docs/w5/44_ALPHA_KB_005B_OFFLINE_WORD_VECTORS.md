@@ -50,8 +50,12 @@ npm run build
 
 `npm run build` 在 `electron-vite build` 后附加执行 `node scripts/verify-offline-worker.mjs`，**真正从 Windows/macOS 的构建产物启动 Worker**，加载临时 UTF-8 词向量，并校验查询编码和未知词失败。其余测试覆盖本地安装、SHA、权限/路径约束、词表解析、中文词典匹配、旧库重启、实际 Indexed SQLite 混合检索、增量续传、模型卸载、用户原文件保留及取消前事务检查。
 
+## 后续 005C 的可靠性修复
+
+[45](45_ALPHA_KB_005C_INDEX_COVERAGE_EVALUATION.md) 开始增加 SQLite v5 持久词表外跳过与真正可执行的本机标注评测：避免旧版在第一条未登录词汇的原文块上无限重试/中止，明确展示索引覆盖率。**该改造不等于 ONNX/E5/BGE 神经模型已落地。**
+
 ## 后续迭代（尚未交付）
 
-- **KB-005C：** 明确审核本机 Transformers.js/ONNX Runtime 的版本和许可证，集成可被用户主动选择、固定 SHA 的 multilingual-e5-small / BGE-zh 真正神经编码器，在独立推理进程做实际 tokenizer 分段、池化和归一化；支持更大模型、下载中断恢复、配置/运行时签名、内存预算以及性能及双语质量对比。
+- **后续神经模型专项：** 明确审核本机 Transformers.js/ONNX Runtime 的版本和许可证，集成可被用户主动选择、固定 SHA 的 multilingual-e5-small / BGE-zh 真正神经编码器，在独立推理进程做实际 tokenizer 分段、池化和归一化；支持更大模型、下载中断恢复、配置/运行时签名、内存预算以及性能及双语质量对比。
 - 对真实用户安装包进行 Windows/macOS 端到端 GUI：本机确认、导入文件、索引中断、文件恢复、OCR 以外的 PDF 页码证据、误用模型/许可提醒、系统离线和原文删除等。
 - 多账号云 RLS 验收仍是独立的 ALPHA-SYNC 门槛，本轮不部署 Supabase SQL 或变更 Canvas/email/privacy 隔离。
