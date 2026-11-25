@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc-channels";
 import type {
   CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary, FocusInsights, FocusReward, FocusRewardOverview, FocusRewardCreateInput,
-  FocusRewardEditInput, FocusRewardRedeemInput, FocusRewardRedemption, FocusTitleUpdate,
+  FocusRewardEditInput, FocusRewardRedeemInput, FocusRewardRedemption, FocusGuardStartInput, FocusGuardStatus, FocusTitleUpdate,
   LocalTask, UpdateTaskInput,
 } from "../shared/local-model";
 
@@ -259,6 +259,9 @@ const desktopApi = Object.freeze({
     importOfflineModel: (acknowledged:boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.knowledgeImportOfflineModel,acknowledged) as
         Promise<KnowledgeEmbeddingStatus|null>,
+    importNeuralModel: (accepted:boolean,kind:"e5"|"bge") =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeImportNeuralModel,accepted,kind) as
+        Promise<KnowledgeEmbeddingStatus|null>,
     startOfflineIndex: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeStartOfflineIndex) as Promise<KnowledgeEmbeddingStatus>,
     cancelOfflineIndex: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCancelOfflineIndex) as Promise<KnowledgeEmbeddingStatus>,
     removeOfflineModel: (confirmation:"REMOVE_LOCAL_MODEL_AND_VECTORS") =>
@@ -301,6 +304,12 @@ const desktopApi = Object.freeze({
     summary: () => ipcRenderer.invoke(IPC_CHANNELS.focusSummary) as Promise<FocusSummary>,
     insights: (timeZone:string) =>
       ipcRenderer.invoke(IPC_CHANNELS.focusInsights,timeZone) as Promise<FocusInsights>,
+    guardStart: (input:FocusGuardStartInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusGuardStart,input) as Promise<FocusGuardStatus>,
+    guardStatus: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusGuardStatus) as Promise<FocusGuardStatus>,
+    guardStop: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusGuardStop) as Promise<FocusGuardStatus>,
     rewards: () => ipcRenderer.invoke(IPC_CHANNELS.focusRewards) as Promise<FocusRewardOverview>,
     createReward: (input:FocusRewardCreateInput) =>
       ipcRenderer.invoke(IPC_CHANNELS.focusRewardCreate,input) as Promise<FocusReward>,

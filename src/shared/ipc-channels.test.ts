@@ -75,6 +75,9 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "cloud:stop-workspace-watch",
       "cloud:workspaces",
       "focus:finish",
+      "focus:guard-start",
+      "focus:guard-status",
+      "focus:guard-stop",
       "focus:insights",
       "focus:reward-create",
       "focus:reward-edit",
@@ -91,7 +94,8 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "knowledge:batch-import",
       "knowledge:delete",
       "knowledge:embedding-status",
-      "knowledge:embedding-import","knowledge:embedding-start",
+      "knowledge:embedding-import",
+      "knowledge:embedding-import-neural","knowledge:embedding-start",
       "knowledge:embedding-cancel","knowledge:embedding-remove",
       "knowledge:embedding-evaluate",
       "knowledge:embedding-evidence-catalog",
@@ -172,7 +176,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
 
   it("keeps knowledge and backup operations narrowly allowlisted", () => {
     const channels=Object.values(IPC_CHANNELS);
-    expect(channels.filter(name=>name.startsWith("knowledge:"))).toHaveLength(32);
+    expect(channels.filter(name=>name.startsWith("knowledge:"))).toHaveLength(33);
     expect(channels.filter(name=>name.startsWith("backup:"))).toEqual(["backup:create"]);
   });
 

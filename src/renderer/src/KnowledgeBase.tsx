@@ -23,6 +23,7 @@ export default function KnowledgeBase(){
   const [query,setQuery]=useState("");
   const [results,setResults]=useState<KnowledgeSearchHit[]>([]);
   const [embeddingStatus,setEmbeddingStatus]=useState<KnowledgeEmbeddingStatus|null>(null);
+  const [neuralKind,setNeuralKind]=useState<"e5"|"bge">("e5");
   const [evaluation,setEvaluation]=useState<KnowledgeEvaluationReport|null>(null);
   const [cards,setCards]=useState<KnowledgeReviewCard[]>([]);
   const [progress,setProgress]=useState<ReviewProgress>(emptyProgress);
@@ -178,6 +179,20 @@ export default function KnowledgeBase(){
       setNotice("离线词向量模型已校验并导入。点击「构建本机语义索引」才会处理已导入的资料。");
     });
   }
+  async function importNeuralModel():Promise<void>{
+    if(!window.confirm(
+      "你需要自行获得并核对 E5/BGE 第三方模型的许可、来源和完整 ONNX 文件。"+
+      "此设备必须已配置离线 Python 环境（numpy、onnxruntime、transformers）。"+
+      "软件只复制校验过的 ONNX 权重和 tokenizer 数据，在本机 CPU 推理，绝不上传文档或在线下载权重。"+
+      "只有真实推理进程通过模型与维度预检才会替换当前语义索引。继续？"
+    ))return;
+    await perform(async()=>{
+      const result=await window.desktop.knowledge.importNeuralModel(true,neuralKind);
+      if(!result)return;
+      setEmbeddingStatus(result);setEvaluation(null);
+      setNotice("ONNX 神经模型已通过真实 CPU 启动与维度预检。需要重新构建语义索引。");
+    });
+  }
   async function startOfflineIndex():Promise<void>{
     await perform(async()=>{
       const status=await window.desktop.knowledge.startOfflineIndex();
@@ -280,10 +295,13 @@ export default function KnowledgeBase(){
       </form>
       <div className="panel">
         <div className="eyebrow">OPT-IN OFFLINE EMBEDDINGS</div>
-        <h3>本机词向量语义索引（可选）</h3>
+        <h3>本机语义索引（静态词向量 / E5 / BGE 神经模型）</h3>
         <p className="privacy-note" role="status">
           {embeddingStatus?.installed
-            ? "已安装静态词向量模型 · 已索引 "+embeddingStatus.indexed+
+            ? "已安装 "+(
+              embeddingStatus.engine==="onnx-e5"?"multilingual-e5-small 神经 ONNX":
+              embeddingStatus.engine==="onnx-bge"?"bge-small-zh-v1.5 神经 ONNX":
+              "静态词向量")+" · 已索引 "+embeddingStatus.indexed+
               " / 不在词表内 "+(embeddingStatus.skipped??0)+
               " / 待处理 "+(embeddingStatus.pending??0)+
               " / 总片段 "+embeddingStatus.total+"。搜索保留精确、容错及有效语义证据。"
@@ -294,6 +312,16 @@ export default function KnowledgeBase(){
         <div className="button-row">
           <button type="button" className="secondary-button" disabled={busy||embeddingStatus?.running}
             onClick={()=>void importOfflineModel()}>导入本机 .vec 词向量</button>
+          <label>神经模型类型
+            <select value={neuralKind} disabled={busy||embeddingStatus?.running}
+              onChange={e=>setNeuralKind(e.target.value as "e5"|"bge")}>
+              <option value="e5">multilingual-e5-small（中英混合，384维）</option>
+              <option value="bge">bge-small-zh-v1.5（中文优先，512维）</option>
+            </select>
+          </label>
+          <button type="button" className="secondary-button"
+            disabled={busy||embeddingStatus?.running}
+            onClick={()=>void importNeuralModel()}>选择本地 ONNX 文件夹并启用神经推理</button>
           {embeddingStatus?.installed&&<>
             <button type="button" className="secondary-button"
               disabled={busy||embeddingStatus.running}
@@ -311,10 +339,12 @@ export default function KnowledgeBase(){
           </>}
         </div>
         <p className="privacy-note">
-          仅支持用户自备的有词表标题行的 UTF-8 静态词向量；不是 E5/BGE Transformer。
-          中文词表覆盖率不足或未命中时自动保留原有搜索结果。权重来源与使用许可需你自行核对，
-          文件不会被上传，也不会读取原始资料路径以外的文件。
-          不在词表里的片段会标为“跳过”，不会阻断后续资料，也不会填充伪造向量。
+          可选择本地 .vec 静态词向量，或通过自备 ONNX 文件夹启用真实 E5/BGE CPU 神经推理。
+          E5 查询与文档分别添加 query:/passage: 前缀并使用 masked mean pooling；BGE 使用 CLS pooling，
+          均进行 L2 归一化。神经模型需事先安装隔离 Python 和 onnxruntime、transformers、numpy。
+          权重来源/许可需自行核对，原文和查询不会上传；模型文件逐个 SHA-256 校验。
+          运行环境缺失或权重不兼容时失败关闭并保留原有精确/容错搜索。
+          ONNX 推理速度、内存和中英相关性仍需真实设备与人工标注验收，安装成功不等于质量达标。
         </p>
         {evaluation&&<div className="kb-evaluation" role="status">
           <strong>本机标注检索评测 · {evaluation.cases} 条查询</strong>

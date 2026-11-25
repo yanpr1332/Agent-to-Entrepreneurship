@@ -73,7 +73,7 @@ export interface KnowledgeEmbeddingStatus {
   /** Index worker state; unavailable in older builds. */
   installed?:boolean;
   running?:boolean;
-  engine?:"static-word-vectors"|null;
+  engine?:"static-word-vectors"|"onnx-e5"|"onnx-bge"|null;
   error?:string|null;
 }
 export interface KnowledgeRetrievalScores {

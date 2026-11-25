@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, globalShortcut, type IpcMainInvokeEvent } from "electron";
 import { join,basename,extname } from "node:path";
 import { configureUserDataOverride } from "./user-data-override";
 import {migrateStudyAnchorProfile} from "./profile-migration";
@@ -36,6 +36,8 @@ import { classifyMailSubject, parseMailCandidateChoice } from "../shared/mail-ca
 import type { MailCandidate } from "../shared/mail-candidates";
 import { KnowledgeStore } from "./knowledge-store";
 import {KnowledgeOfflineModels} from "./knowledge-offline-models";
+import {FocusGuardController} from "./focus-guard";
+import {getForegroundApplication} from "./focus-foreground";
 import { PlanningStore } from "./planning-store";
 import { readSelectedKnowledgeFile } from "./knowledge-import";
 import {importPickedKnowledgeFiles,auditKnowledgeSources,refreshAuditedKnowledgeSources}
@@ -99,6 +101,12 @@ function report(code:DiagnosticCode,operation:"app"|"storage"|"canvas"|"mail"|"a
   diagnostics?.record(code,operation);
 }
 let mainWindow: BrowserWindow | null = null;
+const focusGuard=new FocusGuardController({
+  registerEmergencyShortcut:handler=>
+    globalShortcut.register("CommandOrControl+Shift+F12",handler),
+  unregisterEmergencyShortcut:()=>
+    globalShortcut.unregister("CommandOrControl+Shift+F12"),
+},getForegroundApplication);
 let store: LocalStore | null = null;
 let knowledgeStore: KnowledgeStore | null = null;
 let offlineModels:KnowledgeOfflineModels|null=null;
@@ -499,6 +507,22 @@ function registerIpcHandlers(): void {
     if(selection.canceled||!selection.filePaths.length)return null;
     return localModels().importFile(selection.filePaths[0]);
   });
+  handle(IPC_CHANNELS.knowledgeImportNeuralModel,
+    async(event,consent:unknown,kind:unknown)=>{
+      requireTrustedSender(event);
+      if(consent!==true)
+        throw Error("Explicit third-party neural model license consent required");
+      if(kind!=="e5"&&kind!=="bge")throw Error("Unsupported neural model family");
+      const owner=BrowserWindow.fromWebContents(event.sender);
+      if(!owner||owner.isDestroyed())throw Error("Neural import requires a trusted window");
+      const selection=await dialog.showOpenDialog(owner,{
+        title:kind==="e5"?"选择 multilingual-e5-small 的本地 ONNX 文件夹":
+          "选择 bge-small-zh-v1.5 的本地 ONNX 文件夹",
+        properties:["openDirectory"],
+      });
+      if(selection.canceled||!selection.filePaths.length)return null;
+      return localModels().importNeuralDirectory(selection.filePaths[0],kind);
+    });
   handle(IPC_CHANNELS.knowledgeStartOfflineIndex,event=>{
     requireTrustedSender(event);
     return localModels().startIndex();
@@ -625,6 +649,21 @@ function registerIpcHandlers(): void {
       {name:"planning",store:planner()},
       {name:"calendar",store:fixedCalendar()},
     ]);
+  });
+  handle(IPC_CHANNELS.focusGuardStart,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    const window=BrowserWindow.fromWebContents(event.sender);
+    if(!window||window!==mainWindow||window.isDestroyed())
+      throw Error("Focus protection requires the active desktop window");
+    return focusGuard.start(input,window);
+  });
+  handle(IPC_CHANNELS.focusGuardStatus,(event)=>{
+    requireTrustedSender(event);
+    return focusGuard.status();
+  });
+  handle(IPC_CHANNELS.focusGuardStop,(event)=>{
+    requireTrustedSender(event);
+    return focusGuard.stop();
   });
   handle(IPC_CHANNELS.focusList, (event) => {
     requireTrustedSender(event);
@@ -1032,7 +1071,7 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
   }
-  mainWindow.on("closed", () => { mainWindow = null; });
+  mainWindow.on("closed", () => { focusGuard.close(); mainWindow = null; });
 }
 
 app.whenReady().then(async () => {
@@ -1160,6 +1199,8 @@ app.whenReady().then(async () => {
 
 let waitingForPersonalSyncShutdown=false;
 app.on("before-quit", (event) => {
+  // Always relinquish focus-window elevation even if sync shutdown waits.
+  focusGuard.close();
   const activePersonalSync=personalSync;
   if(activePersonalSync?.hasInFlightRun()){
     event.preventDefault();

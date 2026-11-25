@@ -100,6 +100,10 @@ npm run build
 
 如需在**用户单独批准的隔离 Supabase 项目**验证实时订阅，请先审查并运行既有 `20261110_ate_workspace_poc.sql`，再审查 `supabase/migrations/20261124_ate_workspace_realtime_hints.sql`；本仓库 CI **不部署云端**。未完成五账号 RLS 反向测试、30 秒安全补拉 GUI 与历史游标验收之前，不视为完整 Realtime 发布。详见 [39 团队实时提示验收](docs/w5/39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
 
+### ALPHA-FOC-003/004 + KB-005D 专注安全保护与本地神经模型
+
+专注页面可在计时开始前自愿启用 Windows/macOS 前台程序黑/白名单**提醒**和可逆全屏保护；所有模式可通过 Ctrl/Cmd+Shift+F12 紧急解除，或暂停、取消、退出时释放。无权限则明确提示并降级，不会强杀进程或强制屏蔽其他网站。知识库可选用户自己准备的 E5/BGE ONNX 资产，经本机 SHA-256 校验后调用隔离 Python + ONNX Runtime CPU 运行真实神经编码（查询/段落前缀、pooling、L2），再使用现有 SQLite 检索。**需要额外 Python numpy/onnxruntime/transformers 依赖和本机 ONNX 权重**；没有运行时不能宣称模型可用。不上传文档，也不联网下载模型。详细使用/安全验收见 [50](docs/w5/50_ALPHA_FOCUS_SAFETY_NEURAL_EMBEDDING.md)。
+
 ### ALPHA-FOC-006 自定义虚拟奖励与积分兑换
 
 「专注与自律」模块支持创建/修改/停用自定义现实奖励的**虚拟计划**，显示已赚/已用/可用积分和等级；用户确认后记录一次兑换，软件不会实际购买、付款或提供奖励。积分从本机完整专注会话和兑换账本核算，重复提交不重复消费，兑换凭据保留原名称及花费。SQLite v11 升级前使用 WAL-aware 备份；平台 GUI 与真实恢复需人工验收。详见 [49](docs/w5/49_ALPHA_FOC_006_VIRTUAL_REWARDS.md)。
