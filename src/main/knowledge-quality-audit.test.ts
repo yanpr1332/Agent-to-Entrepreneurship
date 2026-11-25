@@ -1,12 +1,12 @@
 import {afterEach,describe,expect,it} from "vitest";
-import {mkdtempSync,rmSync,symlinkSync,writeFileSync} from "node:fs";
+import {mkdtempSync,rmSync,symlinkSync,writeFileSync,readFileSync} from "node:fs";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {KnowledgeStore} from "./knowledge-store";
 import {KnowledgeOfflineModels} from "./knowledge-offline-models";
 import {
   parseLocalEvaluationLabels,readLocalEvaluationLabels,
-  evaluateLocalRetrieval,
+  evaluateLocalRetrieval,saveLocalEvaluationLabels,assertCurrentKnowledgeEvidence,
 } from "./knowledge-quality-audit";
 import {staticWordVectorProvider,readStaticWordVectors} from "./knowledge-word-vectors";
 import type {LocalEmbeddingModel} from "./knowledge-embeddings";
@@ -63,6 +63,28 @@ describe("ALPHA-KB-005C user-labelled local search evaluation",()=>{
       {...label,cases:[label.cases[0],label.cases[0]]},
       {...label,cases:[{...label.cases[0],relevant:[ID+":1:0",ID+":1:0"]}]},
     ])expect(()=>parseLocalEvaluationLabels(incorrect)).toThrow();
+  });
+
+  it("saves human-labelled datasets exclusively and rejects stale evidence before writing",()=>{
+    const {dir,store}=fixture();
+    const doc=store.importText({sourcePath:"/private/bio.md",title:"Bio",
+      format:"markdown",text:"mitochondria energy"}).document;
+    const key=doc.id+":1:0";
+    const filename=join(dir,"relevance.json");
+    const check=(value:string)=>assertCurrentKnowledgeEvidence(value,
+      (id,ordinal)=>store.getPassage(id,ordinal));
+    const dataset={schema:1,cases:[{id:"user-001",query:"energy",relevant:[key]}]};
+    expect(saveLocalEvaluationLabels(filename,dataset,check)).toBe(1);
+    expect(readLocalEvaluationLabels(filename)).toEqual(dataset.cases);
+    expect(JSON.parse(readFileSync(filename,"utf8"))).toEqual(dataset);
+    expect(()=>saveLocalEvaluationLabels(filename,dataset,check)).toThrow();
+    expect(()=>saveLocalEvaluationLabels(join(dir,"bad.json"),
+      {...dataset,unexpected:"secret"},check)).toThrow();
+    store.importText({sourcePath:"/private/bio.md",title:"Bio",
+      format:"markdown",text:"calculus new content"});
+    expect(()=>saveLocalEvaluationLabels(join(dir,"stale.json"),
+      dataset,check)).toThrow("obsolete");
+    expect(()=>readFileSync(join(dir,"stale.json"))).toThrow();
   });
 
   it("refuses symlinked, oversized and malformed JSON files",()=>{

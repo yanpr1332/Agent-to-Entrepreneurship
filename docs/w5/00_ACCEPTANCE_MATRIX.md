@@ -118,7 +118,7 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 
 - 用户希望继续演进为**精确搜索 + 模糊搜索 + 本地向量语义搜索**，已记录在 Backlog 与 [26 选型及工程难度评估](26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md)。
 - **005A 已完成**：SQLite v4 向量索引、模型版本和严格源证据失效、RRF 融合及引用；[43](43_ALPHA_KB_005A_VECTOR_FOUNDATION.md)。**005B PR #52 已合并**：本机用户手动确认的小型静态词向量 .vec、独立 Worker CPU 编码、可取消增量索引、卸载/重启恢复和打包 Worker smoke；详见 [44](44_ALPHA_KB_005B_OFFLINE_WORD_VECTORS.md)。**并非 E5/BGE 神经模型，不保证真实双语质量，仍待 Windows/macOS GUI**。
-- **005C：当前开发，未做真实模型质量或双平台 GUI 验收**。SQLite v5 的模型词表外跳过/跨重启继续、覆盖率和用户自己编写的本机证据标签 P@5/Recall@10/MRR@10/延迟比较，见 [45](45_ALPHA_KB_005C_INDEX_COVERAGE_EVALUATION.md)。没有真实 E5/BGE Transformer/ONNX 推理，也没有任何私有资料外传。
+- **005C：当前开发，未做真实模型质量或双平台 GUI 验收**。SQLite v5 的模型词表外跳过/跨重启继续、覆盖率、本机分页人工标注/独占文件保存与用户亲自判定证据的 P@5/Recall@10/MRR@10/延迟比较，见 [45](45_ALPHA_KB_005C_INDEX_COVERAGE_EVALUATION.md)。没有真实 E5/BGE Transformer/ONNX 推理，也没有任何私有资料外传。
 - 不把 PR #32 的可选 OpenAI 单段解释误称为全库本地语义检索。
 
 ### ALPHA-SYNC-001/002/003 同步优先队列（2026-11-24，持续实施）

@@ -113,6 +113,25 @@ describe("local knowledge FTS5 + source revisions",()=>{
   });
 });
 
+describe("bounded local evidence catalog pagination",()=>{
+  it("pages all passages deterministically without source paths",()=>{
+    const db=memory();
+    for(let i=0;i<5;i++)db.importText({sourcePath:"/private/"+i+".md",
+      title:"Doc "+i,format:"markdown",text:"knowledge page "+i});
+    const all=db.localEvidenceCatalog(5);
+    const first=db.localEvidenceCatalog(2,0);
+    const next=db.localEvidenceCatalog(2,2);
+    const last=db.localEvidenceCatalog(2,4);
+    expect([...first.items,...next.items,...last.items]).toEqual(all.items);
+    expect(first.total).toBe(5);
+    expect(db.localEvidenceCatalog(2,9)).toMatchObject({total:5,items:[]});
+    expect(JSON.stringify(all)).not.toContain("/private/");
+    for(const offset of [-1,100001,1.5,NaN])
+      expect(()=>db.localEvidenceCatalog(50,offset)).toThrow("catalog page");
+    expect(()=>db.localEvidenceCatalog(501,0)).toThrow("limit");
+  });
+});
+
 describe("human-rated offline review scheduler",()=>{
   it("keeps authored answer and cited original, schedules only after a user rating",()=>{
     const db=memory();

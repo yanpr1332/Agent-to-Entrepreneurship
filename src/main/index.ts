@@ -6,6 +6,8 @@ import {mkdirSync} from "node:fs";
 import { randomUUID } from "node:crypto";
 import { lstat,readFile,writeFile } from "node:fs/promises";
 import { FixedCalendarStore } from "./fixed-calendar-store";
+import {parseLocalEvaluationLabels,saveLocalEvaluationLabels,
+  assertCurrentKnowledgeEvidence} from "./knowledge-quality-audit";
 import { parseICS,exportICS } from "../shared/ics-calendar";
 import type { ICSPreview,FixedEventDraft } from "../shared/fixed-calendar-model";
 import { pathToFileURL } from "node:url";
@@ -499,6 +501,33 @@ function registerIpcHandlers(): void {
     if(selection.canceled||!selection.filePaths.length)return null;
     return localModels().evaluateFile(selection.filePaths[0]);
   });
+  handle(IPC_CHANNELS.knowledgeEvidencePage,(event,offset:unknown)=>{
+    requireTrustedSender(event);
+    if(!Number.isSafeInteger(offset)||(offset as number)<0||
+      (offset as number)>100000)throw Error("Invalid evidence catalog offset");
+    return knowledge().localEvidenceCatalog(50,offset as number);
+  });
+  handle(IPC_CHANNELS.knowledgeSaveEvaluationLabels,
+    async(event,consent:unknown,raw:unknown)=>{
+      requireTrustedSender(event);
+      if(consent!==true)
+        throw Error("Explicit private evaluation label export consent required");
+      const cases=parseLocalEvaluationLabels(raw);
+      const owner=BrowserWindow.fromWebContents(event.sender);
+      if(!owner||owner.isDestroyed())
+        throw Error("Private evaluation label export requires trusted window");
+      const target=await dialog.showSaveDialog(owner,{
+        title:"保存人工检索相关性标注（私人查询和证据引用）",
+        defaultPath:"study-anchor-relevance-labels.json",
+        filters:[{name:"本地检索评测标签",extensions:["json"]}],
+      });
+      if(target.canceled||!target.filePath)return null;
+      const check=(key:string)=>assertCurrentKnowledgeEvidence(key,
+        (id,ordinal)=>knowledge().getPassage(id,ordinal));
+      const count=saveLocalEvaluationLabels(
+        target.filePath,{schema:1,cases},check);
+      return {path:target.filePath,cases:count};
+    });
   handle(IPC_CHANNELS.knowledgeExportEvidenceCatalog,async(event,consent:unknown)=>{
     requireTrustedSender(event);
     if(consent!==true)throw Error("Explicit local evidence export consent required");
