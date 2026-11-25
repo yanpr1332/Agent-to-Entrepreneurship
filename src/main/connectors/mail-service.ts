@@ -125,6 +125,9 @@ export class CampusMailService {
   /** Only called after UI consent. Fetches one approved cached UID in read-only
    * mode, validates the original envelope and drops body after the preview. */
   async readApprovedBody(record:MailRecord):Promise<string>{
+    if (!record || typeof record !== "object" ||
+        typeof record.account !== "string" || !Number.isSafeInteger(record.uid) ||
+        !Number.isSafeInteger(record.uidValidity)) throw Error("Invalid mail body selection");
     const generation=this.generation;
     const credentials=await this.vault.load();
     if(!credentials||credentials.email!==record.account)
