@@ -104,7 +104,7 @@ export async function evaluateLocalRetrieval(
     if(blended.some(h=>h.matchType==="semantic"))semanticCases++;
     baseline.push(ordinary);hybrid.push(blended);
   }
-  const lexicalMetric=evaluateRetrieval(cases,baseline);
+  // Documents may be re-imported while asynchronous hybrid queries execute.\n  // Reject the whole report if its human-labelled evidence became stale.\n  for(const c of cases)for(const key of c.relevant)evaluate.assertCurrentEvidence(key);\n  const lexicalMetric=evaluateRetrieval(cases,baseline);
   const hybridMetric=evaluateRetrieval(cases,hybrid);
   lexicalDurations.sort((a,b)=>a-b);hybridDurations.sort((a,b)=>a-b);
   return {cases:cases.length,modelId:evaluate.modelId,
