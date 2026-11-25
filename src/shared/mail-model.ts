@@ -149,6 +149,8 @@ export function parseMailDraftSave(input: unknown): MailDraftSaveInput {
 export function replyAddress(from: string): string {
   if (typeof from !== "string" || from.length > 500) throw Error("Invalid mail sender");
   const match = /<([^<>]+)>\s*$/.exec(from);
+  if (match && /[<>]/.test(from.slice(0, match.index)))
+    throw Error("Multiple sender addresses cannot be used as a reply target");
   return normalizeAddress(match ? match[1] : from);
 }
 
