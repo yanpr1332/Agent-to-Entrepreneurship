@@ -185,7 +185,7 @@ export default function AIWorkspace(){
           </p>}
           <p>当前 UTC 日请求：<strong>{status.usedToday}/{status.dailyRequestLimit}</strong></p>
           <p>剩余请求：<strong>{status.remainingToday}</strong></p>
-          <p className="privacy-note">已保存不代表密钥或模型一定有效；第一次明确确认提问才会连接服务商。</p>
+          <p className="privacy-note">已配置不代表密钥或模型一定有效；第一次明确确认提问才会连接服务商。</p>
           {status.keySource==="saved"&&<button className="secondary-button" disabled={busy||sending}
             onClick={()=>void disconnect()}>删除本机保存的 Key</button>}
         </div>}
@@ -199,7 +199,7 @@ export default function AIWorkspace(){
               placeholder="sk-…" onChange={event=>setApiKey(event.target.value)}/>
           </label>
           <button type="submit" className="primary-button" disabled={busy||sending}>
-            {status.connected?"替换本地模型配置与 Key":"加密保存配置（不进行付费测试）"}
+            {status.connected?(status.keySource==="environment"?"保存并切换到手动 Key":"替换本地模型配置与 Key"):"加密保存配置（不进行付费测试）"}
           </button>
           <p className="privacy-note">
             手动输入会使用系统凭据加密；如果安全加密不可用，会拒绝保存，不退回明文存储。
