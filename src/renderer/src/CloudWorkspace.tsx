@@ -96,6 +96,8 @@ export default function CloudWorkspace() {
   const [receiptReconciliation,setReceiptReconciliation]=useState<PersonalSyncReceiptReconcileResult|null>(null);
   const [receiptReview,setReceiptReview]=useState<PersonalSyncReceiptReview|null>(null);
   const [workspaceLivePhase,setWorkspaceLivePhase]=useState<WorkspaceLiveUpdate["phase"]>("stopped");
+  const [workspaceLastVerifiedAt,setWorkspaceLastVerifiedAt]=useState<string|null>(null);
+  const [workspaceRefreshFailed,setWorkspaceRefreshFailed]=useState(false);
   const selectedRef=useRef<string|null>(null);
   const workspaceFetchSeq=useRef(0);
 
@@ -123,6 +125,7 @@ export default function CloudWorkspace() {
     setSelected(null);setMembers([]);setMessages([]);setTasks([]);setInvite("");
     setOlderMessages([]);setOlderTasks([]);setHistoryStatus(null);
     setWorkspaceLivePhase("revoked");
+    setWorkspaceLastVerifiedAt(null);setWorkspaceRefreshFailed(false);
     setNotice("小组成员权限可能已撤销，已清除当前界面中的共享数据。请重新登录或确认小组成员资格。");
     void window.desktop.cloud.workspaces().then(setWorkspaces).catch(()=>setWorkspaces([]));
   },[]);
@@ -139,6 +142,7 @@ export default function CloudWorkspace() {
       setMembers([]);setMessages([]);setTasks([]);setInvite("");
       setOlderMessages([]);setOlderTasks([]);setHistoryStatus(null);
       setWorkspaceLivePhase("stopped");setHistoryLoading(false);
+      setWorkspaceLastVerifiedAt(null);setWorkspaceRefreshFailed(false);
       setNotice("云端登录已失效，请使用本人的账号重新登录。未自动重传任何本地待同步数据。");
     }catch{/* Status diagnostic failure must not leak a token or retain stale shared content. */}
   },[]);
@@ -152,12 +156,15 @@ export default function CloudWorkspace() {
       setMessages(snapshot.messages);
       setTasks(snapshot.tasks);
       setHistoryStatus(snapshot.history??null);
+      setWorkspaceLastVerifiedAt(new Date().toISOString());
+      setWorkspaceRefreshFailed(false);
       if(snapshot.history?.rebuilding||(snapshot.history?.applied??0)>0){
         // An immutable journal page may contain tombstones for older items.
         // Drop historical UI pages so deleted records cannot remain visible.
         setOlderMessages([]);setOlderTasks([]);
       }
     }catch(error){
+      if(selectedRef.current===workspaceId)setWorkspaceRefreshFailed(true);
       if(selectedRef.current===workspaceId&&isCloudSessionExpired(error))
         await recoverExpiredSession();
       else if(selectedRef.current===workspaceId&&isWorkspaceAccessDenied(error))
@@ -295,6 +302,7 @@ export default function CloudWorkspace() {
       selectedRef.current=null;workspaceFetchSeq.current++;
       setSelected(null);setMembers([]);setMessages([]);setTasks([]);
       setOlderMessages([]);setOlderTasks([]);setHistoryStatus(null);
+      setWorkspaceLastVerifiedAt(null);setWorkspaceRefreshFailed(false);
       setWorkspaceLivePhase("stopped");setInvite("");
       setNotice("已清除当前账号本机团队历史分区（正式记录及暂存快照），涉及 "+
         result.workspaces+" 个历史分区。云端资料未删除；需要时重新选择小组补拉。"+
@@ -306,6 +314,7 @@ export default function CloudWorkspace() {
     await run(async()=>{
       selectedRef.current=id;workspaceFetchSeq.current++;setSelected(id);setInvite("");
       setMembers([]);setMessages([]);setTasks([]);
+      setWorkspaceLastVerifiedAt(null);setWorkspaceRefreshFailed(false);
       setOlderMessages([]);setOlderTasks([]);setHistoryStatus(null);
       await refreshSelected(id);
     });
@@ -646,6 +655,19 @@ export default function CloudWorkspace() {
             <section className="panel cloud-chat" aria-label="小组消息">
               <div className="eyebrow">TEAM MESSAGES</div><h2>小组消息 · 实时提醒与安全补拉</h2>
               <p className="privacy-note" role="status">{liveLabels[workspaceLivePhase]}</p>
+              <div className="button-row">
+                <button className="secondary-button" type="button" disabled={busy}
+                  onClick={()=>{if(selected)void run(async()=>{
+                    await refreshSelected(selected);
+                    setNotice("已手动向云端重新核对成员、消息、任务与同步位点。");
+                  });}}>立即刷新小组</button>
+                <p className="privacy-note" role="status">
+                  {workspaceLastVerifiedAt
+                    ? "上次成功核对云端："+timestamp(workspaceLastVerifiedAt)
+                    : "尚无成功云端核对记录"}
+                  {workspaceRefreshFailed?" · 最近一次核对失败；可能已离线，恢复网络后可重试":""}
+                </p>
+              </div>
               <p className="privacy-note" role="status">
                 {historyStatus?.mode==="durable"
                   ? historyStatus.rebuilding
