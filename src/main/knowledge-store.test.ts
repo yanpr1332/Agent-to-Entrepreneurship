@@ -128,7 +128,7 @@ describe("bounded local evidence catalog pagination",()=>{
     expect(JSON.stringify(all)).not.toContain("/private/");
     for(const offset of [-1,100001,1.5,NaN])
       expect(()=>db.localEvidenceCatalog(50,offset)).toThrow("catalog page");
-    expect(()=>db.localEvidenceCatalog(501,0)).toThrow("catalog page");
+    expect(()=>db.localEvidenceCatalog(501,0)).toThrow("limit");
   });
 });
 

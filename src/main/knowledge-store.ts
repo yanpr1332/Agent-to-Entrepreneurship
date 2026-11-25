@@ -476,8 +476,9 @@ export class KnowledgeStore {
     total:number;items:Array<{evidenceKey:string;title:string;pageNumber:number|null;
       excerpt:string}>
   }{
-    if(!Number.isSafeInteger(limit)||limit<1||limit>500||
-      !Number.isSafeInteger(offset)||offset<0||offset>100000)
+    if(!Number.isSafeInteger(limit)||limit<1||limit>500)
+      throw Error("Invalid local evidence export page limit");
+    if(!Number.isSafeInteger(offset)||offset<0||offset>100000)
       throw Error("Invalid local evidence catalog page");
     const total=(this.db.prepare("SELECT count(*) AS n FROM knowledge_chunks")
       .get() as {n:number}).n;
