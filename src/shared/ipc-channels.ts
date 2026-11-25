@@ -71,6 +71,7 @@ export const IPC_CHANNELS = {
   focusFinish: "focus:finish",
   focusRename: "focus:rename",
   focusSummary: "focus:summary",
+  focusInsights: "focus:insights",
   canvasStatus: "canvas:status",
   canvasConnect: "canvas:connect",
   canvasCourses: "canvas:courses",
