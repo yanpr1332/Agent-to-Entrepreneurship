@@ -44,7 +44,8 @@ export default function LocalEvaluationLab(){
     try{
       const next=serial+1;
       const id="case-"+String(next).padStart(3,"0");
-      setCases(previous=>appendManualLabelCase(previous,query,selected,id));
+      const updated=appendManualLabelCase(cases,query,selected,id);
+      setCases(updated);
       setSerial(next);setQuery("");setSelected([]);setError("");
       setNotice("已加入人工标注查询。你可以继续浏览其他页，添加更多不同查询。");
     }catch(reason){setError(reason instanceof Error?reason.message:"添加标注失败");}

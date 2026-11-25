@@ -86,6 +86,8 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "knowledge:embedding-cancel","knowledge:embedding-remove",
       "knowledge:embedding-evaluate",
       "knowledge:embedding-evidence-catalog",
+      "knowledge:embedding-evidence-page",
+      "knowledge:embedding-save-labels",
       "knowledge:documents",
       "knowledge:graph",
       "knowledge:graph-create-edge",
