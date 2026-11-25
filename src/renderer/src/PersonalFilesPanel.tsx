@@ -2,7 +2,7 @@ import {useEffect,useState} from "react";
 import type {PersonalFilesOverview,RemotePersonalFile,StagedPersonalFile}
   from "../../shared/personal-file-sync";
 
-const empty:PersonalFilesOverview={pending:[],remote:[]};
+const empty:PersonalFilesOverview={pending:[],remote:[],cloudAvailable:false};
 function msg(error:unknown):string{
   return error instanceof Error?error.message:"个人文件同步未完成";
 }
@@ -99,7 +99,7 @@ export default function PersonalFilesPanel(){
     </div>
     {error&&<div className="error-banner" role="alert">{error}</div>}
     {notice&&<div className="connector-notice" role="status">{notice}</div>}
-    {!ready&&<p className="privacy-note">云端文件服务尚未连接或未部署对应的 V0.2 SQL；请先核对独立测试项目的迁移。</p>}
+    {(!ready||!data.cloudAvailable)&&<p className="privacy-note" role="status">远端文件列表暂不可用（可能离线、未部署 V0.2 SQL 或权限已改变）。本机暂存可以保留；没有验证云端是否为空，恢复网络后请刷新。</p>}
     {data.pending.length>0&&<>
       <h3>仅本机暂存 · 不会后台发送</h3>
       <ul className="cloud-task-list">
@@ -118,8 +118,8 @@ export default function PersonalFilesPanel(){
         </li>)}
       </ul>
     </>}
-    <h3>当前账号的云端文件</h3>
-    {data.remote.length===0?<p className="empty-state">暂无已上传文件。另一个设备登录同一账号后，手动刷新才会列出已授权文件。</p>:
+    <h3>当前账号的云端文件 {data.cloudAvailable?"":"· 未核对"}</h3>
+    {!data.cloudAvailable?<p className="empty-state">云端目录未验证，离线时不能将此处显示为无文件。</p>:data.remote.length===0?<p className="empty-state">暂无已上传文件。另一个设备登录同一账号后，手动刷新才会列出已授权文件。</p>:
       <ul className="cloud-task-list">
         {data.remote.map(item=><li key={item.fileId}>
           <div><strong>{item.filename}</strong>
