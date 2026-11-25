@@ -16,16 +16,16 @@ export const MIGRATIONS = Object.freeze([
   "20261124_ate_workspace_checkpoint_recovery.sql",
 ]);
 const DANGEROUS = [
-  [/\\bdrop\\s+schema\\s+public\\b/i, "DROP SCHEMA public"],
-  [/\\btruncate\\s+(?:table\\s+)?public\\./i, "TRUNCATE public table"],
-  [/\\balter\\s+table\\s+public\\.[\\w]+\\s+disable\\s+row\\s+level\\s+security/i, "disabled RLS"],
-  [/\\bgrant\\s+all\\s+on\\s+(?:all\\s+tables|table\\s+public\\.)/i, "unrestricted table grant"],
-  [/\\bgrant\\s+[^;]+\\s+to\\s+(?:anon|public)\\s*;/i, "grant to anon/public"],
+  [/\bdrop\s+schema\s+public\b/i, "DROP SCHEMA public"],
+  [/\btruncate\s+(?:table\s+)?public\./i, "TRUNCATE public table"],
+  [/\balter\s+table\s+public\.[\w]+\s+disable\s+row\s+level\s+security/i, "disabled RLS"],
+  [/\bgrant\s+all\s+on\s+(?:all\s+tables|table\s+public\.)/i, "unrestricted table grant"],
+  [/\bgrant\s+[^;]+\s+to\s+(?:anon|public)\s*;/i, "grant to anon/public"],
 ];
 function withoutComments(sql) {
   // This conservative preflight strips SQL comments, not string literals. It is
   // intentionally NOT a full SQL parser and never claims a proof of safety.
-  return sql.replace(/--[^\\n]*/g, "").replace(/\\/\\*[\\s\\S]*?\\*\\//g, "");
+  return sql.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
 }
 export function inspectMigrations(directory) {
   const issues = [];
@@ -45,17 +45,17 @@ export function inspectMigrations(directory) {
     for (const [pattern, label] of DANGEROUS) {
       if (pattern.test(active)) issues.push(name + ": potentially unsafe " + label);
     }
-    if (!/\\b(?:create|alter|drop|grant|revoke)\\b/i.test(active))
+    if (!/\b(?:create|alter|drop|grant|revoke)\b/i.test(active))
       issues.push(name + ": no recognized DDL");
     migrations.push({ name, bytes: Buffer.byteLength(sql, "utf8") });
   }
   const workspace = readText(directory, MIGRATIONS[0]);
-  if (workspace && !/alter\\s+table\\s+public\\.ate_workspace_messages\\s+enable\\s+row\\s+level\\s+security/i.test(workspace))
+  if (workspace && !/alter\s+table\s+public\.ate_workspace_messages\s+enable\s+row\s+level\s+security/i.test(workspace))
     issues.push("workspace messages RLS enablement missing");
-  if (workspace && !/alter\\s+table\\s+public\\.ate_workspace_tasks\\s+enable\\s+row\\s+level\\s+security/i.test(workspace))
+  if (workspace && !/alter\s+table\s+public\.ate_workspace_tasks\s+enable\s+row\s+level\s+security/i.test(workspace))
     issues.push("workspace tasks RLS enablement missing");
   const personal = readText(directory, MIGRATIONS[1]);
-  if (personal && !/row\\s+level\\s+security/i.test(personal))
+  if (personal && !/row\s+level\s+security/i.test(personal))
     issues.push("personal sync RLS declaration missing");
   const history = readText(directory, MIGRATIONS[4]);
   const checkpoint = readText(directory, MIGRATIONS[5]);
