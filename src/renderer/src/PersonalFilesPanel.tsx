@@ -41,12 +41,10 @@ export default function PersonalFilesPanel(){
     });
   }
   function upload(item:StagedPersonalFile){
-    if(!window.confirm("确认将「"+item.filename+"」（"+item.byteLength+
-      " 字节）发送到当前 Supabase 项目的数据库？"+
-      "本功能暂不提供端到端加密，项目管理员和云服务可访问内容。"+
-      "只有这次选择的文件会上传。"))return;
+    // Electron Main displays a native OS confirmation BEFORE network writes.
     void run(async()=>{
       const result=await window.desktop.cloud.uploadFile(item.fileId);
+      if(result.status==="cancelled")return "已取消上传；本机暂存仍保留";
       return result.status==="conflict"
         ?"云端版本已变化（当前版本 "+(result.version??"不可用")+
           "），本机暂存未覆盖云端。请先下载核对，再取消旧暂存并选择新版本。"
@@ -68,11 +66,10 @@ export default function PersonalFilesPanel(){
     });
   }
   function remove(item:RemotePersonalFile){
-    if(!window.confirm("确认从当前 Supabase 数据库删除「"+item.filename+
-      "」的云端文件内容？这会产生新的删除版本，其他设备下次刷新将看不到它。"+
-      "已经下载的副本、系统备份不会被远程擦除。此操作不可自动撤销。"))return;
+    // Native confirmation is enforced in Main, not only in Renderer JS.
     void run(async()=>{
       const result=await window.desktop.cloud.deleteRemoteFile(item.fileId,item.version);
+      if(result.status==="cancelled")return "已取消云端删除；文件未改变";
       return result.status==="conflict"
         ?"云端版本已变化（"+(result.version??"不可用")+"）；删除未执行，请刷新核对。"
         :"云端文件内容已从当前记录删除；其他设备的本地副本不会自动擦除。";
