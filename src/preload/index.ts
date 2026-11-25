@@ -158,13 +158,13 @@ const desktopApi = Object.freeze({
     stageFile:(replace:{fileId:string;version:number}|null=null) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudFileStage,replace) as Promise<StagedPersonalFile|null>,
     uploadFile:(fileId:string) =>
-      ipcRenderer.invoke(IPC_CHANNELS.cloudFileUpload,fileId) as Promise<{status:"uploaded"|"conflict";version:number|null}>,
+      ipcRenderer.invoke(IPC_CHANNELS.cloudFileUpload,fileId) as Promise<{status:"uploaded"|"conflict"|"cancelled";version:number|null}>,
     stopLocalFile:(fileId:string) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudFileStopLocal,fileId) as Promise<{stopped:true}>,
     downloadFile:(fileId:string,version:number) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudFileDownload,fileId,version) as Promise<{path:string;bytes:number}>,
     deleteRemoteFile:(fileId:string,version:number) =>
-      ipcRenderer.invoke(IPC_CHANNELS.cloudFileDelete,fileId,version) as Promise<{status:"deleted"|"conflict";version:number|null}>,
+      ipcRenderer.invoke(IPC_CHANNELS.cloudFileDelete,fileId,version) as Promise<{status:"deleted"|"conflict"|"cancelled";version:number|null}>,
     syncPersonalNow: () =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudPersonalSyncNow) as Promise<PersonalSyncRunResult>,
     personalSyncCandidates: () =>
