@@ -17,6 +17,7 @@ import type {RecoveryPreview,RecoveryResult,RecoveryConfirmation} from "../../sh
 import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } from "../../shared/mail-candidates";
 
 import type {WorkspaceHistoryItems,WorkspaceHistoryMarker} from "../../shared/workspace-history-contract";
+import type {PersonalFilesOverview,StagedPersonalFile} from "../../shared/personal-file-sync";
 import type {
   CloudCredentials, CloudProjectConfig, CloudSessionStatus,
   SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
@@ -110,6 +111,13 @@ declare global {
         tasks: (workspaceId: string) => Promise<SharedTask[]>;
         createTask: (workspaceId: string, input: SharedTaskInput) => Promise<SharedTask>;
         markTask: (workspaceId: string, taskId: string, completed: boolean) => Promise<SharedTask>;
+        filesOverview:() => Promise<PersonalFilesOverview>;
+        stageFile:(replace?:{fileId:string;version:number}|null) => Promise<StagedPersonalFile|null>;
+        uploadFile:(fileId:string) => Promise<{status:"uploaded"|"conflict";version:number|null}>;
+        stopLocalFile:(fileId:string) => Promise<{stopped:true}>;
+        downloadFile:(fileId:string,version:number) => Promise<{path:string;bytes:number}>;
+        deleteRemoteFile:(fileId:string,version:number) =>
+          Promise<{status:"deleted"|"conflict";version:number|null}>;
         syncPersonalNow: () => Promise<PersonalSyncRunResult>;
         personalSyncCandidates: () => Promise<PersonalSyncCandidate[]>;
         setPersonalTaskSync: (id:string,enabled:boolean) => Promise<{saved:true}>;
