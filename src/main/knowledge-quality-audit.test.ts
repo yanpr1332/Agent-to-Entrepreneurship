@@ -141,6 +141,33 @@ describe("ALPHA-KB-005C user-labelled local search evaluation",()=>{
     await expect(manager.evaluateFile(file)).rejects.toThrow("obsolete");
   });
 
+  it("rejects results when human-labelled evidence is revised during async retrieval",async()=>{
+    const {store}=fixture();
+    const original=store.importText({sourcePath:"/changing.md",title:"Original",
+      format:"markdown",text:"mitochondria energy"}).document;
+    const key=original.id+":1:0";
+    let checks=0;
+    const assertCurrentEvidence=(evidence:string)=>{
+      checks++;
+      const [id,revision,ordinal]=evidence.split(":");
+      if(store.getPassage(id,Number(ordinal)).revision!==Number(revision))
+        throw Error("obsolete source revision");
+    };
+    await expect(evaluateLocalRetrieval([
+      {id:"race",query:"energy",relevant:[key]},
+    ],{
+      modelId:"test",modelRevision:"a".repeat(64),
+      indexed:1,skipped:0,pending:0,assertCurrentEvidence,
+      lexical:()=>store.search("energy"),
+      hybrid:async()=>{
+        store.importText({sourcePath:"/changing.md",title:"Updated",
+          format:"markdown",text:"calculus revised notes"});
+        return store.search("energy");
+      },
+    })).rejects.toThrow("obsolete source revision");
+    expect(checks).toBe(2);
+  });
+
   it("rejects invalid labelled results and calculates paired metrics",async()=>{
     const hit=(ordinal:number):KnowledgeSearchHit=>({
       documentId:ID,documentTitle:"Sample",documentRevision:1,ordinal,
