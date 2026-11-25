@@ -181,6 +181,7 @@ declare global {
         search: (query: string) => Promise<KnowledgeSearchHit[]>;
         embeddingStatus: () => Promise<KnowledgeEmbeddingStatus>;
         importOfflineModel: (acknowledged:boolean) => Promise<KnowledgeEmbeddingStatus|null>;
+        importNeuralModel: (accepted:boolean,kind:"e5"|"bge") => Promise<KnowledgeEmbeddingStatus|null>;
         startOfflineIndex: () => Promise<KnowledgeEmbeddingStatus>;
         cancelOfflineIndex: () => Promise<KnowledgeEmbeddingStatus>;
         removeOfflineModel: (confirmation:"REMOVE_LOCAL_MODEL_AND_VECTORS") => Promise<KnowledgeEmbeddingStatus>;

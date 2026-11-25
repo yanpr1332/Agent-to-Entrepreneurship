@@ -507,6 +507,22 @@ function registerIpcHandlers(): void {
     if(selection.canceled||!selection.filePaths.length)return null;
     return localModels().importFile(selection.filePaths[0]);
   });
+  handle(IPC_CHANNELS.knowledgeImportNeuralModel,
+    async(event,consent:unknown,kind:unknown)=>{
+      requireTrustedSender(event);
+      if(consent!==true)
+        throw Error("Explicit third-party neural model license consent required");
+      if(kind!=="e5"&&kind!=="bge")throw Error("Unsupported neural model family");
+      const owner=BrowserWindow.fromWebContents(event.sender);
+      if(!owner||owner.isDestroyed())throw Error("Neural import requires a trusted window");
+      const selection=await dialog.showOpenDialog(owner,{
+        title:kind==="e5"?"选择 multilingual-e5-small 的本地 ONNX 文件夹":
+          "选择 bge-small-zh-v1.5 的本地 ONNX 文件夹",
+        properties:["openDirectory"],
+      });
+      if(selection.canceled||!selection.filePaths.length)return null;
+      return localModels().importNeuralDirectory(selection.filePaths[0],kind);
+    });
   handle(IPC_CHANNELS.knowledgeStartOfflineIndex,event=>{
     requireTrustedSender(event);
     return localModels().startIndex();

@@ -49,6 +49,12 @@
       "package.json",
       "LICENSE"
     ],
+    "extraResources": [
+      {
+        "from": "scripts/neural-inference-worker.py",
+        "to": "neural-inference-worker.py"
+      }
+    ],
     "win": {
       "target": [
         "nsis"

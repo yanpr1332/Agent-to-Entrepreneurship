@@ -259,6 +259,9 @@ const desktopApi = Object.freeze({
     importOfflineModel: (acknowledged:boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.knowledgeImportOfflineModel,acknowledged) as
         Promise<KnowledgeEmbeddingStatus|null>,
+    importNeuralModel: (accepted:boolean,kind:"e5"|"bge") =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeImportNeuralModel,accepted,kind) as
+        Promise<KnowledgeEmbeddingStatus|null>,
     startOfflineIndex: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeStartOfflineIndex) as Promise<KnowledgeEmbeddingStatus>,
     cancelOfflineIndex: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCancelOfflineIndex) as Promise<KnowledgeEmbeddingStatus>,
     removeOfflineModel: (confirmation:"REMOVE_LOCAL_MODEL_AND_VECTORS") =>
