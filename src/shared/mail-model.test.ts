@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeAddress, parseCampusMailCredentials, parseMailDraft } from "./mail-model";
+import { normalizeAddress, parseCampusMailCredentials, parseMailDraft, parseMailDraftSave, replyAddress } from "./mail-model";
 
 describe("campus mail input boundaries", () => {
   it("validates campus identity without exposing secrets", () => {
@@ -20,6 +20,22 @@ describe("campus mail input boundaries", () => {
     expect(() => parseMailDraft({
       to: ["a@example.com","a@example.com"], subject:"Hi", body:"Text",
     })).toThrow("Duplicate");
+  });
+
+  it("allows incomplete encrypted drafts but guards reply recipients and message header injection", () => {
+    expect(parseMailDraftSave({to:[],subject:"",body:"idea"})).toEqual({
+      to:[],subject:"",body:"idea",
+    });
+    expect(replyAddress('Alice Example <alice@example.com>')).toBe("alice@example.com");
+    expect(() => replyAddress('Alice <a@example.com>, Bob <b@example.com>')).toThrow();
+    expect(parseMailDraft({
+      to:["a@example.com"],subject:"Re: Hi",body:"Reply",
+      replyMessageId:"<safe-message@school.example>",
+    }).replyMessageId).toBe("<safe-message@school.example>");
+    expect(() => parseMailDraft({
+      to:["a@example.com"],subject:"Re: Hi",body:"Reply",
+      replyMessageId:"<safe@example.com>\\r\\nBcc:other@example.com",
+    })).toThrow();
   });
 
   it("validates a bounded confirmed-send draft", () => {
