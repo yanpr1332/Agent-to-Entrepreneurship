@@ -40,6 +40,11 @@
 
 ## 3. 切片状态
 
+### ALPHA-CLOSE-04A Supabase 只读部署预检（2026-11-25）
+
+- **代码待 CI**：[55](55_ALPHA_CLOSE_04_SUPABASE_PREFLIGHT.md) 新增独立 Node 预检、SQL 迁移完整性/危险权限回归测试、npm 脚本与人工部署顺序。检查不访问网络、不读取密码或 API Key、不执行 SQL。
+- **真实验收未做（Blocked）**：尚无用户授权的隔离 Supabase 项目、五个独立账号与真实迁移部署；五账号 RLS、Realtime、双设备恢复、撤权、Windows/macOS GUI 全部不能标为已验收。
+
 ### ALPHA-CLOSE-03 内部安装包与数据安全恢复（2026-11-25）
 
 - **代码范围**：[54](54_ALPHA_CLOSE_03_INSTALLER_AND_RECOVERY.md)。五 SQLite 数据库新增 manifest v2 SHA-256/字节数/user_version 与 quick_check；旧 v1 只能检查结构而没有原始历史哈希。Electron Main 原生选择器 + 10 分钟审查令牌、重复审查与原子复制到全新隔离 userData，不允许 Renderer 提交文件路径或覆盖正在使用的配置。
