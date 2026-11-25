@@ -139,8 +139,9 @@ describe("KB-005D local E5/BGE asset supply chain and index integration",()=>{
     await service.importNeuralDirectory(dir,"e5");
     const original=service.status().model?.revision;
     const bge=source(root,"bge");
-    const failing=new KnowledgeOfflineModels(root,
-      new KnowledgeStore(join(root,"alternate.sqlite")),
+    const alternate=new KnowledgeStore(join(root,"alternate.sqlite"));
+    databases.push(alternate);
+    const failing=new KnowledgeOfflineModels(root,alternate,
       async()=>{throw Error("No static");},
       async()=>{throw Error("Python unavailable");});
     managers.push(failing);
