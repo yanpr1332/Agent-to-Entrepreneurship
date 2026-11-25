@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import PersonalFilesPanel from "./PersonalFilesPanel";
 import type {
   CloudSessionStatus, SharedMember, SharedMessage, SharedTask, SharedWorkspace,
   WorkspaceLiveUpdate,
@@ -734,6 +735,7 @@ export default function CloudWorkspace() {
           </>}
         </section>
       </div>
+      <PersonalFilesPanel key={status.userId??"signed-out"} />
       <section className="panel cloud-personal-sync" aria-label="个人数据同步与恢复">
         <div className="panel-heading">
           <div><div className="eyebrow">PERSONAL DEVICE SYNC · MANUAL</div><h2>个人任务与手动日历同步</h2></div>
