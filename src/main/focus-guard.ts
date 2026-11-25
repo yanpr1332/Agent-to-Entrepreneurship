@@ -157,13 +157,11 @@ export class FocusGuardController {
     this.foregroundApp=null;this.warning=null;
     try{
       if(owner&&!owner.isDestroyed()&&before){
-        // Release elevated display position before window geometry.
-        owner.setAlwaysOnTop(before.top);
-        owner.setFullScreen(before.full);
+        // Independent best-effort restoration: a failing always-on-top API
+        // must not prevent the fullscreen release attempt.
+        try{owner.setAlwaysOnTop(before.top);}catch{/* OS may be closing */}
+        try{owner.setFullScreen(before.full);}catch{/* OS may be closing */}
       }
-    }catch{
-      // OS may already have destroyed the window; never postpone releasing
-      // the emergency shortcut or the in-memory lease.
     }finally{this.platform.unregisterEmergencyShortcut();}
     return this.status();
   }

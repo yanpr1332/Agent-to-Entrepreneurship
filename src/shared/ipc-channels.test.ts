@@ -176,7 +176,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
 
   it("keeps knowledge and backup operations narrowly allowlisted", () => {
     const channels=Object.values(IPC_CHANNELS);
-    expect(channels.filter(name=>name.startsWith("knowledge:"))).toHaveLength(32);
+    expect(channels.filter(name=>name.startsWith("knowledge:"))).toHaveLength(33);
     expect(channels.filter(name=>name.startsWith("backup:"))).toEqual(["backup:create"]);
   });
 

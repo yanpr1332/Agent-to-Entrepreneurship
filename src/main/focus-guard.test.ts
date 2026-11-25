@@ -96,13 +96,13 @@ describe("FOC-003/004 opt-in fail-open application guard",()=>{
     expect(isFocusDistraction("Chrome",[],"allow")).toBe(false);
   });
   it("never leaks stale asynchronous foreground results to the next session",async()=>{
-    let resolve:(name:string)=>void=()=>{};
-    const probe=vi.fn(()=>new Promise<string>(r=>{resolve=r;}));
+    const resolvers:Array<(name:string)=>void>=[];
+    const probe=vi.fn(()=>new Promise<string>(r=>{resolvers.push(r);}));
     const {guard,owner}=fixture(probe);
     guard.start(request("monitor"),owner);
     guard.stop();
     guard.start(request("monitor"),owner);
-    resolve("Safari");
+    resolvers[0]("Safari"); // resolve OLD observation after a new lease starts
     await Promise.resolve();
     expect(guard.status().distraction).toBe(false);
     guard.close();

@@ -169,7 +169,8 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
       void window.desktop.focus.guardStatus().then(status=>{
         if(!active)return;
         setGuardStatus(status);
-        if(phase==="running"&&!status.active&&remaining>0){
+        if(phase==="running"&&!status.active&&
+          deadline.current>Date.now()&&remaining>0){
           // External emergency shortcut or timeout: never silently claim a
           // still-enforced protected session.
           setRemaining(Math.max(0,Math.ceil((deadline.current-Date.now())/1000)));
