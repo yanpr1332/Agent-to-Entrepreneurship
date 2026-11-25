@@ -21,6 +21,8 @@ export const IPC_CHANNELS = {
   knowledgeRemoveOfflineModel: "knowledge:embedding-remove",
   knowledgeEvaluateOfflineModel: "knowledge:embedding-evaluate",
   knowledgeExportEvidenceCatalog: "knowledge:embedding-evidence-catalog",
+  knowledgeEvidencePage: "knowledge:embedding-evidence-page",
+  knowledgeSaveEvaluationLabels: "knowledge:embedding-save-labels",
   knowledgeCards: "knowledge:cards",
   knowledgeCreateCard: "knowledge:create-card",
   knowledgeRemoveCard: "knowledge:remove-card",

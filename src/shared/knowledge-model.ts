@@ -48,6 +48,16 @@ export interface KnowledgeRetrievalScores {
   recallAt10:number;
   mrrAt10:number;
 }
+/** A bounded, local-only page of evidence to support human relevance labelling. */
+export interface KnowledgeEvidenceCatalogPage {
+  total:number;
+  items:Array<{evidenceKey:string;title:string;pageNumber:number|null;excerpt:string}>;
+}
+export interface KnowledgeLabelsSaveResult {path:string;cases:number;}
+export interface KnowledgeLocalLabels {
+  schema:1;
+  cases:Array<{id:string;query:string;relevant:string[]}>;
+}
 export interface KnowledgeEvidenceExportResult {
   path:string;
   exported:number;

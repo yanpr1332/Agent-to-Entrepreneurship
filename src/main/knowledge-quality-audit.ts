@@ -1,4 +1,4 @@
-import {closeSync,constants,fstatSync,lstatSync,openSync,readFileSync}
+import {closeSync,constants,fstatSync,lstatSync,openSync,readFileSync,writeFileSync}
   from "node:fs";
 import {requireKnowledgeId,parseKnowledgeQuery,
   type KnowledgeEvaluationReport,type KnowledgeRetrievalScores}
@@ -46,6 +46,42 @@ export function parseLocalEvaluationLabels(input:unknown):RetrievalBenchmarkCase
   }
   return cases;
 }
+/** Check the current on-disk revision again at export/evaluation time.
+ * Failed lookups are deliberately treated as stale references, not as
+ * missing relevant evidence that may distort quality measurements. */
+export function assertCurrentKnowledgeEvidence(
+  key:string,lookup:(id:string,ordinal:number)=>{revision:number},
+):void{
+  const [id,revision,ordinal]=key.split(":");
+  if(!id||!Number.isSafeInteger(Number(revision))||
+    !Number.isSafeInteger(Number(ordinal)))
+    throw Error("Invalid local evaluation source reference");
+  try{
+    const current=lookup(requireKnowledgeId(id),Number(ordinal));
+    if(current.revision!==Number(revision))
+      throw Error("Local evaluation labels reference an obsolete source revision");
+  }catch{
+    throw Error("Local evaluation labels reference an obsolete or missing passage");
+  }
+}
+
+/** The save path must come exclusively from a trusted native SaveDialog.
+ * Atomic exclusive creation prevents overwriting existing files or symlinks.
+ * No raw local content is logged, exported to cloud, or sent to a model. */
+export function saveLocalEvaluationLabels(
+  file:string,input:unknown,assertEvidence:(key:string)=>void,
+):number{
+  if(typeof file!=="string"||!file.toLowerCase().endsWith(".json"))
+    throw Error("Choose a local JSON labels file");
+  const cases=parseLocalEvaluationLabels(input);
+  for(const c of cases)for(const key of c.relevant)assertEvidence(key);
+  const data=JSON.stringify({schema:1,cases},null,2)+"\n";
+  if(Buffer.byteLength(data,"utf8")>MAX_LABEL_BYTES)
+    throw Error("Local evaluation label file exceeds 128 KiB");
+  writeFileSync(file,data,{flag:"wx",mode:0o600,encoding:"utf8"});
+  return cases.length;
+}
+
 /** Only Main's native file picker supplies this path. Never accepts HTTP,
  * user-provided Renderer paths, symlinks or unlimited labelled datasets. */
 export function readLocalEvaluationLabels(file:string):RetrievalBenchmarkCase[]{
