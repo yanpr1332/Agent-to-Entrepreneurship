@@ -71,6 +71,27 @@ export interface FocusTitleUpdate {
   title: string;
 }
 
+/** Short-lived, explicit focus guard. Never blocks OS recovery or kills apps.
+ * "shield" only controls this application's full-screen window. */
+export type FocusGuardMode="off"|"monitor"|"shield";
+export type FocusGuardListMode="block"|"allow";
+export interface FocusGuardStartInput {
+  sessionId:string;
+  durationSeconds:number;
+  mode:FocusGuardMode;
+  listMode:FocusGuardListMode;
+  appNames:string[];
+}
+export interface FocusGuardStatus {
+  active:boolean;
+  mode:FocusGuardMode;
+  endsAt:string|null;
+  monitor:"idle"|"checking"|"available"|"unavailable";
+  distraction:boolean;
+  foregroundApp:string|null;
+  warning:string|null;
+  safeExitShortcut:string;
+}
 export interface FocusSession {
   id: string;
   title: string;
