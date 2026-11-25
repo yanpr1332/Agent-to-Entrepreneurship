@@ -119,7 +119,7 @@ export function parseMailDraft(input: unknown): MailDraft {
 
 function parseReplyMessageId(value: unknown): string {
   if (typeof value !== "string" || value.length > 250 ||
-      !/^<[^<>\\r\\n\\x00-\\x1f\\x7f]{1,245}>$/.test(value))
+      !/^<[^<>\r\n\x00-\x1f\x7f]{1,245}>$/.test(value))
     throw Error("Invalid reply message reference");
   return value;
 }
@@ -135,8 +135,8 @@ export function parseMailDraftSave(input: unknown): MailDraftSaveInput {
   const to = data.to.map(normalizeAddress);
   if (new Set(to).size !== to.length) throw Error("Duplicate draft recipients");
   if (typeof data.subject !== "string" || data.subject.length > 180 ||
-      /[\\r\\n\\x00-\\x1f\\x7f]/.test(data.subject)) throw Error("Invalid draft subject");
-  if (typeof data.body !== "string" || data.body.length > 10000 || /\\x00/.test(data.body))
+      /[\r\n\x00-\x1f\x7f]/.test(data.subject)) throw Error("Invalid draft subject");
+  if (typeof data.body !== "string" || data.body.length > 10000 || /\x00/.test(data.body))
     throw Error("Invalid draft body");
   return {
     to, subject: data.subject, body: data.body,
@@ -148,7 +148,7 @@ export function parseMailDraftSave(input: unknown): MailDraftSaveInput {
 /** Only a single, safe RFC5322 sender can be used as an automatic reply target. */
 export function replyAddress(from: string): string {
   if (typeof from !== "string" || from.length > 500) throw Error("Invalid mail sender");
-  const match = /<([^<>]+)>\\s*$/.exec(from);
+  const match = /<([^<>]+)>\s*$/.exec(from);
   return normalizeAddress(match ? match[1] : from);
 }
 
