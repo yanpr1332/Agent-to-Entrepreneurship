@@ -24,6 +24,7 @@ import {WorkspaceHistoryStore} from "./cloud/workspace-history-store";
 import {createTeamHistoryCipher} from "./cloud/workspace-history-crypto";
 import {WorkspaceHistoryService} from "./cloud/workspace-history-service";
 import { PersonalSyncService } from "./personal-sync";
+import {PersonalFileSyncService} from "./personal-file-sync";
 import {
   parsePersonalSyncResolutionRequest,parsePersonalSyncLegacyAdoptionRequest,
 } from "../shared/personal-sync-contract";
@@ -192,6 +193,11 @@ const workspaceRealtime=new WorkspaceRealtimeBridge(sharedCloud,update=>{
   }
 });
 let personalSync:PersonalSyncService|null=null;
+let personalFiles:PersonalFileSyncService|null=null;
+function personalFileService():PersonalFileSyncService{
+  if(!personalFiles)throw Error("Personal file synchronization is unavailable");
+  return personalFiles;
+}
 function personalSyncService():PersonalSyncService{
   if(!personalSync)throw new Error("Personal synchronization is not initialized");
   return personalSync;
@@ -1054,6 +1060,50 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return sharedCloud.markTask(workspaceId, taskId, completed);
   });
+  // File staging is native-picker-only: IPC NEVER accepts a filesystem path.
+  handle(IPC_CHANNELS.cloudFileOverview, (event) => {
+    requireTrustedSender(event);
+    return personalFileService().overview();
+  });
+  handle(IPC_CHANNELS.cloudFileStage, async(event,replaceInput:unknown)=>{
+    requireTrustedSender(event);
+    let replacement:{fileId:string;version:number}|undefined;
+    if(replaceInput!==null){
+      if(!replaceInput||typeof replaceInput!=="object"||Array.isArray(replaceInput))
+        throw Error("Invalid file replacement request");
+      const input=replaceInput as Record<string,unknown>;
+      if(Object.keys(input).sort().join(",")!=="fileId,version")
+        throw Error("Invalid file replacement request");
+      replacement={fileId:String(input.fileId),version:Number(input.version)};
+    }
+    // Dialog is controlled by Main and constrained to one file. The selected
+    // absolute path and its contents are never returned to Renderer.
+    const result=await dialog.showOpenDialog({
+      title:"选择一个准备手动同步的个人文件（最大 1 MiB）",
+      properties:["openFile"],
+      filters:[{name:"个人学习文件",extensions:[
+        "md","txt","pdf","html","htm","tex","latex","csv","json","ics",
+      ]}],
+    });
+    if(result.canceled||result.filePaths.length!==1)return null;
+    return personalFileService().stagePickedFile(result.filePaths[0],replacement);
+  });
+  handle(IPC_CHANNELS.cloudFileUpload,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return personalFileService().upload(id);
+  });
+  handle(IPC_CHANNELS.cloudFileStopLocal,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return personalFileService().stopLocal(id);
+  });
+  handle(IPC_CHANNELS.cloudFileDownload,(event,id:unknown,version:unknown)=>{
+    requireTrustedSender(event);
+    return personalFileService().download(id,version);
+  });
+  handle(IPC_CHANNELS.cloudFileDelete,(event,id:unknown,version:unknown)=>{
+    requireTrustedSender(event);
+    return personalFileService().deleteRemote(id,version);
+  });
   handle(IPC_CHANNELS.cloudPersonalSyncNow, async (event) => {
     requireTrustedSender(event);
     return personalSyncService().syncNow();
@@ -1223,6 +1273,14 @@ app.whenReady().then(async () => {
       ()=>canvasSync?.scope()??null,
     );
     personalSync = new PersonalSyncService(sharedCloud,localStore(),fixedCalendar());
+    // Optional file staging is independent of the five core SQLite stores.
+    // No staged content is uploaded or read at application launch.
+    try{
+      personalFiles=new PersonalFileSyncService(sharedCloud,app.getPath("userData"));
+    }catch{
+      personalFiles=null;
+      report("FILE_SYNC_INIT_DEGRADED","storage");
+    }
     // The optional cloud history cache must never make offline tasks,
     // calendar, mail or knowledge unavailable if its file is damaged.
     try{
@@ -1342,6 +1400,7 @@ app.on("before-quit", (event) => {
   aiLedger = null;
   pendingICS=null;
   personalSync=null;
+  personalFiles?.close();personalFiles=null;
   planningStore?.close();
   planningStore = null;
   fixedCalendarStore?.close();
