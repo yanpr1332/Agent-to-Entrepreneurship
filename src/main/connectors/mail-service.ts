@@ -119,6 +119,32 @@ export class CampusMailService {
     }
   }
 
+  /** Only called after UI consent. Fetches one approved cached UID in read-only
+   * mode, validates the original envelope and drops body after the preview. */
+  async readApprovedBody(record:MailRecord):Promise<string>{
+    const generation=this.generation;
+    const credentials=await this.vault.load();
+    if(!credentials||credentials.email!==record.account)
+      throw Error("Mailbox is not authorized for body access");
+    const source=this.store.list(credentials.email).find(x=>
+      x.uidValidity===record.uidValidity&&x.uid===record.uid);
+    if(!source||source.subject!==record.subject||source.from!==record.from||
+       source.messageId!==record.messageId||source.date!==record.date)
+      throw Error("Selected mail header changed before body access");
+    if(!this.reader.readBody)throw Error("Read-only mail body access is unavailable");
+    const response=await this.reader.readBody(credentials,record.uid,record.uidValidity);
+    if(generation!==this.generation)
+      throw Error("Mailbox authorization changed during body access");
+    const envelope=response.envelope;
+    if(envelope.uid!==record.uid||envelope.uidValidity!==record.uidValidity||
+       envelope.subject!==record.subject||envelope.from!==record.from||
+       envelope.messageId!==record.messageId||envelope.date!==record.date)
+      throw Error("IMAP body identity does not match selected mail");
+    if(typeof response.body!=="string"||!response.body.trim()||response.body.length>2400)
+      throw Error("Invalid approved plain-text mail body");
+    return response.body;
+  }
+
   async list(): Promise<MailRecord[]> {
     const saved=await this.vault.load();
     return saved ? this.store.list(saved.email) : [];
