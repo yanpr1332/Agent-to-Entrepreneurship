@@ -5,6 +5,7 @@ import KnowledgeAIHelper from "./KnowledgeAIHelper";
 import LocalEvaluationLab from "./LocalEvaluationLab";
 import ReviewCardMaintenance from "./ReviewCardMaintenance";
 import KnowledgeSourceLifecycle from "./KnowledgeSourceLifecycle";
+import RecoveryCenter from "./RecoveryCenter";
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
   KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport,
@@ -282,6 +283,8 @@ export default function KnowledgeBase(){
         </button>
       </div>
     </div>
+
+    <RecoveryCenter/>
 
     {activeTab==="library"&&<>
       <form className="kb-search" onSubmit={event=>void find(event)}>
