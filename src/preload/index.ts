@@ -18,6 +18,9 @@ import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } fr
 
 import type {WorkspaceHistoryItems,WorkspaceHistoryMarker} from "../shared/workspace-history-contract";
 import type {
+  PersonalFilesOverview,StagedPersonalFile,
+} from "../shared/personal-file-sync";
+import type {
   CloudCredentials, CloudProjectConfig, CloudSessionStatus,
   SharedWorkspace, SharedMember, SharedMessage, SharedTask, SharedTaskInput,
   SharedWorkspaceSnapshot, WorkspaceLiveUpdate,
@@ -150,6 +153,18 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.cloudCreateTask, workspaceId, input) as Promise<SharedTask>,
     markTask: (workspaceId: string, taskId: string, completed: boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudMarkTask, workspaceId, taskId, completed) as Promise<SharedTask>,
+    filesOverview:() =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudFileOverview) as Promise<PersonalFilesOverview>,
+    stageFile:(replace:{fileId:string;version:number}|null=null) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudFileStage,replace) as Promise<StagedPersonalFile|null>,
+    uploadFile:(fileId:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudFileUpload,fileId) as Promise<{status:"uploaded"|"conflict";version:number|null}>,
+    stopLocalFile:(fileId:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudFileStopLocal,fileId) as Promise<{stopped:true}>,
+    downloadFile:(fileId:string,version:number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudFileDownload,fileId,version) as Promise<{path:string;bytes:number}>,
+    deleteRemoteFile:(fileId:string,version:number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudFileDelete,fileId,version) as Promise<{status:"deleted"|"conflict";version:number|null}>,
     syncPersonalNow: () =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudPersonalSyncNow) as Promise<PersonalSyncRunResult>,
     personalSyncCandidates: () =>
