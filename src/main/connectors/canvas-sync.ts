@@ -132,6 +132,7 @@ export class CanvasSyncService {
     try {
       [accountId] = await Promise.all([api.getCurrentUserId()]);
     } catch (reason) {
+      if(generation!==this.generation)return summary;
       const kind=canvasFailureKind(reason);
       summary.failureKind=kind;
       summary.lastError=canvasFailureHelp(kind);
@@ -184,6 +185,7 @@ export class CanvasSyncService {
         summary.preserved += report.preserved;
         summary.missing += report.missing;
       } catch (reason) {
+        if(generation!==this.generation)return summary;
         // Auth expiry and rate limits stop the batch instead of hammering
         // the remaining courses with a token that cannot currently succeed.
         const kind=canvasFailureKind(reason);
@@ -208,6 +210,7 @@ export class CanvasSyncService {
           summary.calendarMissing=(summary.calendarMissing??0)+report.missing;
           summary.calendarSkipped=(summary.calendarSkipped??0)+report.skipped;
         }catch(reason){
+          if(generation!==this.generation)return summary;
           summary.calendarFailedCourses=(summary.calendarFailedCourses??0)+1;
           const kind=canvasFailureKind(reason);
           if(kind==="authentication"||kind==="rate-limit"){
