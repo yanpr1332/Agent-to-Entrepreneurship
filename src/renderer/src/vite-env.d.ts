@@ -97,6 +97,7 @@ declare global {
         workspaces: () => Promise<SharedWorkspace[]>;
         createWorkspace: (name: string, displayName: string) => Promise<string>;
         createInvite: (workspaceId: string) => Promise<string>;
+        revokeMember: (workspaceId:string,userId:string) => Promise<{revoked:true}>;
         joinWorkspace: (token: string, displayName: string) => Promise<string>;
         members: (workspaceId: string) => Promise<SharedMember[]>;
         messages: (workspaceId: string) => Promise<SharedMessage[]>;
