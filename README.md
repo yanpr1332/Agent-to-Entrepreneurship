@@ -102,7 +102,7 @@ npm run build
 
 ## ALPHA-CLOSE-01 邮件 AI 人工确认建任务
 
-在邮件中心主动选择至多三封本机缓存邮件的基本信息（主题、发件人、发送时间和内部匹配编号），可完整预览将向 OpenAI API 外传的内容；只有再次确认才进行可能付费的 AI 提取。模型返回的候选需严格验证来源和明确截止日，用户可修改标题/日期并独立确认后创建本机个人任务。不会自动读取邮件正文、发送邮件、创建任务或上传其他邮箱内容；真实交大邮箱仍需用户自行授权验收。OpenAI API Key 支持 AI 页面手动输入并加密保存，或启动前设置 `OPENAI_API_KEY` 环境变量（本机保存的 Key 优先，环境变量只由 Electron 主进程读取）。见 [52](docs/w5/52_ALPHA_CLOSE_01_MAIL_AI_REVIEW.md)。
+在邮件中心主动选择至多三封本机缓存邮件的基本信息（主题、发件人、发送时间和内部匹配编号），可完整预览将向 OpenAI API 外传的内容；只有再次确认才进行可能付费的 AI 提取。模型返回的候选需严格验证来源和明确截止日，用户可修改标题/日期并独立确认后创建本机个人任务。不会自动读取邮件正文、发送邮件、创建任务或上传其他邮箱内容；真实交大邮箱仍需用户自行授权验收。AI 允许用户在设置页选择 OpenAI、Anthropic、Gemini、DeepSeek，或其他支持 Chat Completions 的可信 HTTPS API 服务商；输入自己的 Key 加密保存，亦可通过 `OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`GEMINI_API_KEY`、`DEEPSEEK_API_KEY` 等环境变量提供。旧 OpenAI 加密配置仍可读取。正文仅在用户对指定邮件确认授权后按需只读获取，纯文本限长、先预览后人工确认调用；绝不自动发送附件或 SMTP 邮件。见 [52](docs/w5/52_ALPHA_CLOSE_01_MAIL_AI_REVIEW.md)。
 
 ## V0.1 五人内部 Alpha 收尾执行计划（2026-11-25）
 
