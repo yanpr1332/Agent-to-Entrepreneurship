@@ -1,13 +1,14 @@
 import { useEffect,useState,type FormEvent } from "react";
 import {
-  AI_DEFAULT_MODEL, AI_MAX_PROMPT_CHARS,
+  AI_DEFAULT_MODEL, AI_MODEL_DEFAULTS, AI_MAX_PROMPT_CHARS,
+  type AIProvider,
   type AIAnswer, type AIPreview, type AIStatus,
 } from "../../shared/ai-model";
 import type { LocalTask } from "../../shared/local-model";
 import { eligibleAIPlanTasks, buildAIPlanPrompt, parseAIPlanDraft, type AIPlanSuggestion } from "../../shared/ai-planning";
 
 const empty:AIStatus={
-  connected:false,running:false,provider:"openai",model:null,keySource:null,configurationWarning:null,usedToday:0,
+  connected:false,running:false,provider:null,model:null,keySource:null,configurationWarning:null,usedToday:0,
   remainingToday:12,dailyRequestLimit:12,maxOutputTokens:512,lastRequestAt:null,
 };
 type Entry={id:number;question:string;answer:AIAnswer};
@@ -21,6 +22,8 @@ export default function AIWorkspace(){
   const [status,setStatus]=useState<AIStatus>(empty);
   const [apiKey,setApiKey]=useState("");
   const [model,setModel]=useState(AI_DEFAULT_MODEL);
+  const [provider,setProvider]=useState<AIProvider>("openai");
+  const [endpoint,setEndpoint]=useState("");
   const [question,setQuestion]=useState("");
   const [preview,setPreview]=useState<AIPreview|null>(null);
   const [answers,setAnswers]=useState<Entry[]>([]);
@@ -39,7 +42,8 @@ export default function AIWorkspace(){
   useEffect(()=>{
     let active=true;
     void window.desktop.ai.status().then(next=>{
-      if(active){setStatus(next);if(next.model)setModel(next.model);}
+      if(active){setStatus(next);if(next.model)setModel(next.model);
+        if(next.provider)setProvider(next.provider);}
     }).catch(e=>{if(active)setError(describeError(e));});
     void window.desktop.tasks.list().then(value=>{if(active)setTasks(value);})
       .catch(e=>{if(active)setError(describeError(e));});
@@ -51,7 +55,9 @@ export default function AIWorkspace(){
     if(busy||sending)return;
     setBusy(true);setError("");setNotice("");
     try{
-      const next=await window.desktop.ai.connect({apiKey,model});
+      const next=await window.desktop.ai.connect({
+        apiKey,model,provider,endpoint:provider==="compatible"?endpoint:null,
+      });
       setStatus(next);
       setPreview(null);
       setNotice("API Key 已加密保存在此设备，并优先于环境变量。尚未发起付费测试请求，密钥可用性将在首次确认提问时验证。");
@@ -147,7 +153,7 @@ export default function AIWorkspace(){
     <div className="page-heading">
       <div><div className="eyebrow">EXPLICIT AI PROVIDER</div>
         <h1>AI 学习助手 · 单轮问答</h1>
-        <p>自己配置 OpenAI API Key，先预览，再明确确认后发送单次问题</p>
+        <p>自行配置 AI 服务商与个人 API Key，预览并确认后才发送单次请求</p>
       </div>
       <span className="count-chip">{status.connected
         ?status.keySource==="environment"?"使用环境变量 API Key":"使用本机加密 API Key"
@@ -155,7 +161,7 @@ export default function AIWorkspace(){
     </div>
     <div className="connector-warning" role="note">
       <strong>付费与隐私告知</strong>
-      每次确认后，你输入的问题将通过 HTTPS 发送给 OpenAI API，并可能按服务商当前计价产生费用。
+      每次确认后，你输入的问题将通过 HTTPS 发送给当前选择的 AI 服务商，并可能按该服务商的计价产生费用。
       每日最多 {status.dailyRequestLimit} 次请求、每次最多 {status.maxOutputTokens} 个输出 token；
       这是软件端限额，<strong>不是费用金额上限</strong>，其他设备和平台用量不受此限额控制。
       API 请求指定不保存响应供模型会话使用，但服务商仍会依其 API 数据处理政策处理请求。
@@ -173,7 +179,8 @@ export default function AIWorkspace(){
         <div className="eyebrow">PERSONAL KEY / ENVIRONMENT</div>
         <h2>模型连接</h2>
         {status.connected&&<div className="ai-connection">
-          <p>服务商：OpenAI Responses API</p>
+          <p>服务商：{status.provider==="openai"?"OpenAI":status.provider==="anthropic"?"Anthropic Claude":
+            status.provider==="gemini"?"Google Gemini":"OpenAI-compatible 第三方接口"}</p>
           <p>已设置模型：<strong>{status.model}</strong></p>
           <p>Key 来源：<strong>{status.keySource==="environment"?"环境变量 OPENAI_API_KEY":"本机系统凭据加密存储"}</strong></p>
           {status.keySource==="environment"&&<p className="privacy-note">
@@ -190,9 +197,27 @@ export default function AIWorkspace(){
             onClick={()=>void disconnect()}>删除本机保存的 Key</button>}
         </div>}
         <form className="ai-config-form" onSubmit={event=>void connect(event)}>
-          <label>模型标识（GPT 系列）
+          <label>API 服务商
+            <select value={provider} disabled={busy||sending} onChange={event=>{
+              const next=event.target.value as AIProvider;
+              setProvider(next);
+              if(next!=="compatible")setModel(AI_MODEL_DEFAULTS[next]);
+              else setModel("");
+            }}>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic Claude</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="compatible">其他 OpenAI-compatible API</option>
+            </select>
+          </label>
+          {provider==="compatible"&&<label>可信服务商的 HTTPS Chat Completions 完整地址
+            <input value={endpoint} required maxLength={300} autoComplete="off"
+              placeholder="https://api.example.com/v1/chat/completions"
+              onChange={event=>setEndpoint(event.target.value)}/>
+          </label>}
+          <label>模型 ID（以你的服务商账号可调用的型号为准）
             <input value={model} required maxLength={68} autoComplete="off"
-              onChange={event=>setModel(event.target.value)} placeholder="gpt-4.1-mini"/>
+              onChange={event=>setModel(event.target.value)} placeholder="模型的完整 ID"/>
           </label>
           <label>手动输入个人项目 API Key（保存到本机安全凭据库）
             <input value={apiKey} required type="password" autoComplete="off"
@@ -202,10 +227,16 @@ export default function AIWorkspace(){
             {status.connected?(status.keySource==="environment"?"保存并切换到手动 Key":"替换本地模型配置与 Key"):"加密保存配置（不进行付费测试）"}
           </button>
           <p className="privacy-note">
+            OpenAI、Anthropic、Gemini 使用原生 API，其他服务商需提供兼容 Chat Completions 的 HTTPS 接口，
+            不能保证任何专有 API Key 直接通用。确认调用前请审核实际服务商及提示词；
+            第三方服务商的数据处理、计费规则由你选择的服务商决定。
             手动输入会使用系统凭据加密；如果安全加密不可用，会拒绝保存，不退回明文存储。
-            也可在启动应用前设置操作系统环境变量 <code>OPENAI_API_KEY</code>，无需在此输入。
+            也可用 <code>OPENAI_API_KEY</code>、<code>ANTHROPIC_API_KEY</code>、
+            <code>GEMINI_API_KEY</code>，或为其他兼容接口设置
+            <code>STUDY_ANCHOR_AI_PROVIDER</code>、<code>STUDY_ANCHOR_AI_MODEL</code>、
+            <code>STUDY_ANCHOR_AI_ENDPOINT</code>、<code>STUDY_ANCHOR_AI_API_KEY</code>。
             本机加密 Key 优先；删除本机 Key 后才会回退到环境变量。环境变量不写入应用数据库或凭据文件。
-            当前仅支持固定 OpenAI 官方 API 端点，不支持自定义 URL。
+            兼容接口要求公网 HTTPS URL，不允许本地或内网地址。
           </p>
         </form>
       </section>
@@ -224,7 +255,7 @@ export default function AIWorkspace(){
         )}</div>}
         {preview ? <div className="ai-preview" role="region" aria-label="付费 AI 请求确认">
           <strong>发送前最后核对</strong>
-          <p>将向 <strong>OpenAI</strong> 发送以下文字，模型为 <strong>{preview.model}</strong>：</p>
+          <p>将向 <strong>{preview.endpointLabel}</strong>（{preview.provider}）发送以下文字，模型为 <strong>{preview.model}</strong>：</p>
           <div className="ai-question-preview">{preview.prompt}</div>
           <p className="privacy-note">单次输出最多 {preview.maxOutputTokens} token；确认有效至 {new Date(preview.expiresAt).toLocaleString("zh-CN")}。
             一次性确认后不能自动重试，可能产生计费。</p>
