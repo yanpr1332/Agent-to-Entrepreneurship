@@ -6,6 +6,8 @@ const valid={items:[{uidValidity:9,uid:3,kind:"coursework",title:"提交实验�
 const uuid="b27409e8-b8a1-43a7-86d5-9849a3f15eb1";
 describe("explicit bounded mail AI inputs and output",()=>{
   it("accepts one to three unique source IDs, never renderer content",()=>{
+    expect(parseMailAISelection({sources:[{uid:3,uidValidity:9}],includeBodies:true})).toEqual({sources:[{uid:3,uidValidity:9}],includeBodies:true});
+    expect(()=>parseMailAISelection({sources:[{uid:3,uidValidity:9}],includeBodies:"yes"})).toThrow();
     expect(parseMailAISelection({sources:[{uid:3,uidValidity:9}]})).toEqual({
       sources:[{uid:3,uidValidity:9}],
     });

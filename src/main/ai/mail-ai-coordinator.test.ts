@@ -28,12 +28,14 @@ function fixture(){
     model:"gpt-4.1-mini",usage:{inputTokens:90,outputTokens:70},
     createdAt:new Date(now).toISOString(),
   }));
+  const readBody=vi.fn(async()=>"Teacher: please submit lab report 2026-12-06");
   const coordinator=new MailAIReviewCoordinator({prepare,confirm},{
     list:async()=>headers,
+    readBody,
     decisions:addr=>store.mailCandidateDecisions(addr),
     accept:(record,draft)=>store.reviewMailCandidate(record,"accept",draft),
   },()=>now);
-  return {store,coordinator,prepare,confirm,
+  return {store,coordinator,prepare,confirm,readBody,
     setHeaders:(value:MailRecord[])=>{headers=value;},
     advance:(ms:number)=>{now+=ms;}};
 }
@@ -66,6 +68,27 @@ describe("Alpha 01 mail AI user consent and source-safe task creation",()=>{
     expect(retry).toEqual({...task,created:false});
     expect(f.store.listTasks()).toHaveLength(1);
     expect(f.store.mailCandidateDecisions(account)).toHaveLength(1);
+  });
+
+  it("never accesses a body unless explicitly authorized, and previews exact selected text",async()=>{
+    const f=fixture();
+    const without=await f.coordinator.prepare(selection);
+    expect(without.prompt).not.toContain("Teacher: please submit");
+    expect(f.readBody).not.toHaveBeenCalled();
+    const withBody=await f.coordinator.prepare({...selection,includeBodies:true});
+    expect(f.readBody).toHaveBeenCalledTimes(1);
+    expect(withBody.prompt).toContain("Teacher: please submit lab report 2026-12-06");
+    expect(f.confirm).not.toHaveBeenCalled();
+    f.confirm.mockResolvedValueOnce({
+      text:JSON.stringify({items:[{
+        uid:13,uidValidity:5,kind:"coursework",title:"Submit report",
+        dueDate:"2026-12-06",reason:"Approved plain-text body cited exact due date",
+      }]}),model:"gpt-4.1-mini",usage:{inputTokens:50,outputTokens:20},
+      createdAt:"2026-11-25T11:00:00Z",
+    });
+    const reviewed=await f.coordinator.confirm(id);
+    expect(reviewed.items[0].dueDate).toBe("2026-12-06");
+    expect(f.store.listTasks()).toHaveLength(0);
   });
   it("rejects stale changed/removed mails before charging or task writes",async()=>{
     const f=fixture();
