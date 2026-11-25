@@ -12,10 +12,11 @@ export function formatSmtpMessage(from: string, draft: MailDraft): string {
   const messageId = randomUUID();
   return [
     `Date: ${new Date().toUTCString()}`,
-    `Message-ID: <${messageId}@agent-to-entrepreneurship.local>`,
+    `Message-ID: <${messageId}@study-anchor.local>`,
     `From: <${from}>`,
     `To: ${draft.to.map(address => `<${address}>`).join(", ")}`,
     `Subject: =?UTF-8?B?${subject}?=`,
+    ...(draft.replyMessageId ? [`In-Reply-To: ${draft.replyMessageId}`, `References: ${draft.replyMessageId}`] : []),
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="UTF-8"',
     "Content-Transfer-Encoding: base64",
