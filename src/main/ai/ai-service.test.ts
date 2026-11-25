@@ -80,7 +80,7 @@ describe("paid AI requires explicit one-time approval",()=>{
   });
   it("refuses actions before configuration and never echoes key in status",async()=>{
     const {service,ledger}=fixture();
-    expect(()=>service.prepare("Hi")).toThrow("OPENAI_API_KEY");
+    expect(()=>service.prepare("Hi")).toThrow("API_KEY");
     await service.connect(cfg);
     expect(JSON.stringify(service.status())).not.toContain(key);
     expect(service.status().keySource).toBe("saved");
@@ -132,6 +132,25 @@ describe("paid AI requires explicit one-time approval",()=>{
     expect(status.configurationWarning).toBe("invalid_environment_key");
     expect(JSON.stringify(status)).not.toContain(invalid);
     expect(status.connected).toBe(false);
+    ledger.close();
+  });
+  it("uses DeepSeek environment variable with official model and no secret disclosure",async()=>{
+    const env={DEEPSEEK_API_KEY:"ds-"+"f".repeat(48)};
+    const {service,ledger,vault,ask}=fixture(()=>undefined);
+    // Main's only environment provider is injected separately in this test.
+    const local=new AIService(vault,ledger,{ask},()=>undefined,()=>env);
+    expect(await local.initialize()).toMatchObject({
+      provider:"deepseek",model:"deepseek-flash",keySource:"environment",
+    });
+    const preview=local.prepare("Read my authorized data");
+    expect(preview).toMatchObject({provider:"deepseek",endpointLabel:"deepseek"});
+    await local.confirm(preview.approvalId);
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({provider:"deepseek",apiKey:env.DEEPSEEK_API_KEY}),
+      expect.any(String),expect.any(AbortSignal),
+    );
+    expect(JSON.stringify(local.status())).not.toContain(env.DEEPSEEK_API_KEY);
+    expect(await vault.load()).toBeNull();
     ledger.close();
   });
 });

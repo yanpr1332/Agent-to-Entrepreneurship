@@ -17,7 +17,7 @@ function fixture(){
   let now=Date.parse("2026-11-25T11:00:00Z");
   let headers=[row,second];
   const prepare=vi.fn((prompt:string)=>({
-    approvalId:id,prompt,model:"gpt-4.1-mini",
+    approvalId:id,prompt,model:"gpt-4.1-mini",provider:"openai" as const,endpointLabel:"openai",
     expiresAt:new Date(now+120000).toISOString(),maxOutputTokens:512,
   }));
   const confirm=vi.fn(async()=>({
