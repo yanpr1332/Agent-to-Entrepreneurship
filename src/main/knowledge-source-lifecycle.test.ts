@@ -119,7 +119,8 @@ describe("ALPHA-KB-007 native local knowledge source lifecycle",()=>{
     const id=added.items[0].documentId!;
     writeFileSync(a,"source changed externally");
     const audit=(await auditKnowledgeSources(store,[id]))[0];
-    store.importText({sourcePath:a,title:"concurrent.md",format:"markdown",
+    store.importText({sourcePath:store.getDocument(id).sourcePath,
+      title:"concurrent.md",format:"markdown",
       text:"different user reimport"});
     const result=await refreshAuditedKnowledgeSources(store,[refreshRequest(audit)]);
     expect(result.items[0]).toMatchObject({status:"failed"});
