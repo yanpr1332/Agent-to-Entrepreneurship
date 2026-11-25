@@ -1,0 +1,71 @@
+name: Build internal Alpha installers (manual, unsigned)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: internal-alpha-${{ github.ref }}-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  installer:
+    name: Unsigned install bundle (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+          - os: macos-latest
+            target: mac
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - name: Check out exact selected commit
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Typecheck, regression tests, desktop bundle, worker smoke
+        run: npm run build
+
+      # No private signing certificates or developer keys are used.
+      # Installers are only for authorized internal Alpha testing, not
+      # signed / notarized app store distribution.
+      - name: Build unsigned Windows NSIS installer
+        if: matrix.target == 'win'
+        run: npx electron-builder --win nsis --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Build unsigned macOS DMG + ZIP
+        if: matrix.target == 'mac'
+        run: npx electron-builder --mac dmg zip --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Check installer presence and write local checksums
+        run: node scripts/verify-internal-installer.mjs ${{ matrix.target }}
+
+      - name: Upload unsigned internal Alpha artifacts (7 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: study-anchor-unsigned-${{ matrix.target }}-${{ github.sha }}
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/SHA256SUMS.txt
+            release/BUILD_EVIDENCE.json
+          if-no-files-found: error
+          retention-days: 7
