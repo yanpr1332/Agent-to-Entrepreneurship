@@ -16,9 +16,9 @@ scripts/verify-internal-installer.mjs 检查实际产物存在、名称和体积
 
 知识库页面原有“备份本地数据库”会通过 Node SQLite 在线备份 API，在 userData/backups 下创建新目录。现为 manifest schema 2，含 databases 列表和 files 数组：每库 name、bytes、sha256、userVersion；包含任务/专注、邮件头、知识与复习、学习规划、固定课程/日历共五个 SQLite 文件。创建后执行 PRAGMA quick_check。
 
-**备份没有额外加密**，可能含个人任务/课程原文/邮件主题；请放在受控且最好加密的磁盘，不要公开分享、直接上传网盘或提交 GitHub。**不包含**：加密 API Key、Canvas/邮箱凭据、团队历史缓存、AI 使用计费账本、硬盘原始资料、离线模型文件及本机 Local Storage UI 偏好。因此这不是全设备克隆，恢复后要重新授权账号。
+**备份没有额外加密**，可能含个人任务/课程原文/邮件主题；请放在受控且最好加密的磁盘，不要公开分享、直接上传网盘或提交 GitHub。**不包含**：加密 API Key、Canvas/邮箱凭据、团队历史缓存、AI 使用计费账本、硬盘原始资料、离线模型文件及本机 Local Storage UI 偏好。因此这不是全设备克隆，恢复后要重新授权账号。任务 SQLite 仍可能包含历史个人同步的设备 ID/游标或关联用户的元数据；在恢复副本上重新授权云端前，须独立核对个人同步待发送状态，避免同一账号两台副本意外共用旧设备身份。
 
-原有 manifest schema 1（包括 migration 前快照）只支持只读 SQLite quick_check 和现有文件哈希，不能补回创建时未记录的历史哈希，也无法证明旧备份没有遭到事后篡改。
+原有 manifest schema 1（包括更名之前 ate-local.sqlite / ate-knowledge.sqlite 等迁移前快照）会严格映射到现代 Study Anchor 文件名，只支持只读 SQLite quick_check 和现有文件哈希，不能补回创建时未记录的历史哈希，也无法证明旧备份没有遭到事后篡改。
 
 ## C. 用户从界面恢复（永不覆盖正在运行的库）
 

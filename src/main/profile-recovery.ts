@@ -36,6 +36,11 @@ export interface InspectedRecovery {
 const aliases=new Map<string,Kind>([
   ...kinds.map(name=>[RESTORABLE_DATABASES[name].source,name] as const),
   ...kinds.map(name=>[RESTORABLE_DATABASES[name].destination,name] as const),
+  // Legacy pre-rename migration backups are read-only imported into modern
+  // names. Never copy the old vaults or arbitrary old profile contents.
+  ["ate-local.sqlite","tasks"],["ate-mail.sqlite","mail"],
+  ["ate-knowledge.sqlite","knowledge"],["ate-plans.sqlite","planning"],
+  ["ate-fixed-calendar.sqlite","calendar"],
 ]);
 function inside(root:string,child:string):boolean{
   const r=relative(root,child);

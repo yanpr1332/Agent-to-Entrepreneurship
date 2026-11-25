@@ -109,6 +109,10 @@ describe("ALPHA-CLOSE-03 strict manifest and offline isolated profile recovery",
       activeUserData:live,expectedFingerprint:inspected.fingerprint})).rejects.toThrow("nonexistent");
     await expect(recoverToNewProfile({folder:saved.folder,destination:live,
       activeUserData:live,expectedFingerprint:inspected.fingerprint})).rejects.toThrow("nonexistent");
+    const liveAlias=join(dir,"live-alias");symlinkSync(live,liveAlias,"dir");
+    await expect(recoverToNewProfile({folder:saved.folder,
+      destination:join(liveAlias,"sneaky"),activeUserData:live,
+      expectedFingerprint:inspected.fingerprint})).rejects.toThrow("nonexistent");
     const linked=join(dir,"linked");symlinkSync(saved.folder,linked,"dir");
     await expect(inspectRecoveryFolder(linked)).rejects.toThrow("symlink");
     const linkFile=join(saved.folder,"tasks.sqlite");
@@ -120,7 +124,7 @@ describe("ALPHA-CLOSE-03 strict manifest and offline isolated profile recovery",
   it("supports older manifest v1 and pre-migration snapshot without fake hash guarantees",async()=>{
     const {dir,live,saved}=await snapshot();
     const single=join(dir,"v1");mkdirSync(single);
-    const filename="study-anchor-tasks.sqlite";
+    const filename="ate-local.sqlite";
     copyFileSync(join(saved.folder,"tasks.sqlite"),join(single,filename));
     writeFileSync(join(single,"manifest.json"),JSON.stringify({
       schema:1,source:filename,createdAt:"2026-11-25T00:00:00.000Z",
@@ -133,7 +137,8 @@ describe("ALPHA-CLOSE-03 strict manifest and offline isolated profile recovery",
     const dest=join(dir,"v1-recovered");
     await recoverToNewProfile({folder:single,destination:dest,activeUserData:live,
       expectedFingerprint:inspected.fingerprint});
-    expect(existsSync(join(dest,filename))).toBe(true);
+    expect(existsSync(join(dest,"study-anchor-tasks.sqlite"))).toBe(true);
+    expect(existsSync(join(dest,filename))).toBe(false);
   });
   it("requires a one-time strictly shaped confirmation token, no paths from Renderer",()=>{
     const uuid="98e832b6-0643-481d-bd87-9da9014d32bc";
