@@ -317,3 +317,8 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 ## ALPHA-RC-01：V0.1 一次性集成与发布候选证据门禁（2026-11-25）
 
 [58 发布候选集中演练与人工验收](58_ALPHA_RC_01_INTEGRATION_RELEASE_GATE.md)：真实五 SQLite 的合成八模块跨流程、在线备份/隔离恢复/重启回读、敏感存储排除，以及对 ALPHA-01～20 默认阻塞的严格证据完整性检查。CI/模拟通过 != 真实外部账号、双平台 GUI 或五人 RLS 验收通过。运行 `npm run alpha:rehearsal`，再按需初始化本地私人证据文件；不要把真实验收文件提交 GitHub。
+
+
+## V0.2-01：Electron 启动预检与多人联机稳定性
+
+[60 开发/验收说明](60_V02_01_ELECTRON_CLOUD_STABILITY.md)：新增 Electron 只读二进制检查和用户显式下载命令、Supabase 身份/项目切换异步隔离、Realtime 首次离线回退与授权拒绝停止重连、小组手动刷新与上次成功时间。新增本地 Node/Vitest 故障注入回归；真实账号、真机与独立云部署仍待验收。

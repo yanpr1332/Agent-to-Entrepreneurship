@@ -34,12 +34,17 @@ export class SharedCloudClient {
   private project:CloudProjectConfig|null=null;
   private session:Session|null=null;
   private refreshJob:Promise<void>|null=null;
+  /** Revokes authority of every in-flight auth/REST response on account or project change. */
+  private authEpoch=0;
 
   constructor(private readonly fetcher:Fetcher=(url,init)=>fetch(url,init)){}
 
   configure(input:unknown):CloudSessionStatus {
-    this.project=validateCloudProject(input);
+    const next=validateCloudProject(input);
+    this.authEpoch++;
+    this.project=next;
     this.session=null;
+    this.refreshJob=null;
     return this.status();
   }
 
@@ -50,14 +55,19 @@ export class SharedCloudClient {
 
   signOut():void {
     // Volatile credentials: no durable tokens, no silent cross-device login.
+    this.authEpoch++;
     this.session=null;
+    this.refreshJob=null;
   }
 
   private async call(path:string,method:"GET"|"POST"|"PATCH",
     body?:unknown,headers:Record<string,string>={},useUser=true):Promise<unknown>{
     if(!this.project)throw Error("Configure a Supabase test project first");
     const base=this.project;
+    const epoch=this.authEpoch;
     if(useUser) await this.requireSession();
+    if(this.authEpoch!==epoch||this.project!==base)
+      throw Error("Cloud account or project changed during request");
     const token=useUser ? this.session!.accessToken : base.publishableKey;
     let response:Response;
     try {
@@ -75,8 +85,12 @@ export class SharedCloudClient {
         signal:AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
     }catch{
+      if(this.authEpoch!==epoch||this.project!==base)
+        throw Error("Cloud account or project changed during request");
       throw Error("Cloud service is unreachable; check the connection and project URL");
     }
+    if(this.authEpoch!==epoch||this.project!==base)
+      throw Error("Cloud account or project changed during request");
     if(!response.ok) {
       // Never forward remote error bodies: they may contain private account details.
       if(response.status===401 || response.status===403)
@@ -85,6 +99,8 @@ export class SharedCloudClient {
     }
     if(response.status===204)return null;
     const text=await response.text();
+    if(this.authEpoch!==epoch||this.project!==base)
+      throw Error("Cloud account or project changed during request");
     if(text.length>MAX_JSON_BYTES)throw Error("Cloud response exceeds safety limit");
     if(!text)return null;
     try{return JSON.parse(text);}catch{throw Error("Cloud returned malformed JSON");}
@@ -105,7 +121,11 @@ export class SharedCloudClient {
 
   async signUp(input:unknown):Promise<{emailVerificationRequired:true}> {
     const credentials=requireCloudCredentials(input);
+    const epoch=++this.authEpoch;
+    this.session=null;
+    this.refreshJob=null;
     const result=await this.call("auth/v1/signup","POST",credentials,{},false);
+    if(epoch!==this.authEpoch)throw Error("Cloud signup cancelled by account change");
     // An account can require email confirmation. Do not assume signup logs in.
     if(result && typeof result==="object" && "access_token" in result &&
        (result as AuthPayload).access_token){
@@ -116,7 +136,11 @@ export class SharedCloudClient {
 
   async login(input:unknown):Promise<CloudSessionStatus> {
     const credentials=requireCloudCredentials(input);
+    const epoch=++this.authEpoch;
+    this.session=null;
+    this.refreshJob=null;
     const data=await this.call("auth/v1/token?grant_type=password","POST",credentials,{},false);
+    if(epoch!==this.authEpoch)throw Error("Cloud login cancelled by account change");
     this.acceptAuth(data);
     return this.status();
   }
@@ -125,14 +149,26 @@ export class SharedCloudClient {
     if(!this.session)throw Error("Log in to the cloud workspace first");
     if(Date.now()<this.session.expiresAt-60_000)return;
     if(this.refreshJob)return this.refreshJob;
-    const refreshToken=this.session.refreshToken;
+    const oldSession=this.session,epoch=this.authEpoch;
+    const refreshToken=oldSession.refreshToken;
     const job=(async()=>{
       const updated=await this.call("auth/v1/token?grant_type=refresh_token","POST",
         {refresh_token:refreshToken},{},false);
+      if(this.authEpoch!==epoch||this.session!==oldSession)
+        throw Error("Cloud account changed during session refresh");
+      // A rotated refresh token must never silently switch to a different
+      // account. In that case fail closed and require an explicit new login.
+      const subject=(updated as AuthPayload|null)?.user?.id;
+      if(typeof subject!=="string"||requireUuid(subject)!==oldSession.userId)
+        throw Error("Cloud refresh identity does not match the signed-in user");
       this.acceptAuth(updated);
     })().catch(()=>{
-      this.session=null;
-      throw Error("Cloud session expired; log in again");
+      // Failure of an OLD refresh must never sign out a new account/project.
+      if(this.authEpoch===epoch && this.session===oldSession){
+        this.authEpoch++;
+        this.session=null;
+      }
+      throw Error("Cloud session expired or account changed; log in again");
     }).finally(()=>{if(this.refreshJob===job)this.refreshJob=null;});
     this.refreshJob=job;
     return job;
@@ -297,13 +333,16 @@ export class SharedCloudClient {
   /** Main-only credentials; no user secret ever reaches Renderer. */
   async realtimeCredentials():Promise<{url:string;accessToken:string;userId:string;expiresAt:number}>{
     if(!this.project)throw Error("Configure a Supabase test project first");
+    const epoch=this.authEpoch,project=this.project;
     await this.requireSession();
-    const session=this.session!;
-    const host=new URL(this.project.projectUrl);
+    if(this.authEpoch!==epoch||this.project!==project||!this.session)
+      throw Error("Cloud account or project changed during realtime authorization");
+    const session=this.session;
+    const host=new URL(project.projectUrl);
     if(host.protocol!=="https:"||!/^[a-z0-9-]+\.supabase\.co$/i.test(host.hostname))
       throw Error("Realtime project host is not allowlisted");
     return {url:"wss://"+host.hostname+"/realtime/v1/websocket?apikey="+
-      encodeURIComponent(this.project.publishableKey)+"&vsn=1.0.0",
+      encodeURIComponent(project.publishableKey)+"&vsn=1.0.0",
       accessToken:session.accessToken,userId:session.userId,expiresAt:session.expiresAt};
   }
 

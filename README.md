@@ -434,3 +434,9 @@ node node_modules/vitest/vitest.mjs run --pool=threads
 如需在本机使用**纯合成数据**检查八模块的本地 SQLite 流程、备份/隔离恢复、重启与敏感存储排除，请执行 `npm ci && npm run alpha:rehearsal`。这些测试不需要 Canvas Token、学校邮箱、Supabase 或 AI Key，不对外联网。
 
 真实五人 Alpha 放行须另按 [W5 发布候选核验手册](docs/w5/58_ALPHA_RC_01_INTEGRATION_RELEASE_GATE.md) 完成 20 项独立真人/真机验收并记录缺陷。门禁模板可通过 `npm run alpha:evidence:init -- alpha-evidence/v01-internal.json <完整40位SHA>` 创建（默认全部阻塞），运行 `npm run alpha:evidence:check -- alpha-evidence/v01-internal.json <完整40位SHA>` 检查格式和完整性；**没有自动标绿/自动执行真实外部操作的捷径**。
+
+
+## V0.2 第一轮：本机启动、云端账号和团队重连稳定性（2026-11-25）
+
+- **修复 Electron uninstall 类开发启动故障的诊断**：在 `npm run dev` / `npm run dev:compat` 前自动执行只读预检。可用 `npm run doctor:electron` 查看缺失二进制原因；若缺失，用户手动执行 `npm run setup:electron` 下载当前锁定的 Electron 版本，重新预检后再启动。此操作不修改任何用户 SQLite 或关闭系统安全保护。参见 [60 V0.2 启动与云端恢复](docs/w5/60_V02_01_ELECTRON_CLOUD_STABILITY.md)。
+- **改进 Supabase 多人账号切换与 Realtime 断网恢复**：登出/切换项目使旧登录、JWT 刷新和 REST 响应失效；首次网络失败时保留轮询并重试实时订阅、被拒绝的 JWT 停止重连。小组页面新增手动刷新、最后一次云端核对与失败提示。真人五人 RLS 与双设备联网仍需独立测试，CI/模拟回归不等于真实验收。

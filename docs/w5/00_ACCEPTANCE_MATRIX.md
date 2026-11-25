@@ -40,6 +40,13 @@
 
 ## 3. 切片状态
 
+### V0.2 第一轮：Electron 启动自检 + 云端会话/Realtime 稳定性（2026-11-25）
+
+- **代码开发，CI 及真实验收须分开登记**：[60](60_V02_01_ELECTRON_CLOUD_STABILITY.md)。加入 dev/compat 只读 Electron preflight、用户显式二进制安装入口、Node 系统路径回归；Supabase A/B/项目异步登录刷新隔离、旧 REST 响应拒绝、不同 JWT 用户拒绝；Realtime 首次网络错误进入轮询+退避重连，已撤权用户停止重试，云端 UI 最近核对状态/手动刷新。
+- **无真实证据不得标绿**：Windows/macOS 真机 Electron 下载/启动、两人真实网络断开恢复、五人 RLS/Realtime/成员撤权、真实 Canvas/交大邮箱/AI Provider 尚需独立授权和真人验收。既有 Alpha 的 20 项人工门禁仍有效。
+
+
+
 ### ALPHA-RC-01 八模块集成与 20 项人工验收门禁（2026-11-25）
 
 - **本轮代码**：[58](58_ALPHA_RC_01_INTEGRATION_RELEASE_GATE.md)：新增合成数据、真实五 SQLite 存储的跨模块流程测试（Canvas/邮件/知识复习/专注/规划/本地 AI 确认和团队历史），完整在线快照→隔离恢复→重启读取与数据/凭据排除校验；`npm run alpha:rehearsal` 为专用回归命令。
