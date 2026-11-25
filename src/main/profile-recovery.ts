@@ -1,6 +1,7 @@
 import {randomUUID,createHash} from "node:crypto";
 import {
   createReadStream,existsSync,lstatSync,mkdirSync,renameSync,rmSync,statSync,
+  realpathSync,
   writeFileSync,
 } from "node:fs";
 import {copyFile,readFile} from "node:fs/promises";
@@ -145,14 +146,13 @@ export async function inspectRecoveryFolder(folder:string):Promise<InspectedReco
     legacyManifest:parsed.records===null,sourceFiles,expectedHashes,
     fingerprint:fingerprint.digest("hex")};
 }
-function validateParents(path:string):void{
-  let p=dirname(path);
-  while(true){
-    const st=lstatSync(p);
-    if(st.isSymbolicLink()||!st.isDirectory())
-      throw Error("Recovery destination must have real directory ancestors");
-    const prev=dirname(p);if(prev===p)break;p=prev;
-  }
+function realNewDestination(path:string):string{
+  // macOS /var is often a symlink to /private/var. Rejecting *every*
+  // ancestor symlink rejects valid native save dialogs. Resolve the existing
+  // parent, and compare the canonical destination to canonical live roots.
+  const parent=realpathSync(dirname(path));
+  if(!statSync(parent).isDirectory())throw Error("Recovery parent is not a directory");
+  return join(parent,basename(path));
 }
 /** Creates an isolated, unopened new userData tree. No active profile files,
  * passwords, AI keys, team history, WAL, or symlink targets are overwritten. */
@@ -161,12 +161,13 @@ export async function recoverToNewProfile(input:{
 }):Promise<RecoveryResult>{
   const folder=resolve(input.folder),destination=resolve(input.destination),
     active=resolve(input.activeUserData);
-  if(destination===dirname(destination)||inside(active,destination)||
-    inside(destination,active)||inside(folder,destination)||inside(destination,folder)||
-    basename(destination)==="backups"||
-    existsSync(destination))
+  const canonicalTarget=realNewDestination(destination),
+    canonicalActive=realpathSync(active),canonicalFolder=realpathSync(folder);
+  if(destination===dirname(destination)||inside(canonicalActive,canonicalTarget)||
+    inside(canonicalTarget,canonicalActive)||
+    inside(canonicalFolder,canonicalTarget)||inside(canonicalTarget,canonicalFolder)||
+    basename(destination)==="backups"||existsSync(destination))
     throw Error("Choose a nonexistent new profile outside live userData and its backups");
-  validateParents(destination);
   const inspected=await inspectRecoveryFolder(folder);
   if(inspected.fingerprint!==input.expectedFingerprint)
     throw Error("Backup changed since review; inspect it again");
