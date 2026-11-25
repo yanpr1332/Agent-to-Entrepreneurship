@@ -9,3 +9,7 @@ coverage/
 !.env.example
 .DS_Store
 Thumbs.db
+
+# Real Alpha acceptance material must stay local, never versioned.
+alpha-evidence/
+*.alpha-evidence.json
