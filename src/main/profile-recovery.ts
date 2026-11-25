@@ -26,6 +26,8 @@ export interface InspectedRecovery {
   databases:RecoveryDatabase[];
   missing:string[];
   legacyManifest:boolean;
+  /** Internal manifest-selected file names, never Renderer-provided. */
+  sourceFiles:Partial<Record<Kind,string>>;
   /** Exact raw inventory hash, bound to the short-lived Main-only approval. */
   fingerprint:string;
 }
@@ -114,6 +116,7 @@ export async function inspectRecoveryFolder(folder:string):Promise<InspectedReco
   catch{throw Error("Backup manifest cannot be parsed");}
   const parsed=parseManifest(raw);
   const result:RecoveryDatabase[]=[];
+  const sourceFiles:Partial<Record<Kind,string>>={};
   const fingerprint=createHash("sha256").update(await readFile(manifestPath));
   for(const [i,filename] of parsed.files.entries()){
     if(basename(filename)!==filename||filename.includes("/")||filename.includes("\\"))
@@ -131,11 +134,13 @@ export async function inspectRecoveryFolder(folder:string):Promise<InspectedReco
     if(recorded&&recorded.userVersion!==userVersion)
       throw Error("Backup schema version checksum mismatch");
     fingerprint.update(filename).update(sha);
+    sourceFiles[name]=filename;
     result.push({name,bytes:size,userVersion,sha256Verified:!!recorded});
   }
   return {createdAt:parsed.createdAt,databases:result,
     missing:kinds.filter(x=>!result.some(r=>r.name===x)),
-    legacyManifest:parsed.records===null,fingerprint:fingerprint.digest("hex")};
+    legacyManifest:parsed.records===null,sourceFiles,
+    fingerprint:fingerprint.digest("hex")};
 }
 function validateParents(path:string):void{
   let p=dirname(path);
@@ -155,7 +160,7 @@ export async function recoverToNewProfile(input:{
     active=resolve(input.activeUserData);
   if(destination===dirname(destination)||inside(active,destination)||
     inside(destination,active)||inside(folder,destination)||inside(destination,folder)||
-    inside(destination,dirname(folder))||basename(destination)==="backups"||
+    basename(destination)==="backups"||
     existsSync(destination))
     throw Error("Choose a nonexistent new profile outside live userData and its backups");
   validateParents(destination);
@@ -166,8 +171,7 @@ export async function recoverToNewProfile(input:{
   mkdirSync(stage,{recursive:false,mode:0o700});
   try{
     for(const record of inspected.databases){
-      const source=[...aliases].find(([key,value])=>
-        value===record.name&&existsSync(join(folder,key)))?.[0];
+      const source=inspected.sourceFiles[record.name];
       if(!source)throw Error("Backup file missing");
       const to=join(stage,RESTORABLE_DATABASES[record.name].destination);
       await copyFile(join(folder,source),to);

@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync,statSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync, backup } from "node:sqlite";
 import type { BackupResult } from "../shared/knowledge-model";
+import {sha256File} from "./profile-recovery";
 
 export interface SnapshotSource {
   backupTo(path:string):Promise<number>;
@@ -28,18 +29,24 @@ export async function createLocalBackup(
   const folder=join(userData,"backups",createdAt.replace(/[:.]/g,"-")+"-"+randomUUID());
   await mkdir(folder,{recursive:true,mode:0o700});
   const databases:string[]=[];
+  const files:Array<{name:string;bytes:number;sha256:string;userVersion:number}>=[];
   try{
     for(const {name,store} of sources){
       const file=name+".sqlite";
       const output=join(folder,file);
       await store.backupTo(output);
       assertSqliteBackup(output);
+      const verified=new DatabaseSync(output,{readOnly:true});
+      let userVersion:number;
+      try{userVersion=(verified.prepare("PRAGMA user_version").get() as {user_version:number}).user_version;}
+      finally{verified.close();}
+      files.push({name:file,bytes:statSync(output).size,sha256:await sha256File(output),userVersion});
       databases.push(file);
     }
     const manifest:BackupResult={folder,createdAt,databases,encryption:"none"};
     await writeFile(join(folder,"manifest.json"),JSON.stringify({
-      schema:1,createdAt,databases,encryption:"none",
-      note:"Local SQLite snapshots only; does not include encrypted credentials or original documents",
+      schema:2,createdAt,databases,files,encryption:"none",
+      note:"Unencrypted 5-database snapshot. Excludes AI usage, team history, vault credentials, cloud configuration, original files and local UI preferences.",
     },null,2),{mode:0o600,flag:"wx"});
     return manifest;
   }catch(error){
