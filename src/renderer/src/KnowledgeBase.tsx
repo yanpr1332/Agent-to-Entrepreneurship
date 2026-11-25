@@ -252,8 +252,10 @@ export default function KnowledgeBase(){
         <h3>本机词向量语义索引（可选）</h3>
         <p className="privacy-note" role="status">
           {embeddingStatus?.installed
-            ? "已安装静态词向量模型 · 索引 "+embeddingStatus.indexed+"/"+embeddingStatus.total+
-              " 个原文片段。搜索同时使用精确、容错及已建立的本机语义向量。"
+            ? "已安装静态词向量模型 · 已索引 "+embeddingStatus.indexed+
+              " / 不在词表内 "+(embeddingStatus.skipped??0)+
+              " / 待处理 "+(embeddingStatus.pending??0)+
+              " / 总片段 "+embeddingStatus.total+"。搜索保留精确、容错及有效语义证据。"
             : "未启用语义模型：当前只使用精确及容错搜索，不会自动下载任何模型。"}
           {embeddingStatus?.running?" · 正在构建索引，可随时取消。":""}
           {embeddingStatus?.error?" · "+embeddingStatus.error:""}
