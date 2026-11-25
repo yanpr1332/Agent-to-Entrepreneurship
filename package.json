@@ -10,10 +10,14 @@
     "npm": ">=11.0.0"
   },
   "scripts": {
+    "predev": "node scripts/electron-dev-preflight.mjs",
     "dev": "electron-vite dev",
+    "predev:compat": "node scripts/electron-dev-preflight.mjs",
     "dev:compat": "electron-vite dev --noSandbox",
+    "doctor:electron": "node scripts/electron-dev-preflight.mjs",
+    "setup:electron": "install-electron --no",
     "typecheck": "tsc -b",
-    "test": "vitest run && node --test scripts/sync-rls-acceptance.node.mjs scripts/supabase-alpha-preflight.node.mjs && node --test scripts/verify-downloaded-alpha.node.mjs && node --test scripts/alpha-readiness.node.mjs",
+    "test": "vitest run && node --test scripts/sync-rls-acceptance.node.mjs scripts/supabase-alpha-preflight.node.mjs && node --test scripts/verify-downloaded-alpha.node.mjs && node --test scripts/alpha-readiness.node.mjs && node --test scripts/electron-dev-preflight.node.mjs",
     "test:sync-rls": "node --test scripts/sync-rls-acceptance.node.mjs",
     "test:watch": "vitest",
     "build": "npm run typecheck && npm test && electron-vite build && node scripts/verify-offline-worker.mjs",
