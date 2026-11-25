@@ -118,8 +118,8 @@ describe("ALPHA-RC real local eight-module rehearsal and isolated recovery",()=>
     f.calendar.create({title:"Synthetic manual seminar",day:tomorrow,
       startMinute:900,durationMinutes:60,weeks:1});
 
-    const proposal=f.planning.propose({startDate:today,days:5,dailyStart:"08:00",
-      dailyEnd:"22:00",minutesPerTask:45},f.tasks.listTasks(),now);
+    const proposal=f.planning.propose({startDate:tomorrow,days:5,dailyStart:"13:00",
+      dailyEnd:"19:00",minutesPerTask:45},f.tasks.listTasks(),now);
     expect(proposal.blocks.length).toBeGreaterThan(0);
     const applied=f.planning.apply({proposalId:proposal.id,
       blockIds:[proposal.blocks[0].id],edits:[]},f.tasks.listTasks(),now);
