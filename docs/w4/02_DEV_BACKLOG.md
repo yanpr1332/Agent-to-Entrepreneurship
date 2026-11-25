@@ -32,7 +32,7 @@
 | FOC-001 / FOC-002 | 已完成（计时、历史、积分账本） | 单测通过，待真机 |
 | FOC-005 | 7/30 天本机专注趋势、IANA 时区日期归属、连续完成天数及历史 >500 条校验，见 [48](../w5/48_ALPHA_FOC_005_FOCUS_INSIGHTS.md) | 代码开发，双平台 CI 与真实 UI 分别验收 |
 | FOC-006 | 自定义虚拟奖励、余额核算、幂等兑换与追溯（SQLite v11） | CI/真机独立验收，非真实自动兑换 |
-| FOC-003 / FOC-004 | **未实现**（程序限制与安全退出） | 未开始 |
+| FOC-003 / FOC-004 | 代码新增显式前台黑/白名单提醒、全屏保护与独立紧急退出；未具备强制系统级程序/网站阻断 | 真实 Windows/macOS OS 权限、崩溃恢复与安全验证待做，见 [50](../w5/50_ALPHA_FOCUS_SAFETY_NEURAL_EMBEDDING.md) |
 | FOC-007 | 按任务/退出原因的细粒度专注统计仍未完成；已有 FOC-005 近 7/30 天聚合 | 后续 |
 | AI-001 ~ AI-004 | 已完成（自带 Key、两阶段确认、用量上限、结构化规划审核） | 无真实 Key 验收 |
 | TEAM-001 ~ TEAM-007 | 代码完成（Supabase Auth/Workspace/任务/消息/RLS） | 未在真实项目部署验收 |
@@ -51,6 +51,7 @@
 | ALPHA-TIME-004 | 本机重复课程「仅本次/从本次起/整个系列」批量修改、冲突原子回滚，见 PR #29 | 已提交；待 CI 与 GUI 验收 |
 | ALPHA-KB-003 | 本地 HTML/LaTeX 导入、Markdown/HTML/TeX 受限安全预览、离线容错检索见 PR #31；完整 TeX 与 AI 语义检索未实现 | PR 已合并，GUI 待验收 |
 | ALPHA-KB-004 | 精确/容错混合结果、用户明确授权的 AI 单段原文解释，见 PR #32；全库 embedding/多文档语义检索未实现 | PR #32 已合并；仍待核对最新 CI 与 GUI 验收 |
+| ALPHA-FOC-003/004 + KB-005D | 同一开发 PR：可逆全屏/前台程序提醒、主进程紧急释放 + 真正离线 E5/BGE ONNX CPU 推理适配器（需用户外部 Python 环境和自备权重），详见 [50](../w5/50_ALPHA_FOCUS_SAFETY_NEURAL_EMBEDDING.md) | CI、实际 OS 权限和真实模型质量分别验收，不等于强制阻断或运行时供应链完成 |
 | ALPHA-FOC-006 | 本地可自定义虚拟奖励，已赚-历史消费余额、双窗口事务防双花、重复兑换幂等、奖励快照、SQLite v11 迁移前备份；详见 [49](../w5/49_ALPHA_FOC_006_VIRTUAL_REWARDS.md) | 自动测试、独立 Review 和真实 GUI/升级恢复分别验收；不负责现实奖励 |
 | ALPHA-FOC-005 | Focus 近 7/30 天离线趋势、连续完成天数与真实 SQLite 全窗口聚合，不改变积分规则；详见 [48](../w5/48_ALPHA_FOC_005_FOCUS_INSIGHTS.md) | 自动验证需附最终 Windows/macOS CI；真机趋势面板待用户验收 |
 | ALPHA-KB-007 | 本机资料最多 20 份批量导入、已导入来源只读变更检查与用户选择确认刷新；过期引用回流 KB-006；详见 [47](../w5/47_ALPHA_KB_007_SOURCE_LIFECYCLE.md) | 双平台 CI 与用户原生文件对话框验收分开记录；不等于后台目录监控或 ONNX/E5/BGE |
