@@ -71,9 +71,9 @@ function readResult(data:unknown,kind:AIPrivateSettings["provider"]):{
   if(typeof text!=="string"||!text.trim()||text.length>40000)
     throw Error("AI provider text was missing or too large");
   const inCount=kind==="gemini"?usage.promptTokenCount:
-    kind==="compatible"?usage.prompt_tokens:usage.input_tokens;
+    kind==="compatible"||kind==="deepseek"?usage.prompt_tokens:usage.input_tokens;
   const outCount=kind==="gemini"?usage.candidatesTokenCount:
-    kind==="compatible"?usage.completion_tokens:usage.output_tokens;
+    kind==="compatible"||kind==="deepseek"?usage.completion_tokens:usage.output_tokens;
   return {text:text.trim(),model:typeof root.model==="string"?root.model:"unknown",
     inputTokens:count(inCount),outputTokens:count(outCount)};
 }
@@ -103,7 +103,7 @@ export class OpenAIResponsesClient {
         contents:[{role:"user",parts:[{text:prompt}]}],
         generationConfig:{maxOutputTokens:AI_OUTPUT_TOKEN_CAP}};
     }else{
-      url=settings.endpoint!;
+      url=settings.provider==="deepseek"?"https://api.deepseek.com/chat/completions":settings.endpoint!;
       headers={Authorization:"Bearer "+settings.apiKey};
       body={model:settings.model,max_tokens:AI_OUTPUT_TOKEN_CAP,stream:false,
         messages:[{role:"system",content:instructions},{role:"user",content:prompt}]};
