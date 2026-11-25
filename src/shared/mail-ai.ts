@@ -3,7 +3,7 @@ import {parseCreateTask} from "./local-model";
 
 export type MailAIKind="coursework"|"deadline"|"event"|"none";
 export interface MailAIRef {uid:number;uidValidity:number;}
-export interface MailAISelection {sources:MailAIRef[];}
+export interface MailAISelection {sources:MailAIRef[];includeBodies?:boolean;}
 export interface MailAIProposal extends MailAIRef {
   kind:MailAIKind;title:string;dueDate:string|null;reason:string;
   /** Displays data from the current authorized local mail header. */
@@ -35,7 +35,10 @@ export function mailAIKey(ref:MailAIRef):string{
   return ref.uidValidity+":"+ref.uid;
 }
 export function parseMailAISelection(input:unknown):MailAISelection{
-  const value=exact(input,["sources"]);
+  const incoming=input as Record<string,unknown>;
+  const value=exact(input,("includeBodies" in incoming)?["sources","includeBodies"]:["sources"]);
+  if(value.includeBodies!==undefined&&typeof value.includeBodies!=="boolean")
+    throw Error("Mail body permission must be explicit boolean");
   if(!Array.isArray(value.sources)||value.sources.length<1||value.sources.length>3)
     throw Error("Select 1–3 mail headers explicitly");
   const sources=value.sources.map(item=>{
@@ -44,7 +47,7 @@ export function parseMailAISelection(input:unknown):MailAISelection{
   });
   if(new Set(sources.map(mailAIKey)).size!==sources.length)
     throw Error("Duplicate mail AI selection");
-  return {sources};
+  return {sources,...(value.includeBodies===true?{includeBodies:true}:{})};
 }
 export function parseMailAIApply(input:unknown):MailAIApply{
   const v=exact(input,["reviewId","uid","uidValidity","title","dueDate"]);
@@ -60,7 +63,7 @@ export function parseMailAIApply(input:unknown):MailAIApply{
  * derived from mail sent_at; only verbatim ISO dates in the actual source
  * subject may appear as model-suggested deadlines. */
 export function parseMailAIAnswer(input:unknown,
-  selected:readonly {uid:number;uidValidity:number;subject:string}[]):
+  selected:readonly {uid:number;uidValidity:number;subject:string;body?:string}[]):
   Array<Pick<MailAIProposal,"uid"|"uidValidity"|"kind"|"title"|"dueDate"|"reason">>{
   if(typeof input!=="string"||input.length>8000)throw Error("Invalid AI mail answer");
   let raw:unknown;
@@ -87,7 +90,8 @@ export function parseMailAIAnswer(input:unknown,
     const task=parseCreateTask({
       title:o.kind==="none"?"No action suggested":o.title,dueDate:o.dueDate,
     });
-    if(task.dueDate&&!mail.subject.includes(task.dueDate))
+    if(task.dueDate&&!mail.subject.includes(task.dueDate)&&
+       !mail.body?.includes(task.dueDate))
       throw Error("AI invented an unsupported mail deadline");
     return {...ref,kind:o.kind,title:o.kind==="none"?"":task.title,
       dueDate:task.dueDate,reason:o.reason};
