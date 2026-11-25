@@ -100,6 +100,10 @@ npm run build
 
 如需在**用户单独批准的隔离 Supabase 项目**验证实时订阅，请先审查并运行既有 `20261110_ate_workspace_poc.sql`，再审查 `supabase/migrations/20261124_ate_workspace_realtime_hints.sql`；本仓库 CI **不部署云端**。未完成五账号 RLS 反向测试、30 秒安全补拉 GUI 与历史游标验收之前，不视为完整 Realtime 发布。详见 [39 团队实时提示验收](docs/w5/39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
 
+### ALPHA-KB-005C 离线索引词表覆盖与检索质量评测
+
+本轮在本地 SQLite v5 中增加明确的“已索引 / 词表外跳过 / 待处理”计数，**无法编码的文档不再阻塞后续索引**，仍可使用精确及容错搜索。用户明确确认后可导出最多 500 条本机证据 ID、文档标题、PDF 页码和摘要，人工编写相关性标注 JSON 后对同一批查询计算精确/容错与混合检索的 Precision@5、Recall@10、MRR@10、P50/P95 查询延迟，全程不上传私人数据。**尚未接入 E5/BGE ONNX Transformer**，不能把这些静态词向量测试误称为真正神经模型基准。详见 [45](docs/w5/45_ALPHA_KB_005C_INDEX_COVERAGE_EVALUATION.md)。
+
 ### ALPHA-KB-005B 自愿导入离线静态词向量与 Worker 编码
 
 从个人知识库选择“导入本机 .vec 词向量”，自行确认模型来源/许可后通过原生文件选择器导入不超过 32 MiB 的 UTF-8 文本词向量，第二次点击“构建/继续本地索引”才开始处理个人知识库。每轮最多 16 个原文块，索引可取消/续传、可卸载，查询保留精确优先排序和 PDF 页码。**不预装/下载模型，也不表示 E5/BGE ONNX 已接入**。构建会执行真实打包 Worker smoke：`node scripts/verify-offline-worker.mjs`。详见 [44](docs/w5/44_ALPHA_KB_005B_OFFLINE_WORD_VECTORS.md)。
