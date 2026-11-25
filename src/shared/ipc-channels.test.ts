@@ -14,7 +14,10 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "ai:status",
       "app:get-version",
       "app:ping",
+      "backup:cancel",
       "backup:create",
+      "backup:inspect",
+      "backup:restore",
       "calendar:canvas-visibility",
       "calendar:fixed-create",
       "calendar:fixed-delete",
@@ -181,7 +184,9 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
   it("keeps knowledge and backup operations narrowly allowlisted", () => {
     const channels=Object.values(IPC_CHANNELS);
     expect(channels.filter(name=>name.startsWith("knowledge:"))).toHaveLength(33);
-    expect(channels.filter(name=>name.startsWith("backup:"))).toEqual(["backup:create"]);
+    expect(channels.filter(name=>name.startsWith("backup:"))).toEqual([
+      "backup:create","backup:inspect","backup:restore","backup:cancel",
+    ]);
   });
 
   it("does not expose arbitrary Node, SQL, filesystem or shell operations", () => {

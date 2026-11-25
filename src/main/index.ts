@@ -43,6 +43,8 @@ import { readSelectedKnowledgeFile } from "./knowledge-import";
 import {importPickedKnowledgeFiles,auditKnowledgeSources,refreshAuditedKnowledgeSources}
   from "./knowledge-source-lifecycle";
 import { createLocalBackup, backupBeforeMigration } from "./local-backup";
+import {inspectRecoveryFolder,recoverToNewProfile} from "./profile-recovery";
+import {parseRecoveryConfirmation} from "../shared/recovery-model";
 import { AIKeyVault } from "./ai/ai-vault";
 import { AIUsageLedger } from "./ai/ai-usage";
 import { AIService } from "./ai/ai-service";
@@ -114,6 +116,7 @@ let offlineModels:KnowledgeOfflineModels|null=null;
 let planningStore: PlanningStore | null = null;
 let fixedCalendarStore: FixedCalendarStore | null = null;
 let pendingICS:{id:string;expires:number;filename:string;events:FixedEventDraft[]}|null=null;
+let pendingRecovery:{id:string;folder:string;fingerprint:string;expires:number}|null=null;
 function fixedCalendar():FixedCalendarStore{
   if(!fixedCalendarStore)throw new Error("Fixed calendar database is unavailable");
   return fixedCalendarStore;
@@ -653,6 +656,44 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return knowledge().progress();
   });
+  handle(IPC_CHANNELS.backupInspect,async event=>{
+    requireTrustedSender(event);
+    pendingRecovery=null;
+    const chosen=await dialog.showOpenDialog({
+      title:"选择现有 Study Anchor 备份目录（包含 manifest.json）",
+      defaultPath:join(app.getPath("userData"),"backups"),
+      properties:["openDirectory"],buttonLabel:"检查备份",
+    });
+    if(chosen.canceled||chosen.filePaths.length!==1)return null;
+    const folder=chosen.filePaths[0];
+    const inspection=await inspectRecoveryFolder(folder);
+    const id=randomUUID(),expires=Date.now()+10*60_000;
+    pendingRecovery={id,folder,fingerprint:inspection.fingerprint,expires};
+    return {reviewId:id,expiresAt:new Date(expires).toISOString(),
+      createdAt:inspection.createdAt,databases:inspection.databases,
+      missing:inspection.missing,legacyManifest:inspection.legacyManifest};
+  });
+  handle(IPC_CHANNELS.backupRestore,async(event,raw:unknown)=>{
+    requireTrustedSender(event);
+    const input=parseRecoveryConfirmation(raw),review=pendingRecovery;
+    pendingRecovery=null;
+    if(!review||review.id!==input.reviewId||review.expires<Date.now())
+      throw Error("备份核验授权已失效，请重新选择备份。");
+    const target=await dialog.showSaveDialog({
+      title:"为恢复数据选择一个不存在的新配置目录名称（不会覆盖现有数据）",
+      defaultPath:join(app.getPath("documents"),"Study Anchor Recovered "+
+        new Date().toISOString().slice(0,10)),
+      buttonLabel:"创建独立恢复配置",
+    });
+    if(target.canceled||!target.filePath)return null;
+    return recoverToNewProfile({
+      folder:review.folder,destination:target.filePath,
+      activeUserData:app.getPath("userData"),expectedFingerprint:review.fingerprint,
+    });
+  });
+  handle(IPC_CHANNELS.backupCancel,event=>{
+    requireTrustedSender(event);pendingRecovery=null;return {canceled:true as const};
+  });
   handle(IPC_CHANNELS.backupCreate, async event => {
     requireTrustedSender(event);
     if(!mailStore)throw new Error("Mail database is unavailable");
@@ -897,7 +938,8 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.cloudConfigure, (event, input: unknown) => {
     requireTrustedSender(event);
-    workspaceRealtime.stop();
+    pendingRecovery=null;
+  workspaceRealtime.stop();
     purgeSignedInTeamHistory();
     return sharedCloud.configure(input);
   });

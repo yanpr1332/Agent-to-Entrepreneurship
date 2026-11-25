@@ -12,6 +12,7 @@ import type {
   CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
 } from "../../shared/mail-model";
 import type {MailAISelection,MailAIApply,MailAIReview} from "../../shared/mail-ai";
+import type {RecoveryPreview,RecoveryResult,RecoveryConfirmation} from "../../shared/recovery-model";
 import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } from "../../shared/mail-candidates";
 
 import type {WorkspaceHistoryItems,WorkspaceHistoryMarker} from "../../shared/workspace-history-contract";
@@ -203,7 +204,12 @@ declare global {
         reviewCard: (id: string, rating: ReviewRating) => Promise<KnowledgeReviewCard>;
         progress: () => Promise<ReviewProgress>;
       };
-      backup: { create: () => Promise<BackupResult> };
+      backup: {
+        create: () => Promise<BackupResult>;
+        inspect: () => Promise<RecoveryPreview|null>;
+        restore: (input:RecoveryConfirmation) => Promise<RecoveryResult|null>;
+        cancel: () => Promise<{canceled:true}>;
+      };
       focus: {
         list: () => Promise<FocusSession[]>;
         finish: (input: FocusCompletionInput) => Promise<FocusSession>;
