@@ -4,6 +4,7 @@ import SafeKnowledgePreview from "./SafeKnowledgePreview";
 import KnowledgeAIHelper from "./KnowledgeAIHelper";
 import LocalEvaluationLab from "./LocalEvaluationLab";
 import ReviewCardMaintenance from "./ReviewCardMaintenance";
+import KnowledgeSourceLifecycle from "./KnowledgeSourceLifecycle";
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
   KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport,
@@ -340,6 +341,10 @@ export default function KnowledgeBase(){
           </p>
         </div>}
       </div>
+      <KnowledgeSourceLifecycle documents={documents} onChanged={async()=>{
+        setSelected(null);setPassage(null);setSourceOrdinal(null);
+        setResults([]);setEvaluation(null);await reload();
+      }}/>
       <LocalEvaluationLab/>
       {results.length>0&&<section className="panel kb-results">
         <div className="eyebrow">TRACEABLE EXCERPTS</div><h2>搜索结果 · {results.length} 条</h2>
