@@ -123,6 +123,7 @@ export const IPC_CHANNELS = {
   cloudWorkspaces: "cloud:workspaces",
   cloudCreateWorkspace: "cloud:create-workspace",
   cloudCreateInvite: "cloud:create-invite",
+  cloudRevokeMember: "cloud:revoke-member",
   cloudJoinWorkspace: "cloud:join-workspace",
   cloudMembers: "cloud:members",
   cloudMessages: "cloud:messages",
