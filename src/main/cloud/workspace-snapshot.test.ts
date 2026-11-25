@@ -89,7 +89,7 @@ describe("ALPHA-SYNC-003A: RLS-verified snapshots and private socket auth",()=>{
     await started;
     cloud.signOut();
     complete(new Response(JSON.stringify(MEMBERS)));
-    await expect(job).rejects.toThrow("Log in");
+    await expect(job).rejects.toThrow("Cloud account or project changed during request");
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
