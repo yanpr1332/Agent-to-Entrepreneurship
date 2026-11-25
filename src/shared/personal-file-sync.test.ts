@@ -13,7 +13,7 @@ const remote={
 describe("V0.2 consented personal file wire contract",()=>{
   it("accepts only bounded, safe user-selected file names and small bytes",()=>{
     for(const name of ["../a.txt","a/b.txt","a\\b.txt","evil.exe",
-      "\u0000foo.md","../.md","a","foo.md\nother"]){
+      "\u0000foo.md","../.md","a","foo.md\nother","CON.txt","unsafe:name.md"]){
       expect(()=>requirePersonalFileName(name)).toThrow();
     }
     expect(requirePersonalFileName("合成学习记录.pdf")).toBe("合成学习记录.pdf");
