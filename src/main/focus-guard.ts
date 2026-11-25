@@ -111,6 +111,9 @@ export class FocusGuardController {
   }
   async checkForeground():Promise<void>{
     if(!this.current||this.monotonic()>=this.until){this.stop();return;}
+    // Once native app observation fails, avoid repeatedly triggering macOS
+    // automation permission prompts or spawning broken Windows helpers.
+    if(this.monitor==="unavailable")return;
     const generation=this.generation;
     try{
       const name=await this.foreground();

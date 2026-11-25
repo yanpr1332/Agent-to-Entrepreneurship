@@ -231,6 +231,7 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
       {guardStatus?.active&&<div role="status" className="connector-notice">
         专注保护已启动 · 前台检测：{guardStatus.monitor==="available"?"可用":
         guardStatus.monitor==="unavailable"?"不可用":"检测中"}。
+        {guardStatus.foregroundApp&&<span>当前应用：{guardStatus.foregroundApp}。</span>}
         {guardStatus.distraction?" 检测到名单偏离。":""}
         {guardStatus.warning&&<span>{guardStatus.warning}</span>}
       </div>}
