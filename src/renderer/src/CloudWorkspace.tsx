@@ -144,7 +144,17 @@ export default function CloudWorkspace() {
       setWorkspaceLivePhase("stopped");setHistoryLoading(false);
       setWorkspaceLastVerifiedAt(null);setWorkspaceRefreshFailed(false);
       setNotice("云端登录已失效，请使用本人的账号重新登录。未自动重传任何本地待同步数据。");
-    }catch{/* Status diagnostic failure must not leak a token or retain stale shared content. */}
+    }catch{
+      // If even the local IPC status check fails, hide the old account's
+      // previously visible shared data until a fresh explicit login succeeds.
+      selectedRef.current=null;workspaceFetchSeq.current++;
+      setStatus(previous=>({...previous,authenticated:false,userId:null,email:null}));
+      setWorkspaces([]);setSelected(null);setMembers([]);setMessages([]);setTasks([]);
+      setInvite("");setOlderMessages([]);setOlderTasks([]);setHistoryStatus(null);
+      setWorkspaceLivePhase("stopped");
+      setWorkspaceLastVerifiedAt(null);setWorkspaceRefreshFailed(true);
+      setNotice("云端登录状态无法确认，已隐藏共享数据。请重新登录再尝试。");
+    }
   },[]);
 
   const refreshSelected=useCallback(async(workspaceId:string)=>{
