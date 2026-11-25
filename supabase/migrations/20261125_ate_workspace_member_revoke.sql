@@ -39,6 +39,34 @@ begin
   return true;
 end;
 $$;
+-- Re-issue invitations only under the workspace row lock; prevents a token
+-- created concurrently with a revocation from surviving that revocation.
+create or replace function public.ate_create_invite(p_workspace uuid)
+returns text language plpgsql volatile security definer set search_path = ''
+as $
+declare v_token text;
+begin
+  if auth.uid() is null or p_workspace is null then
+    raise exception 'Workspace owner required';
+  end if;
+  perform 1 from public.ate_workspaces where id=p_workspace for update;
+  if not found or not exists (
+    select 1 from public.ate_workspace_members
+      where workspace_id=p_workspace and user_id=auth.uid() and role='owner'
+  ) then
+    raise exception 'Only an owner may invite members';
+  end if;
+  v_token := pg_catalog.encode(extensions.gen_random_bytes(24),'hex');
+  insert into public.ate_workspace_invites(
+    workspace_id,token_hash,issued_by,expires_at,remaining_uses
+  ) values (
+    p_workspace,pg_catalog.encode(extensions.digest(v_token,'sha256'),'hex'),
+    auth.uid(),now()+interval '48 hours',4
+  );
+  return v_token;
+end;
+$;
+
 revoke all on function public.ate_revoke_workspace_member(uuid,uuid)
   from public,anon,authenticated;
 grant execute on function public.ate_revoke_workspace_member(uuid,uuid)
