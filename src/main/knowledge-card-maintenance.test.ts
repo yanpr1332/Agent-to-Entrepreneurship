@@ -122,7 +122,7 @@ describe("KB-006 review cards, editing and explicit evidence re-confirmation",()
 
   it("preserves archived PDF page references and review history over restart",()=>{
     const {path,store}=fixture();
-    const source={sourcePath:"/private/paper.pdf",title:"Paper",fileHash:"a".repeat(64),
+    const source={sourcePath:"/private/paper.pdf",title:"Paper",format:"pdf" as const,fileHash:"a".repeat(64),
       byteLength:500,pages:["Intro to biology.","Evidence about energy on page two."]};
     const doc=store.importPdf(source).document;
     const card=store.createCard({documentId:doc.id,sourceOrdinal:1,
