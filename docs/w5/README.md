@@ -264,6 +264,10 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 [44 本机词向量 Worker、用户导入/许可确认、索引及验收](44_ALPHA_KB_005B_OFFLINE_WORD_VECTORS.md)：从用户主动选择的 UTF-8 .vec 文件加载固定 SHA-256 小词表、在专用 Node Worker 完全离线计算真实静态词向量，分批建立可取消/续传索引，三路搜索沿用源修订和 PDF 引用；提供清除已安装模型与派生向量的界面。每次 `npm run build` 增加跨平台打包 Worker 启动测试。**不是 E5/BGE ONNX Transformer，不自动下载任何权重、不上传知识库，真实双语质量和安装包 GUI 待验收。**
 
 
+## ALPHA-CLOSE-02：八模块真实工作台 + 自定义布局（2026-11-25）
+
+[53 八模块工作台实施与验收](53_ALPHA_CLOSE_02_EIGHT_MODULE_WORKBENCH.md)：复用真实 Task/Focus/Planning/Knowledge/Cloud/Canvas/Mail/AI 主进程数据，八组件个性化显隐、顺序调整及本机持久布局预设；连接器拒绝/无授权均有明确状态，尚待真实 Windows/macOS GUI 与外部服务验收。独立 #48 视觉计划不受影响。
+
 ## ALPHA-CLOSE-01：邮件 AI 授权识别 → 人工确认任务（2026-11-25）
 
 [52 邮件 AI 候选安全闭环](52_ALPHA_CLOSE_01_MAIL_AI_REVIEW.md)：仅由用户主动挑选 1–3 封本机授权缓存邮件头，先展示完整将外传的 OpenAI prompt，再单次确认可能计费的请求。模型 JSON 严格核对所选 UID 与显式截止日，用户在页面人工编辑并二次确认后才写个人任务；邮件变化/撤权/审阅过期则拒绝，原有事务去重保持。真实交大邮箱和用户 API Key 验收仍未进行。
