@@ -53,11 +53,13 @@ export class AIService {
       if(explicit){
         raw=provider==="openai"?this.environmentKey():
           provider==="anthropic"?env.ANTHROPIC_API_KEY:
-          provider==="gemini"?env.GEMINI_API_KEY:env.STUDY_ANCHOR_AI_API_KEY;
+          provider==="gemini"?env.GEMINI_API_KEY:
+          provider==="deepseek"?env.DEEPSEEK_API_KEY:env.STUDY_ANCHOR_AI_API_KEY;
       }else{
         raw=this.environmentKey();
         if(!raw){raw=env.ANTHROPIC_API_KEY;provider="anthropic";}
         if(!raw){raw=env.GEMINI_API_KEY;provider="gemini";}
+        if(!raw){raw=env.DEEPSEEK_API_KEY;provider="deepseek";}
       }
       if(!raw?.trim()){
         this.configurationWarning=explicit?"invalid_environment_key":null;
