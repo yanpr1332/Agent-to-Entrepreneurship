@@ -642,6 +642,10 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return localStore().focusSummary();
   });
+  handle(IPC_CHANNELS.focusInsights,(event,zone:unknown)=>{
+    requireTrustedSender(event);
+    return localStore().focusInsights(zone);
+  });
   handle(IPC_CHANNELS.mailStatus, (event) => {
     requireTrustedSender(event);
     return campusMail().snapshot();

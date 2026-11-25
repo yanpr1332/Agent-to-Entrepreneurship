@@ -75,6 +75,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "cloud:stop-workspace-watch",
       "cloud:workspaces",
       "focus:finish",
+      "focus:insights",
       "focus:list",
       "focus:rename",
       "focus:summary",
