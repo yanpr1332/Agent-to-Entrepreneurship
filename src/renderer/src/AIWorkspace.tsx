@@ -180,7 +180,7 @@ export default function AIWorkspace(){
         <h2>模型连接</h2>
         {status.connected&&<div className="ai-connection">
           <p>服务商：{status.provider==="openai"?"OpenAI":status.provider==="anthropic"?"Anthropic Claude":
-            status.provider==="gemini"?"Google Gemini":"OpenAI-compatible 第三方接口"}</p>
+            status.provider==="gemini"?"Google Gemini":status.provider==="deepseek"?"DeepSeek":"OpenAI-compatible 第三方接口"}</p>
           <p>已设置模型：<strong>{status.model}</strong></p>
           <p>Key 来源：<strong>{status.keySource==="environment"?"环境变量 OPENAI_API_KEY":"本机系统凭据加密存储"}</strong></p>
           {status.keySource==="environment"&&<p className="privacy-note">
@@ -207,6 +207,7 @@ export default function AIWorkspace(){
               <option value="openai">OpenAI</option>
               <option value="anthropic">Anthropic Claude</option>
               <option value="gemini">Google Gemini</option>
+              <option value="deepseek">DeepSeek</option>
               <option value="compatible">其他 OpenAI-compatible API</option>
             </select>
           </label>
@@ -227,12 +228,12 @@ export default function AIWorkspace(){
             {status.connected?(status.keySource==="environment"?"保存并切换到手动 Key":"替换本地模型配置与 Key"):"加密保存配置（不进行付费测试）"}
           </button>
           <p className="privacy-note">
-            OpenAI、Anthropic、Gemini 使用原生 API，其他服务商需提供兼容 Chat Completions 的 HTTPS 接口，
+            OpenAI、Anthropic、Gemini、DeepSeek 使用厂商官方 API，其他服务商需提供兼容 Chat Completions 的 HTTPS 接口，
             不能保证任何专有 API Key 直接通用。确认调用前请审核实际服务商及提示词；
             第三方服务商的数据处理、计费规则由你选择的服务商决定。
             手动输入会使用系统凭据加密；如果安全加密不可用，会拒绝保存，不退回明文存储。
             也可用 <code>OPENAI_API_KEY</code>、<code>ANTHROPIC_API_KEY</code>、
-            <code>GEMINI_API_KEY</code>，或为其他兼容接口设置
+            <code>GEMINI_API_KEY</code>、<code>DEEPSEEK_API_KEY</code>，或为其他兼容接口设置
             <code>STUDY_ANCHOR_AI_PROVIDER</code>、<code>STUDY_ANCHOR_AI_MODEL</code>、
             <code>STUDY_ANCHOR_AI_ENDPOINT</code>、<code>STUDY_ANCHOR_AI_API_KEY</code>。
             本机加密 Key 优先；删除本机 Key 后才会回退到环境变量。环境变量不写入应用数据库或凭据文件。
