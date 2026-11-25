@@ -21,7 +21,7 @@ const MAX_FRAME_BYTES=65_536;
 /** Never retry known authorization failures as transient network outages. */
 function accessDenied(error:unknown):boolean {
   const message=error instanceof Error?error.message:"";
-  return /authorization failed|access was denied|membership|log in to the cloud workspace first/i.test(message);
+  return /authorization failed|access was denied|membership|log in to the cloud workspace first|cloud session expired|cloud account or project changed|cloud refresh identity/i.test(message);
 }
 
 /**
