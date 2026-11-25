@@ -65,7 +65,7 @@ describe("ALPHA-KB-005C durable vocabulary coverage and safe recovery",()=>{
     const row=db.prepare("SELECT reason FROM knowledge_vector_skips").get() as {reason:string};
     expect(row.reason).toBe("vocabulary_miss");
     expect((db.prepare("PRAGMA user_version").get() as {user_version:number}).user_version)
-      .toBe(5);
+      .toBe(6);
     db.close();
     expect(unknown.id).not.toBe(second.id);
     dispose(store);

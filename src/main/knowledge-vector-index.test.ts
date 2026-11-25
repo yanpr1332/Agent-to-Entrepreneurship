@@ -70,7 +70,7 @@ describe("ALPHA-KB-005A persisted local vectors and revision-safe search",()=>{
     const header=sqlite.prepare("PRAGMA user_version").get() as {user_version:number};
     const saved=sqlite.prepare("SELECT vector,dimension FROM knowledge_vectors LIMIT 1")
       .get() as {vector:Buffer;dimension:number};
-    expect(header.user_version).toBe(5);
+    expect(header.user_version).toBe(6);
     expect(saved.dimension).toBe(3);
     expect(saved.vector).toHaveLength(12);
     sqlite.close();

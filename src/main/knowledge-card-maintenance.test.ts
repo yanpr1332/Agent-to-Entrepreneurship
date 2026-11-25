@@ -13,7 +13,7 @@ const NOW=new Date("2026-11-10T08:00:00.000Z");
 const NEXT=new Date("2026-11-11T08:00:00.000Z");
 function fixture(){
   const dir=mkdtempSync(join(tmpdir(),"sa-review-source-"));folders.push(dir);
-  const path=join(dir,"knowledge.sqlite");
+  const path=join(dir,"study-anchor-knowledge.sqlite");
   const store=new KnowledgeStore(path);opened.push(store);
   return {dir,path,store};
 }
@@ -154,9 +154,9 @@ describe("KB-006 review cards, editing and explicit evidence re-confirmation",()
     const prior=new DatabaseSync(path);
     prior.exec("DROP TABLE knowledge_card_evidence_history; PRAGMA user_version=5");
     prior.close();
-    const backup=await backupBeforeMigration(dir,"knowledge.sqlite",6);
+    const backup=await backupBeforeMigration(dir,"study-anchor-knowledge.sqlite",6);
     expect(backup).toBeTruthy();
-    const before=new DatabaseSync(join(backup!,"knowledge.sqlite"),{readOnly:true});
+    const before=new DatabaseSync(join(backup!,"study-anchor-knowledge.sqlite"),{readOnly:true});
     expect((before.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(5);
     before.close();
     const restored=new KnowledgeStore(path);opened.push(restored);
