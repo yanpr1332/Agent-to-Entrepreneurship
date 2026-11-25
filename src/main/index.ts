@@ -38,6 +38,8 @@ import { KnowledgeStore } from "./knowledge-store";
 import {KnowledgeOfflineModels} from "./knowledge-offline-models";
 import { PlanningStore } from "./planning-store";
 import { readSelectedKnowledgeFile } from "./knowledge-import";
+import {importPickedKnowledgeFiles,auditKnowledgeSources,refreshAuditedKnowledgeSources}
+  from "./knowledge-source-lifecycle";
 import { createLocalBackup, backupBeforeMigration } from "./local-backup";
 import { AIKeyVault } from "./ai/ai-vault";
 import { AIUsageLedger } from "./ai/ai-usage";
@@ -453,6 +455,29 @@ function registerIpcHandlers(): void {
     const source=await readSelectedKnowledgeFile(selection.filePaths[0]);
     return source.format==="pdf" ? knowledge().importPdf(source) : knowledge().importText(source);
   });
+  handle(IPC_CHANNELS.knowledgeBatchImport,async event=>{
+    requireTrustedSender(event);
+    const owner=BrowserWindow.fromWebContents(event.sender);
+    if(!owner||owner.isDestroyed())throw Error("Batch import requires a trusted window");
+    const selection=await dialog.showOpenDialog(owner,{
+      title:"批量选择本机知识库资料（一次最多 20 份）",
+      properties:["openFile","multiSelections"],
+      filters:[{name:"PDF / Markdown / HTML / LaTeX / TXT",
+        extensions:["pdf","md","markdown","html","htm","tex","latex","txt"]}],
+    });
+    if(selection.canceled||!selection.filePaths.length)return null;
+    return importPickedKnowledgeFiles(knowledge(),selection.filePaths);
+  });
+  handle(IPC_CHANNELS.knowledgeAuditSources,(event,ids:unknown)=>{
+    requireTrustedSender(event);
+    return auditKnowledgeSources(knowledge(),ids);
+  });
+  handle(IPC_CHANNELS.knowledgeRefreshSources,
+    (event,consent:unknown,requests:unknown)=>{
+      requireTrustedSender(event);
+      if(consent!==true)throw Error("Explicit local source refresh consent required");
+      return refreshAuditedKnowledgeSources(knowledge(),requests);
+    });
   handle(IPC_CHANNELS.knowledgeDelete, (event,id:unknown) => {
     requireTrustedSender(event);
     return knowledge().deleteDocument(id);

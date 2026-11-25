@@ -28,6 +28,8 @@ import type {
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
+  KnowledgeBatchImportResult, KnowledgeSourceAuditEntry,
+  KnowledgeSourceRefreshRequest, KnowledgeSourceRefreshResult,
   KnowledgeReviewCard, ReviewCardInput, ReviewCardEditInput, ReviewCardRebindInput,
   ReviewCardEvidenceHistory, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport, KnowledgeEvidenceExportResult, KnowledgeEvidenceCatalogPage, KnowledgeLocalLabels, KnowledgeLabelsSaveResult,
 } from "../shared/knowledge-model";
@@ -243,6 +245,13 @@ const desktopApi = Object.freeze({
     passage: (id: string, ordinal: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.knowledgePassage,id,ordinal) as Promise<KnowledgePassage>,
     importFile: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeImport) as Promise<{document:KnowledgeDocument;changed:boolean}|null>,
+    importBatch: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeBatchImport) as Promise<KnowledgeBatchImportResult|null>,
+    auditSources: (ids:string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeAuditSources,ids) as Promise<KnowledgeSourceAuditEntry[]>,
+    refreshSources: (consent:boolean,items:KnowledgeSourceRefreshRequest[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeRefreshSources,consent,items) as
+        Promise<KnowledgeSourceRefreshResult>,
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeDelete,id) as Promise<boolean>,
     search: (query: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeSearch,query) as Promise<KnowledgeSearchHit[]>,
     embeddingStatus: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeEmbeddingStatus) as Promise<KnowledgeEmbeddingStatus>,
