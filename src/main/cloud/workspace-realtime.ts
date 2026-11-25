@@ -18,6 +18,12 @@ const STALE_MS=80_000;
 const MAX_RETRY_MS=30_000;
 const MAX_FRAME_BYTES=65_536;
 
+/** Never retry known authorization failures as transient network outages. */
+function accessDenied(error:unknown):boolean {
+  const message=error instanceof Error?error.message:"";
+  return /authorization failed|access was denied|membership|log in to the cloud workspace first/i.test(message);
+}
+
 /**
  * Supabase Realtime is a *hint channel*, not a source of truth. Main keeps
  * the JWT and parses no record bodies; Renderer always re-fetches via RLS.
@@ -55,8 +61,22 @@ export class WorkspaceRealtimeBridge {
     this.ownerId=ownerId;
     const epoch=this.epoch;
     this.publish("connecting");
-    // First watch must enforce membership; no socket for nonmembers.
-    const members=await this.cloud.listMembers(workspaceId);
+    // First watch enforces membership; transient network failures instead
+    // remain in polling mode and schedule a bounded retry after reconnect.
+    let members:Awaited<ReturnType<SharedCloudClient["listMembers"]>>;
+    try{
+      members=await this.cloud.listMembers(workspaceId);
+    }catch(error){
+      if(!this.active(epoch)||this.workspaceId!==workspaceId)
+        throw Error("Workspace selection changed");
+      if(accessDenied(error)){
+        this.clearTimersAndSocket();
+        this.publish("revoked");
+        throw error;
+      }
+      this.retry(epoch);
+      return {workspaceId,phase:"fallback",hint:false};
+    }
     if(epoch!==this.epoch||this.workspaceId!==workspaceId)
       throw Error("Workspace selection changed");
     if(this.cloud.currentUserId()!==ownerId||!members.some(m=>m.user_id===ownerId)){
@@ -203,8 +223,14 @@ export class WorkspaceRealtimeBridge {
       };
       ws.onerror=()=>{if(this.active(epoch,ws))this.retry(epoch);};
       ws.onclose=()=>{if(this.active(epoch,ws))this.retry(epoch);};
-    }catch{
-      if(this.active(epoch))this.retry(epoch);
+    }catch(error){
+      if(!this.active(epoch))return;
+      if(accessDenied(error)){
+        this.clearTimersAndSocket();
+        this.publish("revoked");
+        return;
+      }
+      this.retry(epoch);
     }
   }
 }
