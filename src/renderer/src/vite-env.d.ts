@@ -28,6 +28,8 @@ import type {
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
+  KnowledgeBatchImportResult, KnowledgeSourceAuditEntry,
+  KnowledgeSourceRefreshRequest, KnowledgeSourceRefreshResult,
   KnowledgeReviewCard, ReviewCardInput, ReviewCardEditInput, ReviewCardRebindInput,
   ReviewCardEvidenceHistory, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport, KnowledgeEvidenceExportResult, KnowledgeEvidenceCatalogPage, KnowledgeLocalLabels, KnowledgeLabelsSaveResult,
 } from "../../shared/knowledge-model";
@@ -171,6 +173,9 @@ declare global {
         get: (id: string) => Promise<KnowledgeSnapshot>;
         passage: (id: string, ordinal: number) => Promise<KnowledgePassage>;
         importFile: () => Promise<{document:KnowledgeDocument;changed:boolean}|null>;
+        importBatch: () => Promise<KnowledgeBatchImportResult|null>;
+        auditSources: (ids:string[]) => Promise<KnowledgeSourceAuditEntry[]>;
+        refreshSources: (consent:boolean,items:KnowledgeSourceRefreshRequest[]) => Promise<KnowledgeSourceRefreshResult>;
         delete: (id: string) => Promise<boolean>;
         search: (query: string) => Promise<KnowledgeSearchHit[]>;
         embeddingStatus: () => Promise<KnowledgeEmbeddingStatus>;
