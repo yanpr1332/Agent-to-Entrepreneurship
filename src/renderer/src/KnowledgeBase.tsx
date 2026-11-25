@@ -200,6 +200,19 @@ export default function KnowledgeBase(){
     });
   }
 
+  async function exportEvidenceCatalog():Promise<void>{
+    if(!window.confirm(
+      "导出的本机 JSON 包含最多 500 个知识库原文片段的标题、引用 ID、PDF 页码和最多 240 字摘要。"+
+      "内容可能涉及你的私人学习资料，请妥善保管、不要上传公共仓库或聊天。"+
+      "文件只会保存到你在系统对话框中选择的位置，已存在文件不会被自动覆盖。继续？"))return;
+    await perform(async()=>{
+      const saved=await window.desktop.knowledge.exportEvidenceCatalog(true);
+      if(saved)setNotice("已将 "+saved.exported+"/"+saved.total+
+        " 条证据引用保存至本机："+saved.path+
+        (saved.truncated?"。超出上限的片段未导出。":"。")+
+        " 请人工填写标注查询与相关证据，不能直接把目录文件当成评测标签。");
+    });
+  }
   async function evaluateOfflineModel():Promise<void>{
     if(!window.confirm(
       "只选择你自己创建的本机 JSON 检索相关性标注文件（最多 100 条查询、128 KiB）。"+
@@ -285,6 +298,8 @@ export default function KnowledgeBase(){
             <button type="button" className="secondary-button"
               disabled={busy||!embeddingStatus.running}
               onClick={()=>void cancelOfflineIndex()}>取消索引</button>
+            <button type="button" className="secondary-button" disabled={busy}
+              onClick={()=>void exportEvidenceCatalog()}>导出证据目录（供手动标注）</button>
             <button type="button" className="secondary-button"
               disabled={busy||embeddingStatus.running||!embeddingStatus.indexed}
               onClick={()=>void evaluateOfflineModel()}>用本地标注集评测检索</button>
