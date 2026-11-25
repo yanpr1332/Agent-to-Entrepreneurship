@@ -14,6 +14,10 @@ import type {
 const empty:CloudSessionStatus={configured:false,authenticated:false,userId:null,email:null};
 const POLL_MS=10_000;
 const LIVE_SAFETY_POLL_MS=30_000;
+function isCloudSessionExpired(error:unknown):boolean{
+  const message=error instanceof Error?error.message:"";
+  return /cloud session expired|log in to the cloud workspace first/i.test(message);
+}
 function isWorkspaceAccessDenied(error:unknown):boolean{
   const message=error instanceof Error?error.message:"";
   return /membership|permission|access denied|authorization failed|not found or permission/i.test(message);
@@ -123,6 +127,22 @@ export default function CloudWorkspace() {
     void window.desktop.cloud.workspaces().then(setWorkspaces).catch(()=>setWorkspaces([]));
   },[]);
 
+  /** A JWT refresh can expire asynchronously while a workspace is visible.
+   * Query Main's actual session before restoring a login UI; do not retain
+   * old members, messages, or cached history in the previous account's view. */
+  const recoverExpiredSession=useCallback(async()=>{
+    try{
+      const current=await window.desktop.cloud.status();
+      if(current.authenticated)return;
+      selectedRef.current=null;workspaceFetchSeq.current++;
+      setStatus(current);setWorkspaces([]);setSelected(null);
+      setMembers([]);setMessages([]);setTasks([]);setInvite("");
+      setOlderMessages([]);setOlderTasks([]);setHistoryStatus(null);
+      setWorkspaceLivePhase("stopped");setHistoryLoading(false);
+      setNotice("云端登录已失效，请使用本人的账号重新登录。未自动重传任何本地待同步数据。");
+    }catch{/* Status diagnostic failure must not leak a token or retain stale shared content. */}
+  },[]);
+
   const refreshSelected=useCallback(async(workspaceId:string)=>{
     const seq=++workspaceFetchSeq.current;
     try{
@@ -138,11 +158,13 @@ export default function CloudWorkspace() {
         setOlderMessages([]);setOlderTasks([]);
       }
     }catch(error){
-      if(selectedRef.current===workspaceId&&isWorkspaceAccessDenied(error))
+      if(selectedRef.current===workspaceId&&isCloudSessionExpired(error))
+        await recoverExpiredSession();
+      else if(selectedRef.current===workspaceId&&isWorkspaceAccessDenied(error))
         clearSelectedWorkspace();
       throw error;
     }
-  },[clearSelectedWorkspace]);
+  },[clearSelectedWorkspace,recoverExpiredSession]);
 
   useEffect(()=>{
     if(!status.authenticated){
@@ -188,7 +210,8 @@ export default function CloudWorkspace() {
     pull(); // Always catch up immediately, regardless of socket availability.
     void window.desktop.cloud.watchWorkspace(selected).catch(error=>{
       if(!active)return;
-      if(isWorkspaceAccessDenied(error))clearSelectedWorkspace();
+      if(isCloudSessionExpired(error))void recoverExpiredSession();
+      else if(isWorkspaceAccessDenied(error))clearSelectedWorkspace();
       else{phase="fallback";setWorkspaceLivePhase("fallback");}
     });
     const timer=setInterval(()=>{
@@ -199,13 +222,16 @@ export default function CloudWorkspace() {
       active=false;clearInterval(timer);unsubscribe();
       void window.desktop.cloud.stopWorkspaceWatch(selected).catch(()=>{});
     };
-  },[status.authenticated,selected,refreshSelected,clearSelectedWorkspace]);
+  },[status.authenticated,selected,refreshSelected,clearSelectedWorkspace,recoverExpiredSession]);
 
   async function run(operation:()=>Promise<void>):Promise<void>{
     if(busy)return;
     setBusy(true);setError("");
     try{await operation();}
-    catch(reason){setError(issue(reason));}
+    catch(reason){
+      setError(issue(reason));
+      if(isCloudSessionExpired(reason))await recoverExpiredSession();
+    }
     finally{setBusy(false);}
   }
 
@@ -533,7 +559,7 @@ export default function CloudWorkspace() {
       <strong>请只连接你自己有权限管理的隔离测试项目。</strong>
       使用公开的 Supabase Publishable/Anon Key，不要填写 service_role、数据库密码或团队成员的密码。
       个人日历、Canvas 凭据、交大邮箱数据不会自动上传到云端。
-      当前消息每 10 秒刷新一次，属于轮询而非 Supabase Realtime 推送。
+      团队消息与任务采用 Realtime 更新提醒和 RLS 权限复查；实时连接不可用时每 10 秒补拉，正常连接也约每 30 秒安全补拉。
     </div>
     {error && <div className="error-banner" role="alert"><span>{error}</span><button onClick={()=>setError("")}>关闭</button></div>}
     {notice && <div className="connector-notice" role="status">{notice}</div>}
