@@ -16,6 +16,7 @@ import StudyPlanner from "./StudyPlanner";
 import FixedCalendarPanel from "./FixedCalendarPanel";
 import TaskSchedulePanel from "./TaskSchedulePanel";
 import type { CalendarDisplayEvent } from "../../shared/canvas-calendar-model";
+import Workbench from "./Workbench";
 import AIWorkspace from "./AIWorkspace";
 import { minuteString, type PlanBlock } from "../../shared/planning-model";
 
@@ -324,6 +325,7 @@ export default function App() {
   const today = localDateKey(new Date());
   const [page, setPage] = useState<Page>("overview");
   const [runtime, setRuntime] = useState<RuntimeStatus>("checking");
+  const [workbenchRefreshSignal,setWorkbenchRefreshSignal]=useState(0);
   const [version, setVersion] = useState("—");
   const [tasks, setTasks] = useState<LocalTask[]>([]);
   const [sessions, setSessions] = useState<FocusSession[]>([]);
@@ -425,12 +427,14 @@ export default function App() {
   useEffect(() => window.desktop.canvas.onSyncUpdated(() => {
     void refresh().catch(() => {});
     void refreshCalendar().catch(() => {});
+    setWorkbenchRefreshSignal(n=>n+1);
   }), [refresh,refreshCalendar]);
 
   // Accepted mail candidates create ordinary personal tasks in the same local
   // SQLite authority and must refresh the calendar immediately.
   useEffect(() => window.desktop.mail.onSyncUpdated(() => {
     void refresh().catch(() => {});
+    setWorkbenchRefreshSignal(n=>n+1);
   }), [refresh]);
 
   function resetTaskForm(): void {
@@ -537,7 +541,6 @@ export default function App() {
   const expiringSoon = hiddenTasks.filter((task) => task.retentionExpiresAt &&
     Date.parse(task.retentionExpiresAt) - Date.now() <= 30 * 86400000).length;
   const pendingTasks = shownTasks.filter((task) => !task.completed);
-  const todayTasks = pendingTasks.filter((task) => task.dueDate === today);
   const visibleTasks = showHidden ? hiddenTasks : shownTasks.filter((task) =>
     filter === "all" || (filter === "day" && task.dueDate === selectedDate) ||
     (filter === "undated" && task.dueDate === null),
@@ -557,7 +560,6 @@ export default function App() {
   function moveCalendar(direction:-1|1):void{
     selectCalendarDate(shiftCalendarView(selectedDate,calendarView,direction));
   }
-  const nextTasks = pendingTasks.slice(0, 5);
   const selectedModule = menu.find((item) => item.page === page)!;
 
   return (
@@ -596,34 +598,14 @@ export default function App() {
         <div className="content">
           {error && <div className="error-banner" role="alert"><strong>操作未完成：</strong> {error}<button onClick={() => setError("")}>关闭</button></div>}
 
-          {page === "overview" && (
-            <>
-              <div className="welcome-row"><div><div className="eyebrow">YOUR WORKSPACE</div><h1>把重要的事情，<em>一步步做好。</em></h1><p>日程、任务与专注记录已接入本地数据库，重启后可以恢复。</p></div><div className="date-card"><span>当前版本</span><strong>{version}</strong><small>内部开发原型</small></div></div>
-              <div className="status-banner"><div className="status-icon">✦</div><div className="status-copy"><strong>{runtime === "connected" ? "本地工作空间已连接" : "正在检查本地工作空间"}</strong><span>个人任务与专注记录仅存储在本机。Canvas 和邮箱为开发验证版；云端协作 PoC 需配置测试项目并完成真实权限验收。</span></div>
-                <div className="runtime-status"><i className={runtime === "connected" ? "online" : runtime === "unavailable" ? "offline" : ""} />{runtime === "connected" ? "SQLite 已连接" : runtime === "checking" ? "检查中" : "不可用"}</div>
-              </div>
-              <div className="metric-grid">
-                <div className="metric-card"><span>今日待办</span><strong>{todayTasks.length}</strong><small>今天截止且未完成</small></div>
-                <div className="metric-card"><span>全部待办</span><strong>{pendingTasks.length}</strong><small>未完成的个人任务</small></div>
-                <div className="metric-card"><span>专注分钟</span><strong>{summary.totalMinutes}</strong><small>累计专注记录</small></div>
-                <div className="metric-card"><span>专注积分</span><strong>{summary.points}</strong><small>已完成专注获得</small></div>
-              </div>
-              <div className="section-heading"><div><div className="eyebrow">READY TO USE</div><h2>马上开始</h2></div></div>
-              <div className="quick-grid"><button className="quick-card" onClick={() => setPage("calendar")}><span>▦</span><strong>管理我的任务</strong><small>创建、编辑、完成和查看日历</small></button><button className="quick-card" onClick={() => setPage("focus")}><span>◷</span><strong>开始专注</strong><small>计时、历史和积分</small></button></div>
-              <div className="bottom-grid">
-                <section className="panel"><div className="panel-heading"><div><div className="eyebrow">UP NEXT</div><h2>接下来的任务</h2></div><button className="text-button" onClick={() => { setPage("calendar"); setFilter("all"); }}>查看全部 →</button></div>
-                  {nextTasks.length ? <ul className="compact-task-list">{nextTasks.map((task) => <li key={task.id}><span className="task-dot" /><div><strong>{task.title}</strong><small>{formatDueDate(task.dueDate)}</small></div><button onClick={() => editTask(task)}>编辑</button></li>)}</ul> : <p className="empty-state">暂无待办。创建第一条任务，开始整理今天。</p>}
-                </section>
-                <section className="panel runtime-panel"><div className="eyebrow">SYSTEM STATUS</div><h2>运行状态</h2>
-                  <div className="runtime-line"><span>Electron / 本地 SQLite</span><strong>{runtime === "connected" ? "可用" : runtime === "checking" ? "检查中" : "异常"}</strong></div>
-                  <div className="runtime-line"><span>个人任务与日历</span><strong>{runtime === "connected" ? "可用" : "未连接"}</strong></div>
-                  <div className="runtime-line"><span>云端协作</span><strong className="not-ready">候选 PoC，需配置测试云</strong></div>
-                  <div className="runtime-line"><span>Canvas 与邮箱</span><strong>开发验证版</strong></div>
-                  <p className="privacy-note">个人任务与专注数据不会自动上传云端。</p>
-                </section>
-              </div>
-            </>
-          )}
+          {page === "overview" && <Workbench
+            tasks={tasks} summary={summary} plannedBlocks={plannedBlocks}
+            fixedEvents={fixedEvents} runtime={runtime} version={version}
+            refreshSignal={workbenchRefreshSignal} busy={busy}
+            onNavigate={setPage}
+            onEditTask={editTask}
+            onCompleteTask={task=>{void toggleTask(task);}}
+          />}
 
           {page === "calendar" && (
             <>
