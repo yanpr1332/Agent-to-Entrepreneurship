@@ -43,3 +43,6 @@ jobs:
 
       - name: Build desktop bundles
         run: npx electron-vite build
+
+      - name: Verify offline embedding Worker inside desktop bundle
+        run: node scripts/verify-offline-worker.mjs

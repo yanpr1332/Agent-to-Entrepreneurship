@@ -33,6 +33,11 @@ export interface KnowledgeEmbeddingStatus {
   }|null;
   indexed:number;
   total:number;
+  /** Index worker state; unavailable in older builds. */
+  installed?:boolean;
+  running?:boolean;
+  engine?:"static-word-vectors"|null;
+  error?:string|null;
 }
 export interface KnowledgePassage {
   documentId: string;

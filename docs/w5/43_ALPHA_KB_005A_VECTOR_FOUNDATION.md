@@ -38,3 +38,8 @@ npm run build
 1. 用户自愿从审核过的来源安装/离线导入真实模型，校验固定权重、许可证、SHA-256、依赖供应链和 CPU 内存上限，明确关闭自动远程模型拉取；
 2. 在 Electron 隔离进程内加载模型、按 tokenizer 窗口安全分段、建立用户可取消的增量索引进度与磁盘配额；
 3. 通过真实 30–100 条中英标注查询的 Precision@5、Recall@10、MRR@10 / latency 基准调整融合权重，添加启用开关、状态、清除、证据跳转及 Windows/macOS 离线 GUI 验收。
+
+
+## 已启动下一阶段 KB-005B（独立开发）
+
+[44 离线静态词向量模型闭环](44_ALPHA_KB_005B_OFFLINE_WORD_VECTORS.md) 为用户自愿导入的纯 UTF-8 小型词向量文件提供 SHA、Worker CPU 编码、分批索引、重启/卸载和本机三路搜索。005A 本文测试时只有合成 Provider 的说明仍然准确，**005B 的静态词向量也不能称为 E5/BGE Transformer 或已完成真实模型质量基准**。

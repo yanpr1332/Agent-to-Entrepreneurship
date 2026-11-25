@@ -100,6 +100,10 @@ npm run build
 
 如需在**用户单独批准的隔离 Supabase 项目**验证实时订阅，请先审查并运行既有 `20261110_ate_workspace_poc.sql`，再审查 `supabase/migrations/20261124_ate_workspace_realtime_hints.sql`；本仓库 CI **不部署云端**。未完成五账号 RLS 反向测试、30 秒安全补拉 GUI 与历史游标验收之前，不视为完整 Realtime 发布。详见 [39 团队实时提示验收](docs/w5/39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
 
+### ALPHA-KB-005B 自愿导入离线静态词向量与 Worker 编码
+
+从个人知识库选择“导入本机 .vec 词向量”，自行确认模型来源/许可后通过原生文件选择器导入不超过 32 MiB 的 UTF-8 文本词向量，第二次点击“构建/继续本地索引”才开始处理个人知识库。每轮最多 16 个原文块，索引可取消/续传、可卸载，查询保留精确优先排序和 PDF 页码。**不预装/下载模型，也不表示 E5/BGE ONNX 已接入**。构建会执行真实打包 Worker smoke：`node scripts/verify-offline-worker.mjs`。详见 [44](docs/w5/44_ALPHA_KB_005B_OFFLINE_WORD_VECTORS.md)。
+
 ### ALPHA-SYNC-003D 团队历史本机加密与清理
 
 ```sh
@@ -339,7 +343,7 @@ node node_modules/vitest/vitest.mjs run --pool=threads
 **专注与日历联动（PR #27）**：在专注页填写标题，计时期间可切换模块再返回；点击「记录完成」后，历史中可以修改标题，日历月视图用圆点提示有实际专注，日/周和选中日期详情显示实际学习时段。暂停期间计入起止区间，但不计入有效专注秒数；旧版估算时间不进入实际日历。此变更会把本地任务数据库从 v4 迁移到 v5，首次运行前会制作迁移快照；详见 [实施及迁移说明](docs/w5/20_ALPHA_TIME_002_FOCUS_CALENDAR.md)。
 8. 学习规划：生成、选择性应用、核对日历占用并撤销。已确认的单段学习计划可在日历中修改时间或删除本段。
 
-**本地语义检索研发（ALPHA-KB-005A 底层开发中，尚无可用模型）**：拟在现有精确/容错结果上加入可选的**本地 embedding 语义检索**，让同义词和中英混合问题能命中不同措辞的原文。模型下载需用户同意，索引默认本地、断网可用，详情见 [模型可得性和工程难度评估](docs/w5/26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md)。本轮增加了 SQLite v4 的版本化向量/模型元数据、原文失效验证、精确优先 RRF 和质量指标，但**没有运行真实 Embedding 模型、没有自动下载或启用完整语义搜索**；详见 [43 索引基础与验收](docs/w5/43_ALPHA_KB_005A_VECTOR_FOUNDATION.md)。该功能不属于已合并 PR #32 的实际交付。
+**本地语义检索研发（ALPHA-KB-005B：可选离线静态词向量，非 E5/BGE）**：拟在现有精确/容错结果上加入可选的**本地 embedding 语义检索**，让同义词和中英混合问题能命中不同措辞的原文。模型下载需用户同意，索引默认本地、断网可用，详情见 [模型可得性和工程难度评估](docs/w5/26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md)。005A 已提供 SQLite v4 版本化向量、原文引用失效保护和精确优先融合；005B 新增**用户自备 .vec 静态词向量（最大 32 MiB）的 SHA-256 校验、独立 Worker 离线编码、分批可取消/可续传索引以及模型卸载 UI**。不会自动下载或上传原文；**静态词向量不等于 Transformer E5/BGE，模型质量尚未进行正式中英基准评测**，见 [44 本机模型实现与验收](docs/w5/44_ALPHA_KB_005B_OFFLINE_WORD_VECTORS.md)。详见 [43 索引基础与验收](docs/w5/43_ALPHA_KB_005A_VECTOR_FOUNDATION.md)。该功能不属于已合并 PR #32 的实际交付。
 
 **任务执行时间编辑（PR #28）**：在日历中选中日期，找到「任务执行时间」，点击「+ 安排任务时间」为可见、未完成的任务指定具体日期、开始时刻和时长（15–480 分钟、5 分钟刻度）。同一任务可安排多段，也可对已确认的时间块逐段修改或删除。固定课程及其他时间块重叠会被主进程拦截。任务截止日期不变。此轮将 旧版 `ate-plans.sqlite`（新版本自动迁为 `study-anchor-planning.sqlite`）从 v1 升至 v2，原规划库会在迁移前生成快照；详情和本地集中测试案例见 [任务执行时间实施文档](docs/w5/21_ALPHA_TIME_003_TASK_SCHEDULES.md)。
 9. 关闭应用，在**同一** ATE_USER_DATA_DIR 下重新启动，核实任务、专注记录和主题保留。

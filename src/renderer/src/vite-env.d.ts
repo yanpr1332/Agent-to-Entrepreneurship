@@ -173,6 +173,10 @@ declare global {
         delete: (id: string) => Promise<boolean>;
         search: (query: string) => Promise<KnowledgeSearchHit[]>;
         embeddingStatus: () => Promise<KnowledgeEmbeddingStatus>;
+        importOfflineModel: (acknowledged:boolean) => Promise<KnowledgeEmbeddingStatus|null>;
+        startOfflineIndex: () => Promise<KnowledgeEmbeddingStatus>;
+        cancelOfflineIndex: () => Promise<KnowledgeEmbeddingStatus>;
+        removeOfflineModel: (confirmation:"REMOVE_LOCAL_MODEL_AND_VECTORS") => Promise<KnowledgeEmbeddingStatus>;
         cards: () => Promise<KnowledgeReviewCard[]>;
         createCard: (input: ReviewCardInput) => Promise<KnowledgeReviewCard>;
         removeCard: (id: string) => Promise<boolean>;
