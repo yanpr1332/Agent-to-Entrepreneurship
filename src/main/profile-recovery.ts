@@ -28,6 +28,7 @@ export interface InspectedRecovery {
   legacyManifest:boolean;
   /** Internal manifest-selected file names, never Renderer-provided. */
   sourceFiles:Partial<Record<Kind,string>>;
+  expectedHashes:Partial<Record<Kind,string>>;
   /** Exact raw inventory hash, bound to the short-lived Main-only approval. */
   fingerprint:string;
 }
@@ -117,6 +118,7 @@ export async function inspectRecoveryFolder(folder:string):Promise<InspectedReco
   const parsed=parseManifest(raw);
   const result:RecoveryDatabase[]=[];
   const sourceFiles:Partial<Record<Kind,string>>={};
+  const expectedHashes:Partial<Record<Kind,string>>={};
   const fingerprint=createHash("sha256").update(await readFile(manifestPath));
   for(const [i,filename] of parsed.files.entries()){
     if(basename(filename)!==filename||filename.includes("/")||filename.includes("\\"))
@@ -135,11 +137,12 @@ export async function inspectRecoveryFolder(folder:string):Promise<InspectedReco
       throw Error("Backup schema version checksum mismatch");
     fingerprint.update(filename).update(sha);
     sourceFiles[name]=filename;
+    expectedHashes[name]=sha;
     result.push({name,bytes:size,userVersion,sha256Verified:!!recorded});
   }
   return {createdAt:parsed.createdAt,databases:result,
     missing:kinds.filter(x=>!result.some(r=>r.name===x)),
-    legacyManifest:parsed.records===null,sourceFiles,
+    legacyManifest:parsed.records===null,sourceFiles,expectedHashes,
     fingerprint:fingerprint.digest("hex")};
 }
 function validateParents(path:string):void{
@@ -175,7 +178,7 @@ export async function recoverToNewProfile(input:{
       if(!source)throw Error("Backup file missing");
       const to=join(stage,RESTORABLE_DATABASES[record.name].destination);
       await copyFile(join(folder,source),to);
-      if((await sha256File(to))!==(await sha256File(join(folder,source))))
+      if((await sha256File(to))!==inspected.expectedHashes[record.name])
         throw Error("Recovered copy failed checksum comparison");
       verifyDatabase(to,RESTORABLE_DATABASES[record.name].maxVersion);
     }
