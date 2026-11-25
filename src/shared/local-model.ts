@@ -84,6 +84,37 @@ export interface FocusSession {
   timeSource: "recorded" | "estimated";
 }
 
+/** Virtual, user-defined rewards: never an actual purchase or entitlement. */
+export interface FocusReward {
+  id:string;
+  title:string;
+  description:string;
+  cost:number;
+  active:boolean;
+  createdAt:string;
+  updatedAt:string;
+}
+export interface FocusRewardCreateInput {
+  title:string;description:string;cost:number;
+}
+export interface FocusRewardEditInput extends FocusRewardCreateInput {
+  id:string;active:boolean;expectedUpdatedAt:string;
+}
+export interface FocusRewardRedeemInput {
+  /** Unique client idempotency key, reused only for a retry of this reward. */
+  redemptionId:string;rewardId:string;
+}
+export interface FocusRewardRedemption {
+  id:string;rewardId:string;
+  rewardTitle:string;cost:number;redeemedAt:string;
+}
+export interface FocusRewardOverview {
+  earned:number;spent:number;available:number;
+  level:number;badge:string;
+  rewards:FocusReward[];
+  recentRedemptions:FocusRewardRedemption[];
+}
+
 export interface FocusSummary {
   sessions: number;
   completedSessions: number;
