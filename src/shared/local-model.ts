@@ -91,6 +91,28 @@ export interface FocusSummary {
   points: number;
 }
 
+/** A local day is the date when the session ENDED in the selected timezone. */
+export interface FocusInsightsTotals {
+  sessions:number;
+  completedSessions:number;
+  minutes:number;
+  points:number;
+}
+export interface FocusInsightsDay extends FocusInsightsTotals {
+  day:string;recordedSessions:number;estimatedSessions:number;
+}
+export interface FocusInsights {
+  timeZone:string;
+  asOf:string;
+  days:FocusInsightsDay[];
+  last7:FocusInsightsTotals;
+  previous7:FocusInsightsTotals;
+  last30:FocusInsightsTotals;
+  currentStreakDays:number;
+  bestStreakDays:number;
+  estimatedSessions:number;
+}
+
 type UnknownRecord = Record<string, unknown>;
 
 function asRecord(input: unknown): UnknownRecord {

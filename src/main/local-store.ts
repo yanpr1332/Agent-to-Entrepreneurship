@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, backup } from "node:sqlite";
+import {buildFocusInsights,requireFocusTimeZone,type FocusInsightRow}
+  from "./focus-insights";
 import type { CanvasAssignment, CanvasImportResult, CanvasSyncResult } from "../shared/canvas-model";
 import type { MailCandidateAction, MailCandidateChoiceResult, MailCandidateDecision } from "../shared/mail-candidates";
 import { suggestedTaskTitle } from "../shared/mail-candidates";
@@ -14,7 +16,7 @@ import type {
 } from "../shared/personal-sync-contract";
 import {
   parseCreateTask, parseFocusCompletion, parseFocusTitleUpdate, parseTaskId, parseUpdateTask,
-  type FocusSession, type FocusSummary, type LocalTask, type TaskPriority,
+  type FocusSession, type FocusSummary, type FocusInsights, type LocalTask, type TaskPriority,
 } from "../shared/local-model";
 
 interface TaskRow {
@@ -1512,6 +1514,23 @@ export class LocalStore {
     const row = this.db.prepare("SELECT * FROM focus_sessions WHERE id = ?")
       .get(update.id) as unknown as FocusRow;
     return focusFromRow(row);
+  }
+
+  /** Aggregate all sessions from the recent local window; the UI's list
+   * of 500 sessions is deliberately NOT the source for statistics. */
+  focusInsights(zone:unknown,now=new Date()):FocusInsights{
+    const timeZone=requireFocusTimeZone(zone);
+    if(!Number.isFinite(now.getTime()))throw Error("Invalid statistics clock");
+    // UTC window safely covers the last 30 local dates for all IANA zones.
+    const from=new Date(now.getTime()-32*86_400_000).toISOString();
+    const rows=this.db.prepare(
+      "SELECT ended_at,elapsed_seconds,completed,points,time_source "+
+      "FROM focus_sessions WHERE ended_at >= ? AND ended_at <= ? "+
+      "ORDER BY ended_at ASC LIMIT 20001"
+    ).all(from,now.toISOString()) as unknown as FocusInsightRow[];
+    if(rows.length>20000)
+      throw Error("Too many recent focus sessions for bounded statistics");
+    return buildFocusInsights(rows,timeZone,now);
   }
 
   focusSummary(): FocusSummary {
