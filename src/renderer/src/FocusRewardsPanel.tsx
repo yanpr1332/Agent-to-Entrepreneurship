@@ -20,6 +20,7 @@ export default function FocusRewardsPanel({active,refreshKey}:Props){
   const [description,setDescription]=useState("");
   const [cost,setCost]=useState("30");
   const [editId,setEditId]=useState<string|null>(null);
+  const [editorOpen,setEditorOpen]=useState(false);
   const [activeReward,setActiveReward]=useState(true);
   const [editRevision,setEditRevision]=useState("");
   // If the IPC promise fails after Main committed, retrying must reuse the
@@ -42,9 +43,10 @@ export default function FocusRewardsPanel({active,refreshKey}:Props){
   function clearEditor():void{
     setTitle("");setDescription("");setCost("30");
     setEditId(null);setEditRevision("");setActiveReward(true);
+    setEditorOpen(false);
   }
   function beginEdit(reward:FocusReward):void{
-    setEditId(reward.id);
+    setEditId(reward.id);setEditorOpen(true);
     setTitle(reward.title);setDescription(reward.description);
     setCost(String(reward.cost));setEditRevision(reward.updatedAt);
     setActiveReward(reward.active);setError("");setNotice("");
@@ -106,9 +108,11 @@ export default function FocusRewardsPanel({active,refreshKey}:Props){
       <p className="privacy-note">等级 {data.level} · {data.badge}（按累计赚取计，
         不会因兑换而降低）。账户积分不是现金、优惠券或现实奖励承诺。</p>
     </>}
-    <details>
-      <summary>{editId?"修改自定义奖励":"新增自定义奖励"}</summary>
-      <form onSubmit={event=>void saveReward(event)}>
+    <button type="button" className="secondary-button" disabled={busy}
+      onClick={()=>{if(editorOpen)clearEditor();else setEditorOpen(true);}}>
+      {editorOpen?"收起奖励编辑器":"创建新奖励"}
+    </button>
+    {editorOpen&&<form onSubmit={event=>void saveReward(event)}>
         <label>奖励名称
           <input required maxLength={100} value={title} disabled={busy}
             placeholder="例如：看一部电影" onChange={e=>setTitle(e.target.value)}/></label>
@@ -128,8 +132,7 @@ export default function FocusRewardsPanel({active,refreshKey}:Props){
           {editId&&<button type="button" className="secondary-button"
             disabled={busy} onClick={clearEditor}>取消编辑</button>}
         </div>
-      </form>
-    </details>
+      </form>}
     <h3>我的奖励目录</h3>
     {data?.rewards.length?<ul className="kb-review-list">
       {data.rewards.map(item=><li key={item.id}>
