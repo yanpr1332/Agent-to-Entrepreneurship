@@ -166,7 +166,6 @@ export class KnowledgeOfflineModels {
       this.generation++;
       const old=this.provider;
       this.provider=next;this.record=record;this.error=null;next=null;
-      committed=true;
       try{old?.close();}catch{/* New model must remain installed. */}
       if(prior&&prior.file!==record.file){
         try{this.removeAsset(prior);}
@@ -205,6 +204,7 @@ export class KnowledgeOfflineModels {
       this.generation++;
       const old=this.provider;
       this.provider=next;this.record=record;this.error=null;next=null;
+      committed=true;
       try{old?.close();}catch{/* New model must remain installed. */}
       if(prior&&prior.file!==record.file){
         try{this.removeAsset(prior);}
