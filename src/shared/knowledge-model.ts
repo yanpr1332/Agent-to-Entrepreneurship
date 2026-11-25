@@ -12,6 +12,39 @@ export interface KnowledgeDocument {
   /** Actual PDF page count; null for Markdown/TXT. */
   pageCount: number | null;
 }
+/** No filesystem paths are accepted through the renderer's lifecycle IPC. */
+export interface KnowledgeBatchImportItem {
+  title:string;
+  status:"added"|"updated"|"unchanged"|"failed"|"duplicate";
+  documentId?:string;
+  reason?:string;
+}
+export interface KnowledgeBatchImportResult {
+  selected:number;
+  items:KnowledgeBatchImportItem[];
+}
+export interface KnowledgeSourceAuditEntry {
+  documentId:string;
+  title:string;
+  revision:number;
+  status:"changed"|"unchanged"|"missing"|"unreadable"|"stale";
+  /** SHA-256 of the exact disk material checked, used only to prevent racey refresh. */
+  observedHash?:string;
+}
+export interface KnowledgeSourceRefreshRequest {
+  documentId:string;
+  expectedRevision:number;
+  observedHash:string;
+}
+export interface KnowledgeSourceRefreshItem {
+  documentId:string;
+  title:string;
+  status:"updated"|"unchanged"|"failed";
+  reason?:string;
+}
+export interface KnowledgeSourceRefreshResult {
+  items:KnowledgeSourceRefreshItem[];
+}
 export interface KnowledgeSnapshot extends KnowledgeDocument {
   /** An indexed local copy; the original on disk is never rewritten. */
   text: string;
