@@ -11,7 +11,9 @@ import {
 } from "./knowledge-word-vectors";
 import {parseLocalEmbeddingModel,sameEmbeddingModel,type LocalEmbeddingModel,
   type LocalEmbeddingProvider} from "./knowledge-embeddings";
-import type {KnowledgeSearchHit,KnowledgeEmbeddingStatus} from "../shared/knowledge-model";
+import type {KnowledgeSearchHit,KnowledgeEmbeddingStatus,
+  KnowledgeEvaluationReport} from "../shared/knowledge-model";
+import {readLocalEvaluationLabels,evaluateLocalRetrieval} from "./knowledge-quality-audit";
 
 type Handle=LocalEmbeddingProvider & {close():void};
 export type WordVectorFactory=(path:string,model:LocalEmbeddingModel)=>Promise<Handle>;
@@ -149,6 +151,40 @@ export class KnowledgeOfflineModels {
     if(!this.provider)return this.store.search(query);
     return this.store.searchWithEmbeddings(query,this.provider);
   }
+  /** Local-only paired relevance evaluation. Main passes a path from its
+   * native file picker; no case text, labels or results are transmitted. */
+  async evaluateFile(path:string):Promise<KnowledgeEvaluationReport>{
+    const provider=this.provider,record=this.record;
+    if(!provider||!record||this.running)
+      throw Error("Install and finish indexing the local model before evaluation");
+    const labels=readLocalEvaluationLabels(path);
+    const status=this.store.embeddingStatus();
+    if(!status.model||status.indexed===0)
+      throw Error("Local evaluation requires indexed model passages");
+    const epoch=this.generation;
+    const assertCurrent=()=>{
+      if(epoch!==this.generation||!this.provider||!this.record)
+        throw Error("Local model changed while running evaluation");
+    };
+    const report=await evaluateLocalRetrieval(labels,{
+      modelId:record.model.id,modelRevision:record.model.revision,
+      indexed:status.indexed,skipped:status.skipped,pending:status.pending,
+      assertCurrentEvidence:(key)=>{
+        const [id,revision,ordinal]=key.split(":");
+        const source=this.store.getPassage(id,Number(ordinal));
+        if(source.revision!==Number(revision))
+          throw Error("Local evaluation labels reference an obsolete source revision");
+      },
+      lexical:(query)=>{assertCurrent();return this.store.search(query);},
+      hybrid:async(query)=>{assertCurrent();
+        const result=await this.store.searchWithEmbeddings(query,provider);
+        assertCurrent();return result;
+      },
+    });
+    assertCurrent();
+    return report;
+  }
+
   startIndex():LocalModelStatus{
     if(!this.provider)throw Error("Install a local word-vector model first");
     if(this.running)throw Error("Local knowledge indexing is already running");
