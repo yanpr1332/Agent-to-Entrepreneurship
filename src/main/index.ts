@@ -47,6 +47,7 @@ import { AIKeyVault } from "./ai/ai-vault";
 import { AIUsageLedger } from "./ai/ai-usage";
 import { AIService } from "./ai/ai-service";
 import { AIPlanningCoordinator } from "./ai/ai-planner";
+import { MailAIReviewCoordinator } from "./ai/mail-ai-coordinator";
 
 /**
  * Local runtime compatibility notice. See docs/w5/16_LOCAL_RUNTIME_TROUBLESHOOTING.md.
@@ -146,6 +147,18 @@ let canvasSync: CanvasSyncService | null = null;
 let mailStore: CampusMailStore | null = null;
 let mailService: CampusMailService | null = null;
 const MAIL_SYNC_UPDATED = "mail:sync-updated";
+let mailAIService:MailAIReviewCoordinator|null=null;
+function mailAI():MailAIReviewCoordinator{
+  if(!mailAIService){
+    mailAIService=new MailAIReviewCoordinator(assistant(),{
+      list:()=>campusMail().list(),
+      readBody:record=>campusMail().readApprovedBody(record),
+      decisions:account=>localStore().mailCandidateDecisions(account),
+      accept:(record,draft)=>localStore().reviewMailCandidate(record,"accept",draft),
+    });
+  }
+  return mailAIService;
+}
 
 function campusMail(): CampusMailService {
   if (!mailService) throw new Error("Campus email is not initialized");
@@ -398,6 +411,7 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.aiDisconnect,event=>{
     requireTrustedSender(event);
+    mailAIService?.cancel();
     return assistant().disconnect();
   });
   handle(IPC_CHANNELS.aiPrepare,(event,prompt:unknown)=>{
@@ -717,6 +731,28 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return campusMail().sync();
   });
+  handle(IPC_CHANNELS.mailAIPrepare,async(event,selection:unknown)=>{
+    requireTrustedSender(event);
+    return mailAI().prepare(selection);
+  });
+  handle(IPC_CHANNELS.mailAIConfirm,async(event,approvalId:unknown)=>{
+    requireTrustedSender(event);
+    return mailAI().confirm(approvalId);
+  });
+  handle(IPC_CHANNELS.mailAIApply,async(event,input:unknown)=>{
+    requireTrustedSender(event);
+    const result=await mailAI().apply(input);
+    for(const window of BrowserWindow.getAllWindows()){
+      if(!window.isDestroyed())window.webContents.send(MAIL_SYNC_UPDATED);
+    }
+    return result;
+  });
+  handle(IPC_CHANNELS.mailAICancel,event=>{
+    requireTrustedSender(event);
+    mailAIService?.cancel();
+    assistant().cancel();
+    return {canceled:true as const};
+  });
   handle(IPC_CHANNELS.mailCandidates, async (event) => {
     requireTrustedSender(event);
     const records = await campusMail().list();
@@ -748,6 +784,8 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.mailDisconnect, async (event) => {
     requireTrustedSender(event);
+    mailAIService?.cancel();
+    assistant().cancel();
     const account = campusMail().snapshot().email;
     await campusMail().disconnect();
     if (account) localStore().clearMailCandidateDecisions(account);
@@ -1218,6 +1256,8 @@ app.on("before-quit", (event) => {
   workspaceHistoryService?.cancel();
   workspaceHistoryService=null;
   workspaceHistoryStore?.close();workspaceHistoryStore=null;
+  mailAIService?.cancel();
+  mailAIService=null;
   mailService?.cancel();
   mailService?.stop();
   mailService = null;

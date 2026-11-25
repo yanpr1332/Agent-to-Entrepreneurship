@@ -11,6 +11,7 @@ import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPers
 import type {
   CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
 } from "../../shared/mail-model";
+import type {MailAISelection,MailAIApply,MailAIReview} from "../../shared/mail-ai";
 import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } from "../../shared/mail-candidates";
 
 import type {WorkspaceHistoryItems,WorkspaceHistoryMarker} from "../../shared/workspace-history-contract";
@@ -69,6 +70,10 @@ declare global {
         connect: (input: CampusMailConnectInput) => Promise<MailSyncState>;
         list: () => Promise<MailRecord[]>;
         candidates: () => Promise<MailCandidate[]>;
+        aiPrepare: (selection:MailAISelection) => Promise<AIPreview>;
+        aiConfirm: (approvalId:string) => Promise<MailAIReview>;
+        aiApply: (input:MailAIApply) => Promise<MailCandidateChoiceResult>;
+        aiCancel: () => Promise<{canceled:true}>;
         reviewCandidate: (choice: MailCandidateChoice) => Promise<MailCandidateChoiceResult>;
         syncNow: () => Promise<MailSyncState>;
         disconnect: () => Promise<{disconnected:true}>;

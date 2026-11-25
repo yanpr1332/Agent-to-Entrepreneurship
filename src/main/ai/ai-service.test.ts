@@ -6,12 +6,13 @@ import { AIKeyVault } from "./ai-vault";
 import { AIUsageLedger } from "./ai-usage";
 import { AIService } from "./ai-service";
 import type { EncryptionProvider } from "../connectors/canvas-credentials";
-import { AI_DAILY_REQUEST_CAP } from "../../shared/ai-model";
+import { AI_DAILY_REQUEST_CAP,AI_DEFAULT_MODEL } from "../../shared/ai-model";
 const dirs:string[]=[];
 afterEach(()=>{dirs.splice(0).forEach(d=>rmSync(d,{recursive:true,force:true}));});
 const key="sk-"+"c".repeat(40);
+const otherKey="sk-"+"d".repeat(40);
 const cfg={apiKey:key,model:"gpt-4.1-mini"};
-function fixture(){
+function fixture(environmentKey:()=>string|undefined=()=>undefined){
   const dir=mkdtempSync(join(tmpdir(),"ate-ai-test-"));dirs.push(dir);
   const crypt:EncryptionProvider={
     isAsyncEncryptionAvailable:async()=>true,
@@ -21,10 +22,10 @@ function fixture(){
   const vault=new AIKeyVault(join(dir,"key.enc"),crypt);
   const ledger=new AIUsageLedger(join(dir,"usage.sqlite"));
   const ask=vi.fn(async(_config:typeof cfg,_prompt:string,_signal?:AbortSignal)=>({
-    text:"A proof-based answer.",model:cfg.model,createdAt:"2026-11-10T00:00:00Z",
+    text:"A proof-based answer.",model:_config.model,createdAt:"2026-11-10T00:00:00Z",
     usage:{inputTokens:20,outputTokens:50},
   }));
-  const service=new AIService(vault,ledger,{ask});
+  const service=new AIService(vault,ledger,{ask},environmentKey);
   return {service,ledger,vault,ask,dir};
 }
 describe("paid AI requires explicit one-time approval",()=>{
@@ -79,9 +80,77 @@ describe("paid AI requires explicit one-time approval",()=>{
   });
   it("refuses actions before configuration and never echoes key in status",async()=>{
     const {service,ledger}=fixture();
-    expect(()=>service.prepare("Hi")).toThrow("Connect");
+    expect(()=>service.prepare("Hi")).toThrow("API_KEY");
     await service.connect(cfg);
     expect(JSON.stringify(service.status())).not.toContain(key);
+    expect(service.status().keySource).toBe("saved");
+    ledger.close();
+  });
+  it("uses OPENAI_API_KEY from Main without persisting or exposing it",async()=>{
+    const environment={value:key};
+    const {service,ledger,vault,ask}=fixture(()=>environment.value);
+    const status=await service.initialize();
+    expect(status).toMatchObject({
+      connected:true,keySource:"environment",model:AI_DEFAULT_MODEL,
+    });
+    expect(JSON.stringify(status)).not.toContain(key);
+    expect(await vault.load()).toBeNull();
+    const preview=service.prepare("Use my environment key");
+    await service.confirm(preview.approvalId);
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({apiKey:key,model:AI_DEFAULT_MODEL}),
+      "Use my environment key",expect.any(AbortSignal),
+    );
+    expect(await vault.load()).toBeNull();
+    ledger.close();
+  });
+  it("prefers the encrypted manual key, then falls back to environment after removal",async()=>{
+    const {service,ledger}=fixture(()=>key);
+    await service.connect({apiKey:otherKey,model:"gpt-4.1-mini"});
+    expect(service.status().keySource).toBe("saved");
+    const next=await service.disconnect();
+    expect(next).toMatchObject({connected:true,keySource:"environment",model:AI_DEFAULT_MODEL});
+    expect(JSON.stringify(next)).not.toContain(key);
+    ledger.close();
+  });
+  it("invalidates a preview if the environment key changes before confirmation",async()=>{
+    const environment={value:key};
+    const {service,ledger,ask}=fixture(()=>environment.value);
+    await service.initialize();
+    const preview=service.prepare("Do not use a changed key");
+    environment.value=otherKey;
+    await expect(service.confirm(preview.approvalId)).rejects.toThrow("key changed");
+    expect(ledger.today().used).toBe(0);
+    expect(ask).not.toHaveBeenCalled();
+    expect(service.status().keySource).toBe("environment");
+    ledger.close();
+  });
+  it("rejects malformed environment keys without exposing their value",async()=>{
+    const invalid="not-a-real-secret";
+    const {service,ledger}=fixture(()=>invalid);
+    const status=await service.initialize();
+    expect(status.configurationWarning).toBe("invalid_environment_key");
+    expect(JSON.stringify(status)).not.toContain(invalid);
+    expect(status.connected).toBe(false);
+    ledger.close();
+  });
+  it("uses DeepSeek environment variable with official model and no secret disclosure",async()=>{
+    const env={DEEPSEEK_API_KEY:"ds-"+"f".repeat(48)};
+    const {service,ledger,vault,ask}=fixture(()=>undefined);
+    // Main's only environment provider is injected separately in this test.
+    const local=new AIService(vault,ledger,{ask},()=>undefined,()=>env);
+    expect(await local.initialize()).toMatchObject({
+      provider:"deepseek",model:"deepseek-flash",keySource:"environment",
+    });
+    const preview=local.prepare("Read my authorized data");
+    expect(preview).toMatchObject({provider:"deepseek",endpointLabel:"deepseek"});
+    await local.confirm(preview.approvalId);
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({provider:"deepseek",apiKey:env.DEEPSEEK_API_KEY}),
+      expect.any(String),expect.any(AbortSignal),
+    );
+    expect(JSON.stringify(local.status())).not.toContain(env.DEEPSEEK_API_KEY);
+    expect(await vault.load()).toBeNull();
     ledger.close();
   });
 });

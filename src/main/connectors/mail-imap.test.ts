@@ -59,6 +59,32 @@ describe("IMAP read-only inbox",()=>{
     expect(wire.closed).toBe(true);
   });
 
+
+  it("retrieves one approved UID with EXAMINE + BODY.PEEK and no STORE",async()=>{
+    const bytes=Buffer.from("From: Teacher\r\nSubject: Lab\r\n"+
+      "Content-Type: text/plain; charset=utf-8\r\n\r\nLab due 2026-12-16");
+    const wire=new TranscriptWire([
+      "* OK connected","A0001 OK login","* FLAGS (\\Seen)",
+      "* OK [UIDVALIDITY 4] stable","A0002 OK selected",
+      "* 1 FETCH (UID 7 BODY[]<0> {"+bytes.length+"}",
+      ")","A0003 OK fetched",
+    ],[bytes]);
+    const result=await new ImapInboxReader(async()=>wire).readBody(credentials,7,4);
+    expect(result.envelope).toMatchObject({uid:7,uidValidity:4,subject:"Lab"});
+    expect(result.body).toContain("Lab due 2026-12-16");
+    expect(wire.writes.join("")).toContain("UID FETCH 7 (UID BODY.PEEK[]<0.65536>)");
+    expect(wire.writes.join("")).not.toContain(" STORE ");
+    expect(wire.closed).toBe(true);
+  });
+  it("refuses an invalid UIDVALIDITY before IMAP body retrieval",async()=>{
+    const wire=new TranscriptWire([
+      "* OK connected","A0001 OK login","* OK [UIDVALIDITY 8] changed","A0002 OK selected",
+    ]);
+    await expect(new ImapInboxReader(async()=>wire).readBody(credentials,7,4))
+      .rejects.toThrow("UIDVALIDITY changed");
+    expect(wire.writes.join("")).not.toContain("BODY.PEEK[]");
+    expect(wire.closed).toBe(true);
+  });
   it("decodes and sanitizes RFC 2047 header text",()=>{
     expect(decodeMailHeader("=?UTF-8?B?5L2g5aW9?=")).toBe("你好");
     expect(decodeMailHeader("Hello\r\nBcc: fake")).not.toContain("\r");

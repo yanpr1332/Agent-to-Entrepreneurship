@@ -1287,7 +1287,14 @@ export class LocalStore {
    * persist its idempotency record in one SQLite transaction. Mail Date is
    * send time, not a deadline, so the resulting task has no due date.
    */
-  reviewMailCandidate(record: MailRecord, action: MailCandidateAction): MailCandidateChoiceResult {
+  reviewMailCandidate(record: MailRecord, action: MailCandidateAction,
+    aiDraft?:{title:string;dueDate:string|null}): MailCandidateChoiceResult {
+    // Only Main-side reviewed AI coordinator can supply an optional draft.
+    // Validate again here before opening SQLite's write transaction.
+    const reviewed=aiDraft===undefined?null:parseCreateTask({
+      title:aiDraft.title,dueDate:aiDraft.dueDate,
+    });
+    if(reviewed&&action!=="accept")throw Error("AI mail task requires accept");
     if (!record.account.endsWith("@sjtu.edu.cn") ||
         !Number.isSafeInteger(record.uid) || record.uid < 1 ||
         !Number.isSafeInteger(record.uidValidity) || record.uidValidity < 1 ||
@@ -1310,8 +1317,9 @@ export class LocalStore {
           const now = new Date().toISOString();
           this.db.prepare("INSERT INTO tasks(" +
             "id,title,description,due_date,priority,completed,created_at,updated_at) " +
-            "VALUES(?,?,?,NULL,'normal',0,?,?)")
-            .run(id,suggestedTaskTitle(record.subject),"",now,now);
+            "VALUES(?,?,?,?,'normal',0,?,?)")
+            .run(id,reviewed?.title??suggestedTaskTitle(record.subject),"",
+              reviewed?.dueDate??null,now,now);
           this.db.prepare("INSERT INTO mail_candidate_reviews(" +
             "account,uid_validity,uid,decision,task_id,decided_at) " +
             "VALUES(?,?,?,'accepted',?,?)").run(...args,id,now);

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { MailRecord, MailSendPreview, MailSyncState } from "../../shared/mail-model";
 import type { MailCandidate, MailCandidateAction } from "../../shared/mail-candidates";
+import MailAIReviewPanel from "./MailAIReviewPanel";
 
 const initial: MailSyncState = {
   connected:false,email:null,running:false,lastAttempt:null,
@@ -239,6 +240,7 @@ export default function CampusMail() {
           ))}</ul>
         ) : <p className="empty-state">暂无待处理的邮件任务候选。</p>}
       </section>}
+      {status.connected && <MailAIReviewPanel messages={messages}/>}
       {status.connected && <section className="panel mail-compose">
         <div className="eyebrow">CONFIRMED SEND ONLY</div><h2>撰写并发送纯文本邮件</h2>
         {preview ? (

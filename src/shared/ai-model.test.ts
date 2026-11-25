@@ -8,6 +8,16 @@ describe("AI model and key boundaries", () => {
   it("accepts a supported GPT model identifier and rejects arbitrary endpoints", () => {
     expect(parseAIModel("gpt-4.1-mini")).toBe("gpt-4.1-mini");
     expect(() => parseAIModel("https://untrusted.example.org/v1")).toThrow();
+    expect(parseAIConnect({provider:"deepseek",model:"deepseek-flash",apiKey:"ds-"+"1".repeat(38)}))
+      .toMatchObject({provider:"deepseek",model:"deepseek-flash",endpoint:null});
+    expect(parseAIConnect({provider:"compatible",model:"some-model",apiKey:"a".repeat(38),
+      endpoint:"https://api.example.com/v1/chat/completions"})).toMatchObject({provider:"compatible"});
+    for(const endpoint of ["http://example.com/v1/chat/completions",
+      "https://localhost/v1/chat/completions","https://127.0.0.1/v1/chat/completions",
+      "https://api.example.com@127.0.0.1/v1/chat/completions",
+      "https://api.example.com/v1/chat/completions?secret=1"])
+      expect(()=>parseAIConnect({provider:"compatible",model:"some-model",
+        apiKey:"a".repeat(38),endpoint})).toThrow();
     expect(() => parseAIModel("../secret")).toThrow();
     expect(() => parseAIModel("gpt-4\r\nAuthorization: evil")).toThrow();
   });

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { parseAIConnect, type AIPrivateSettings } from "../../shared/ai-model";
+import { parseAIConnect, type AIPrivateSettings, type AIConnectInput } from "../../shared/ai-model";
 import type { EncryptionProvider } from "../connectors/canvas-credentials";
 
 type SafeEncryption = EncryptionProvider & { getSelectedStorageBackend?: () => string };
@@ -18,7 +18,7 @@ export class AIKeyVault {
       throw new Error("System credential encryption is unavailable; AI key was not saved");
     }
   }
-  async save(input: AIPrivateSettings): Promise<void> {
+  async save(input: AIConnectInput): Promise<void> {
     const validated = parseAIConnect(input);
     await this.requireSafeEncryption();
     const ciphertext = await this.crypt.encryptStringAsync(JSON.stringify(validated));
