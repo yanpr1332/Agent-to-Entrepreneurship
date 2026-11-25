@@ -40,6 +40,13 @@
 
 ## 3. 切片状态
 
+### ALPHA-CLOSE-01 五人 V0.1 收尾计划 + 邮件 AI 人工审核（2026-11-25）
+
+- **交付计划**：[51](51_V01_FIVE_PERSON_ALPHA_CLOSEOUT.md) 将五人 Alpha 的剩余工作固定为约 4–7 个大批次，仍要求八大模块、Windows/macOS 真实安装、真实五账号 Supabase RLS/Realtime、Canvas 课程/作业、交大邮箱 IMAP/SMTP、个人 AI Provider 调用与安全/恢复证据。外部审批未获授权的情况必须标记 Blocked。
+- **本轮功能开发**：[52](52_ALPHA_CLOSE_01_MAIL_AI_REVIEW.md) 增加明确选择 1–3 封本机邮箱邮件头、OpenAI 付费调用前完整 prompt 预览、模型严格 JSON 候选/日期校验、二次人工编辑确认与 SQLite 原任务表幂等写入。撤权、来源变化、过期审阅令牌安全失败；不读正文、不自动发信或创建任务。
+- **代码 CI / 真机必须分离**：双平台最新 SHA 的 npm/TypeScript/Vitest/Electron bundle/offline Worker smoke 单独记录；真实 SJTU 邮箱、OpenAI 用户 Key、费用与实际候选、Windows/macOS GUI 的人工证据目前缺失，不能标注验收通过。
+
+
 状态定义：**代码**＝仓库有实现；**单测**＝有 Vitest 覆盖并通过；**CI**＝Windows+macOS 双平台工作流通过；**真机**＝实际运行过（⚠️ 自动化＝由 CDP 脚本真实点击 DOM 验证，未由人手工走查）。
 
 | # | 切片 | 设计文档 | 代码 | 单测 | CI | 真机 |

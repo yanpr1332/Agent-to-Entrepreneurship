@@ -100,6 +100,10 @@ npm run build
 
 如需在**用户单独批准的隔离 Supabase 项目**验证实时订阅，请先审查并运行既有 `20261110_ate_workspace_poc.sql`，再审查 `supabase/migrations/20261124_ate_workspace_realtime_hints.sql`；本仓库 CI **不部署云端**。未完成五账号 RLS 反向测试、30 秒安全补拉 GUI 与历史游标验收之前，不视为完整 Realtime 发布。详见 [39 团队实时提示验收](docs/w5/39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
 
+## ALPHA-CLOSE-01 邮件 AI 人工确认建任务
+
+在邮件中心主动选择至多三封本机缓存邮件头，可完整预览将向 OpenAI API 外传的内容；只有再次确认才进行可能付费的 AI 提取。模型返回的候选需严格验证来源和明确截止日，用户可修改标题/日期并独立确认后创建本机个人任务。不会自动读取邮件正文、发送邮件、创建任务或上传其他邮箱内容；真实交大邮箱/个人 API Key 仍需用户自行授权验收。见 [52](docs/w5/52_ALPHA_CLOSE_01_MAIL_AI_REVIEW.md)。
+
 ## V0.1 五人内部 Alpha 收尾执行计划（2026-11-25）
 
 经用户确认，后续约 **4–7 轮大型开发与集成**集中推进：邮件 AI 候选闭环、工作台、内部桌面包与数据恢复、Supabase 五账号/RLS、Canvas/交大邮箱真实接入、AI 真实调用及双平台 Alpha 验收。**以完整八模块最小闭环为目标**，不降低真实外部账号和安全门槛。详见 [51 V0.1 五人 Alpha 收尾计划](docs/w5/51_V01_FIVE_PERSON_ALPHA_CLOSEOUT.md)。
