@@ -3,6 +3,7 @@ import KnowledgeGraph from "./KnowledgeGraph";
 import SafeKnowledgePreview from "./SafeKnowledgePreview";
 import KnowledgeAIHelper from "./KnowledgeAIHelper";
 import LocalEvaluationLab from "./LocalEvaluationLab";
+import ReviewCardMaintenance from "./ReviewCardMaintenance";
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
   KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport,
@@ -431,19 +432,24 @@ export default function KnowledgeBase(){
             </strong><blockquote>{card.evidence}</blockquote>
             <p className="privacy-note">请根据自己的掌握程度评分。一次评分对应一个 UTC 日期，不会因为重复点击重复累计。</p>
             <div className="button-row kb-rating">
-              <button disabled={busy} className="secondary-button" onClick={()=>void grade(card,"again")}>重新学</button>
-              <button disabled={busy} className="secondary-button" onClick={()=>void grade(card,"hard")}>困难</button>
-              <button disabled={busy} className="primary-button" onClick={()=>void grade(card,"good")}>掌握</button>
-              <button disabled={busy} className="primary-button" onClick={()=>void grade(card,"easy")}>容易</button>
+              <button disabled={busy||card.needsReview} className="secondary-button" onClick={()=>void grade(card,"again")}>重新学</button>
+              <button disabled={busy||card.needsReview} className="secondary-button" onClick={()=>void grade(card,"hard")}>困难</button>
+              <button disabled={busy||card.needsReview} className="primary-button" onClick={()=>void grade(card,"good")}>掌握</button>
+              <button disabled={busy||card.needsReview} className="primary-button" onClick={()=>void grade(card,"easy")}>容易</button>
             </div>
           </div>}
+        <ReviewCardMaintenance card={card} onChanged={reload}/>
         <button className="text-button" disabled={busy} onClick={()=>void removeCard(card)}>删除这张卡</button>
       </section>):
       <section className="panel"><p className="empty-state">今天没有待复习卡片，可以导入资料并创建新卡。</p></section>}
       {cards.length>dueCards.length&&<section className="panel">
         <div className="eyebrow">LATER REVIEWS</div><h2>之后的复习</h2>
         <ul className="kb-review-list">{cards.filter(card=>card.nextDue>day()).map(card=>
-          <li key={card.id}><span>{card.question}</span><small>下次：{card.nextDue}</small></li>)}</ul>
+          <li key={card.id}>
+            <span>{card.question}</span><small>下次：{card.nextDue}</small>
+            {card.needsReview&&<p className="retention-warning">来源已变化：需核对后才能复习评分。</p>}
+            <ReviewCardMaintenance card={card} onChanged={reload}/>
+          </li>)}</ul>
       </section>}
     </div>}
   </section>;

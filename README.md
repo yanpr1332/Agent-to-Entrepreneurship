@@ -100,6 +100,10 @@ npm run build
 
 如需在**用户单独批准的隔离 Supabase 项目**验证实时订阅，请先审查并运行既有 `20261110_ate_workspace_poc.sql`，再审查 `supabase/migrations/20261124_ate_workspace_realtime_hints.sql`；本仓库 CI **不部署云端**。未完成五账号 RLS 反向测试、30 秒安全补拉 GUI 与历史游标验收之前，不视为完整 Realtime 发布。详见 [39 团队实时提示验收](docs/w5/39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
 
+### ALPHA-KB-006 复习卡编辑与新版原文核对
+
+卡片支持人工修改问题/答案，并保留既有评分次数和到期日期；当原文再次导入且版本变化后，必须先在本机核对当前证据才可以继续评分。人工确认更新引用时，将旧片段、来源哈希和 PDF 页码归档到本地 SQLite v6 的证据历史表。旧版数据库在升级前使用 WAL-aware 备份。**不会自动由 AI 决定原文是否仍正确**，也不修改硬盘原始文档；双平台 GUI 和真实数据库恢复仍待人工验收。详见 [46](docs/w5/46_ALPHA_KB_006_CARD_REVIEW.md)。
+
 ### ALPHA-KB-005C 离线索引词表覆盖与检索质量评测
 
 本轮在本地 SQLite v5 中增加明确的“已索引 / 词表外跳过 / 待处理”计数，**无法编码的文档不再阻塞后续索引**，仍可使用精确及容错搜索。用户明确确认后可导出最多 500 条本机证据 ID、文档标题、PDF 页码和摘要，人工编写相关性标注 JSON 后对同一批查询计算精确/容错与混合检索的 Precision@5、Recall@10、MRR@10、P50/P95 查询延迟，全程不上传私人数据。**尚未接入 E5/BGE ONNX Transformer**，不能把这些静态词向量测试误称为真正神经模型基准。详见 [45](docs/w5/45_ALPHA_KB_005C_INDEX_COVERAGE_EVALUATION.md)。

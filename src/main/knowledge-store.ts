@@ -4,9 +4,10 @@ import { dirname } from "node:path";
 import { DatabaseSync, backup } from "node:sqlite";
 import {
   dueDay, nextReviewInterval, parseKnowledgeQuery, parseReviewCardInput,
-  parseReviewRating, requireKnowledgeId, utcDay,
+  parseReviewCardEdit,parseReviewCardRebind,parseReviewRating, requireKnowledgeId, utcDay,
   type KnowledgeDocument, type KnowledgeSnapshot, type KnowledgeSearchHit,
   type KnowledgeReviewCard, type ReviewProgress, type ReviewRating, type KnowledgePassage,
+  type ReviewCardEvidenceHistory,
 } from "../shared/knowledge-model";
 import {extractKnowledgeText,fuzzyCandidateExpression,fuzzySubstringMatch,normalizeFuzzy}
   from "../shared/knowledge-search-text";
@@ -79,7 +80,7 @@ export class KnowledgeStore {
   }
   private migrate():void{
     const version=(this.db.prepare("PRAGMA user_version").get() as {user_version:number}).user_version;
-    if(version>5)throw new Error("Knowledge database is from a newer application");
+    if(version>6)throw new Error("Knowledge database is from a newer application");
     if(version===0){this.db.exec("BEGIN IMMEDIATE");
     try{
       this.db.exec(`
@@ -239,6 +240,26 @@ export class KnowledgeStore {
           CREATE INDEX knowledge_vector_skips_doc
             ON knowledge_vector_skips(document_id);
           PRAGMA user_version=5;
+        `);
+        this.db.exec("COMMIT");
+      }catch(error){this.db.exec("ROLLBACK");throw error;}
+    }
+    if(version<=5){
+      this.db.exec("BEGIN IMMEDIATE");
+      try{
+        this.db.exec(`
+          CREATE TABLE knowledge_card_evidence_history(
+            id INTEGER PRIMARY KEY,
+            card_id TEXT NOT NULL REFERENCES knowledge_cards(id) ON DELETE CASCADE,
+            source_ordinal INTEGER NOT NULL,
+            evidence TEXT NOT NULL,
+            source_hash TEXT NOT NULL,
+            source_page INTEGER,
+            archived_at TEXT NOT NULL
+          );
+          CREATE INDEX knowledge_card_evidence_history_card
+            ON knowledge_card_evidence_history(card_id,id);
+          PRAGMA user_version=6;
         `);
         this.db.exec("COMMIT");
       }catch(error){this.db.exec("ROLLBACK");throw error;}
@@ -834,6 +855,76 @@ export class KnowledgeStore {
         doc.contentHash,part.page_number??null,data.question,data.answer,utcDay(now),stamp,stamp);
     return this.card(id)!;
   }
+  /** Optimistic concurrency: editing the user's wording never alters ratings,
+   * due date, original citation or the source review warning. */
+  editCard(raw:unknown,now=new Date()):KnowledgeReviewCard{
+    const v=parseReviewCardEdit(raw);
+    const changed=this.db.prepare(
+      "UPDATE knowledge_cards SET question=?,answer=?,updated_at=? WHERE id=? AND updated_at=?")
+      .run(v.question,v.answer,now.toISOString(),v.id,v.expectedUpdatedAt);
+    if(Number(changed.changes)!==1)
+      throw Error("Review card changed or no longer exists; reload before editing");
+    return this.card(v.id)!;
+  }
+
+  /** The selected passage must have been shown to the user at exactly the
+   * revision they confirm. Old citation evidence is archived locally and
+   * review attempts + spaced repetition schedule are deliberately unchanged.
+   * Main must not silently auto-confirm changed documents. */
+  rebindCardEvidence(raw:unknown,now=new Date()):KnowledgeReviewCard{
+    const v=parseReviewCardRebind(raw);
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const existing=this.card(v.id);
+      if(!existing||existing.updatedAt!==v.expectedUpdatedAt)
+        throw Error("Review card changed or no longer exists; reload before confirming");
+      const source=this.db.prepare(
+        "SELECT revision,content_hash FROM knowledge_documents WHERE id=?")
+        .get(existing.documentId) as {revision:number;content_hash:string}|undefined;
+      if(!source||source.revision!==v.expectedDocumentRevision)
+        throw Error("Source document changed after preview; review the latest version");
+      const passage=this.db.prepare(`
+        SELECT c.body,cp.page_number FROM knowledge_chunks c
+        LEFT JOIN knowledge_chunk_pages cp ON cp.document_id=c.document_id
+          AND cp.ordinal=c.ordinal
+        WHERE c.document_id=? AND c.ordinal=?
+      `).get(existing.documentId,v.sourceOrdinal) as
+        {body:string;page_number:number|null}|undefined;
+      if(!passage)
+        throw Error("Selected source passage no longer exists");
+      this.db.prepare(`
+        INSERT INTO knowledge_card_evidence_history(
+          card_id,source_ordinal,evidence,source_hash,source_page,archived_at
+        ) VALUES(?,?,?,?,?,?)
+      `).run(existing.id,existing.sourceOrdinal,existing.evidence,
+        existing.sourceHash,existing.sourcePage,now.toISOString());
+      const result=this.db.prepare(`
+        UPDATE knowledge_cards SET source_ordinal=?,evidence=?,source_hash=?,
+          source_page=?,needs_review=0,updated_at=?
+        WHERE id=? AND updated_at=?
+      `).run(v.sourceOrdinal,passage.body.slice(0,500),source.content_hash,
+        passage.page_number??null,now.toISOString(),v.id,v.expectedUpdatedAt);
+      if(Number(result.changes)!==1)
+        throw Error("Review card changed during source confirmation");
+      this.db.exec("COMMIT");
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+    return this.card(v.id)!;
+  }
+  /** Read-only, bounded provenance review; old excerpts remain local and
+   * are deleted together with their owning review card or document. */
+  cardEvidenceHistory(value:unknown):ReviewCardEvidenceHistory[]{
+    const id=requireKnowledgeId(value);
+    if(!this.card(id))throw Error("Review card was not found");
+    const records=this.db.prepare(`
+      SELECT source_ordinal,evidence,source_hash,source_page,archived_at
+      FROM knowledge_card_evidence_history WHERE card_id=?
+      ORDER BY id DESC LIMIT 30
+    `).all(id) as Array<{source_ordinal:number;evidence:string;
+      source_hash:string;source_page:number|null;archived_at:string}>;
+    return records.map(r=>({sourceOrdinal:r.source_ordinal,evidence:r.evidence,
+      sourceHash:r.source_hash,sourcePage:r.source_page??null,archivedAt:r.archived_at}));
+  }
+
   removeCard(value:unknown):boolean{
     return Number(this.db.prepare("DELETE FROM knowledge_cards WHERE id=?")
       .run(requireKnowledgeId(value)).changes)===1;
@@ -842,6 +933,8 @@ export class KnowledgeStore {
     const id=requireKnowledgeId(input),rating=parseReviewRating(ratingValue);
     const existing=this.card(id);
     if(!existing)throw Error("Review card was not found");
+    if(existing.needsReview)
+      throw Error("Source evidence must be reviewed before grading this card");
     const today=utcDay(now);
     const previous=this.db.prepare(`SELECT rating FROM knowledge_review_attempts
       WHERE card_id=? AND review_day=?`).get(id,today);
