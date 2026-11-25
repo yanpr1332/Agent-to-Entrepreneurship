@@ -40,6 +40,13 @@
 
 ## 3. 切片状态
 
+### V0.2-02 个人文件明确授权跨设备同步（2026-11-25）
+
+- **代码层实现，真实服务仍待验收**：见 [61](61_V02_02_CONSENTED_FILE_SYNC.md)。单份小文件原生选择并持久暂存、用户额外上传确认、Main-only JWT 与原始字节、逐文件版本 CAS/哈希校验/本地下载及按版本删除；文件源路径不经 IPC。无任何知识库、Canvas、邮箱自动上云。
+- 限制单文件 1 MiB、每账号 20 份。新 SQL 使用 postgres bytea 和 auth.uid 受限 RPC，非端到端加密：DB 管理员可访问文件，旧备份可能残存。新文件 SQLite staging 不在现有五库恢复包中。
+- **Blocked**：第八份 SQL 未在真实项目部署，双电脑 B/A 同账号下载、不同账号跨 owner 负向 RLS、断网冲突、正式存储计费/性能及 Windows/macOS GUI 未真实验收。不能将 CI mock 合格视为上线。
+
+
 ### V0.2 第一轮：Electron 启动自检 + 云端会话/Realtime 稳定性（2026-11-25）
 
 - **代码开发，CI 及真实验收须分开登记**：[60](60_V02_01_ELECTRON_CLOUD_STABILITY.md)。加入 dev/compat 只读 Electron preflight、用户显式二进制安装入口、Node 系统路径回归；Supabase A/B/项目异步登录刷新隔离、旧 REST 响应拒绝、不同 JWT 用户拒绝；Realtime 首次网络错误进入轮询+退避重连，已撤权用户停止重试，云端 UI 最近核对状态/手动刷新。
