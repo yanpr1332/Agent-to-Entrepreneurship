@@ -1,5 +1,5 @@
 import {isIP} from "node:net";
-export type AIProvider="openai"|"anthropic"|"gemini"|"compatible";
+export type AIProvider="openai"|"anthropic"|"gemini"|"deepseek"|"compatible";
 export type AIKeySource="saved"|"environment";
 export type AIConfigurationWarning="invalid_environment_key";
 export const AI_DEFAULT_MODEL="gpt-4.1-mini";
@@ -9,6 +9,7 @@ export const AI_DAILY_REQUEST_CAP=12;
 export const AI_PREVIEW_TTL_MS=120_000;
 export const AI_MODEL_DEFAULTS:Record<Exclude<AIProvider,"compatible">,string>={
   openai:AI_DEFAULT_MODEL,anthropic:"claude-sonnet-4-5",gemini:"gemini-2.5-flash",
+  deepseek:"deepseek-flash",
 };
 export interface AIConnectInput{apiKey:string;model:string;provider?:AIProvider;endpoint?:string|null;}
 export interface AIPrivateSettings{apiKey:string;model:string;provider:AIProvider;endpoint:string|null;}
@@ -27,7 +28,7 @@ export interface AIAnswer{
   usage:{inputTokens:number|null;outputTokens:number|null};
 }
 export function parseAIProvider(input:unknown):AIProvider{
-  if(input!=="openai"&&input!=="anthropic"&&input!=="gemini"&&input!=="compatible")
+  if(input!=="openai"&&input!=="anthropic"&&input!=="gemini"&&input!=="deepseek"&&input!=="compatible")
     throw Error("Unsupported AI provider protocol");
   return input;
 }
