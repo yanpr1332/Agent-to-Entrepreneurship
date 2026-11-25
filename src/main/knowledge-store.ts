@@ -472,12 +472,13 @@ export class KnowledgeStore {
   /** Bounded, explicitly exported LOCAL evidence catalog for manual
    * relevance labelling. No source file paths, credentials, AI keys or cloud
    * objects. The excerpts are still private and must not be uploaded. */
-  localEvidenceCatalog(limit=500):{
+  localEvidenceCatalog(limit=500,offset=0):{
     total:number;items:Array<{evidenceKey:string;title:string;pageNumber:number|null;
       excerpt:string}>
   }{
-    if(!Number.isSafeInteger(limit)||limit<1||limit>500)
-      throw Error("Invalid local evidence export page limit");
+    if(!Number.isSafeInteger(limit)||limit<1||limit>500||
+      !Number.isSafeInteger(offset)||offset<0||offset>100000)
+      throw Error("Invalid local evidence catalog page");
     const total=(this.db.prepare("SELECT count(*) AS n FROM knowledge_chunks")
       .get() as {n:number}).n;
     const rows=this.db.prepare(`SELECT c.document_id,c.ordinal,c.body,
@@ -485,8 +486,8 @@ export class KnowledgeStore {
       FROM knowledge_chunks c JOIN knowledge_documents d ON d.id=c.document_id
       LEFT JOIN knowledge_chunk_pages cp ON cp.document_id=c.document_id
         AND cp.ordinal=c.ordinal
-      ORDER BY d.updated_at DESC,c.document_id,c.ordinal LIMIT ?`)
-      .all(limit) as Array<{document_id:string;ordinal:number;body:string;
+      ORDER BY d.updated_at DESC,c.document_id,c.ordinal LIMIT ? OFFSET ?`)
+      .all(limit,offset) as Array<{document_id:string;ordinal:number;body:string;
         title:string;revision:number;page_number:number|null}>;
     return {total,items:rows.map(r=>({
       evidenceKey:r.document_id+":"+r.revision+":"+r.ordinal,
