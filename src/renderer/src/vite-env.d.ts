@@ -2,7 +2,7 @@
 
 import type {
   CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary, FocusInsights, FocusReward, FocusRewardOverview, FocusRewardCreateInput,
-  FocusRewardEditInput, FocusRewardRedeemInput, FocusRewardRedemption, FocusTitleUpdate,
+  FocusRewardEditInput, FocusRewardRedeemInput, FocusRewardRedemption, FocusGuardStartInput, FocusGuardStatus, FocusTitleUpdate,
   LocalTask, UpdateTaskInput,
 } from "../../shared/local-model";
 
@@ -204,6 +204,9 @@ declare global {
         rename: (input: FocusTitleUpdate) => Promise<FocusSession>;
         summary: () => Promise<FocusSummary>;
         insights: (timeZone:string) => Promise<FocusInsights>;
+        guardStart: (input:FocusGuardStartInput) => Promise<FocusGuardStatus>;
+        guardStatus: () => Promise<FocusGuardStatus>;
+        guardStop: () => Promise<FocusGuardStatus>;
         rewards: () => Promise<FocusRewardOverview>;
         createReward: (input:FocusRewardCreateInput) => Promise<FocusReward>;
         editReward: (input:FocusRewardEditInput) => Promise<FocusReward>;
