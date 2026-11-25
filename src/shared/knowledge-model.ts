@@ -43,6 +43,24 @@ export interface KnowledgeEmbeddingStatus {
   engine?:"static-word-vectors"|null;
   error?:string|null;
 }
+export interface KnowledgeRetrievalScores {
+  precisionAt5:number;
+  recallAt10:number;
+  mrrAt10:number;
+}
+export interface KnowledgeEvaluationReport {
+  cases:number;
+  modelId:string;
+  modelRevision:string;
+  indexed:number;skipped:number;pending:number;
+  semanticCases:number;
+  baseline:KnowledgeRetrievalScores;
+  hybrid:KnowledgeRetrievalScores;
+  latencyMs:{
+    lexicalP50:number;lexicalP95:number;
+    hybridP50:number;hybridP95:number;
+  };
+}
 export interface KnowledgePassage {
   documentId: string;
   documentTitle: string;
