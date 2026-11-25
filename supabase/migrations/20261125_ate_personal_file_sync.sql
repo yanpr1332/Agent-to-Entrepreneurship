@@ -64,7 +64,7 @@ begin
   return jsonb_build_object(
     'fileId',v_file.file_id,'filename',v_file.filename,'version',v_file.version,
     'sha256',v_file.sha256,'byteLength',v_file.byte_length,
-    'base64',encode(v_file.content,'base64')
+    'base64',replace(encode(v_file.content,'base64'),chr(10),'')
   );
 end;
 $$;
