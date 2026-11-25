@@ -264,6 +264,10 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 [44 本机词向量 Worker、用户导入/许可确认、索引及验收](44_ALPHA_KB_005B_OFFLINE_WORD_VECTORS.md)：从用户主动选择的 UTF-8 .vec 文件加载固定 SHA-256 小词表、在专用 Node Worker 完全离线计算真实静态词向量，分批建立可取消/续传索引，三路搜索沿用源修订和 PDF 引用；提供清除已安装模型与派生向量的界面。每次 `npm run build` 增加跨平台打包 Worker 启动测试。**不是 E5/BGE ONNX Transformer，不自动下载任何权重、不上传知识库，真实双语质量和安装包 GUI 待验收。**
 
 
+## ALPHA-CLOSE-03：内部安装包 + SQLite 安全恢复（2026-11-25）
+
+[54 安装与数据恢复说明](54_ALPHA_CLOSE_03_INSTALLER_AND_RECOVERY.md)：Windows/macOS 原生手动打包工作流、SHA-256 校验、五 SQLite 数据库 v2 快照/校验、原生目录选择与新隔离配置恢复；原账号密钥与团队历史不会被复制，真实安装签名与 GUI 回归仍需完成。
+
 ## ALPHA-CLOSE-02：八模块真实工作台 + 自定义布局（2026-11-25）
 
 [53 八模块工作台实施与验收](53_ALPHA_CLOSE_02_EIGHT_MODULE_WORKBENCH.md)：复用真实 Task/Focus/Planning/Knowledge/Cloud/Canvas/Mail/AI 主进程数据，八组件个性化显隐、顺序调整及本机持久布局预设；连接器拒绝/无授权均有明确状态，尚待真实 Windows/macOS GUI 与外部服务验收。独立 #48 视觉计划不受影响。

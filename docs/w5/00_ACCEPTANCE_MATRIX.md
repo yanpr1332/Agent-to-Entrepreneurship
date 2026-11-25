@@ -40,6 +40,14 @@
 
 ## 3. 切片状态
 
+### ALPHA-CLOSE-03 内部安装包与数据安全恢复（2026-11-25）
+
+- **代码范围**：[54](54_ALPHA_CLOSE_03_INSTALLER_AND_RECOVERY.md)。五 SQLite 数据库新增 manifest v2 SHA-256/字节数/user_version 与 quick_check；旧 v1 只能检查结构而没有原始历史哈希。Electron Main 原生选择器 + 10 分钟审查令牌、重复审查与原子复制到全新隔离 userData，不允许 Renderer 提交文件路径或覆盖正在使用的配置。
+- **内部打包**：手动 GitHub Actions 在 Windows/macOS 生成未签名 NSIS/DMG+ZIP；提供 SHA256SUMS + BUILD_EVIDENCE，7 天可下载，不自动发布、不使用签名/账号凭据。
+- **明确待验收**：如未人工触发打包并在真实 Windows/macOS 下载、核对哈希、安装、重启、恢复与安全卸载，仍不得宣称 Alpha 安装包可用。真实 Supabase/Canvas/交大邮箱/模型授权、OS 级凭据恢复和跨版本数据迁移仍需独立真机证据。
+
+
+
 ### ALPHA-CLOSE-02 八模块工作台与本机布局（2026-11-25）
 
 - **代码**：[53 工作台实施及验收](53_ALPHA_CLOSE_02_EIGHT_MODULE_WORKBENCH.md)。主页复用真实 SQLite/IPC 的任务、确认日程、专注、知识复习、团队、Canvas、邮箱和 AI 状态，独立错误/未连接提示，不显示未经授权内容。
