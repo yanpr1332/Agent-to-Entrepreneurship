@@ -13,7 +13,7 @@ describe("DeepSeek and provider API adapters",()=>{
       expect(init.redirect).toBe("error");
       const req=JSON.parse(init.body as string);
       expect(req).toMatchObject({
-        model:"deepseek-flash",stream:false,
+        model:"deepseek-flash",stream:false,thinking:{type:"disabled"},
         messages:[{role:"system"},{role:"user",content:"Help me study"}],
       });
       expect(JSON.stringify(req)).not.toContain("tools");
