@@ -158,6 +158,63 @@ describe("ALPHA-SYNC-003A: Main-only Realtime transport",()=>{
     expect(m.sockets).toHaveLength(0);
   });
 
+  it("falls back to safe polling when FIRST membership check is offline, then reconnects",async()=>{
+    vi.useFakeTimers();
+    const m=mocks();
+    m.cloud.listMembers.mockRejectedValueOnce(Error("Cloud service is unreachable"));
+    const result=await m.bridge.watch(FIRST);
+    expect(result).toMatchObject({phase:"fallback",hint:false});
+    expect(m.sockets).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    await tick();
+    expect(m.cloud.listMembers).toHaveBeenCalledTimes(2);
+    expect(m.sockets).toHaveLength(1);
+    join(m.sockets[0]);
+    expect(m.bridge.getStatus()).toMatchObject({phase:"live"});
+    m.bridge.stop();
+  });
+
+  it("does not retry initial or reconnect-time 401/403 RLS failures",async()=>{
+    vi.useFakeTimers();
+    const initial=mocks();
+    initial.cloud.listMembers.mockRejectedValueOnce(
+      Error("Cloud authorization failed or server-side workspace access was denied"));
+    await expect(initial.bridge.watch(FIRST)).rejects.toThrow("authorization");
+    expect(initial.bridge.getStatus()).toMatchObject({phase:"revoked"});
+    await vi.advanceTimersByTimeAsync(65_000);
+    expect(initial.cloud.listMembers).toHaveBeenCalledTimes(1);
+    expect(initial.sockets).toHaveLength(0);
+    initial.bridge.stop();
+
+    const reconnected=mocks();
+    await reconnected.bridge.watch(FIRST);await tick();
+    join(reconnected.sockets[0]);
+    reconnected.cloud.listMembers.mockRejectedValueOnce(
+      Error("Cloud authorization failed or server-side workspace access was denied"));
+    reconnected.sockets[0].fail();
+    await vi.advanceTimersByTimeAsync(1_000);await tick();
+    expect(reconnected.bridge.getStatus()).toMatchObject({phase:"revoked"});
+    const calls=reconnected.cloud.listMembers.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(65_000);
+    expect(reconnected.cloud.listMembers).toHaveBeenCalledTimes(calls);
+    expect(reconnected.sockets).toHaveLength(1);
+    reconnected.bridge.stop();
+  });
+
+  it("cancels pending offline retry when user switches workspaces or logs out",async()=>{
+    vi.useFakeTimers();
+    const m=mocks();
+    m.cloud.listMembers.mockRejectedValueOnce(Error("fetch failed"));
+    await m.bridge.watch(FIRST);
+    await m.bridge.watch(SECOND);await tick();
+    join(m.sockets[0]);
+    const before=m.cloud.listMembers.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(m.cloud.listMembers).toHaveBeenCalledTimes(before);
+    expect(m.bridge.getStatus()?.workspaceId).toBe(SECOND);
+    m.bridge.stop();
+  });
+
   it("will not reconnect a socket under a different logged-in owner",async()=>{
     vi.useFakeTimers();
     const m=mocks();
