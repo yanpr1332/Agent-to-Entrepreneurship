@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { SJTU_MAIL_HOST, SJTU_SMTP_PORT, type CampusMailCredentials, type MailDraft } from "../../shared/mail-model";
+import { SJTU_MAIL_HOST, SJTU_SMTP_PORT, parseMailDraft, type CampusMailCredentials, type MailDraft } from "../../shared/mail-model";
 import { connectMailTls, type MailWire, type MailWireFactory } from "./mail-wire";
 
 function base64Lines(text: string): string {
@@ -8,6 +8,7 @@ function base64Lines(text: string): string {
 
 /** A plain-text SMTP MIME message: no HTML execution or attachment support. */
 export function formatSmtpMessage(from: string, draft: MailDraft): string {
+  draft = parseMailDraft(draft);
   const subject = Buffer.from(draft.subject, "utf8").toString("base64");
   const messageId = randomUUID();
   return [
