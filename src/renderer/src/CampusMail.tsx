@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { MailRecord, MailSendPreview, MailSyncState } from "../../shared/mail-model";
+import { replyAddress, type MailRecord, type MailSendPreview, type MailSyncState, type MailSavedDraft } from "../../shared/mail-model";
 import type { MailCandidate, MailCandidateAction } from "../../shared/mail-candidates";
 import MailAIReviewPanel from "./MailAIReviewPanel";
 
@@ -30,16 +30,21 @@ export default function CampusMail() {
   const [subject,setSubject] = useState("");
   const [body,setBody] = useState("");
   const [preview,setPreview] = useState<MailSendPreview|null>(null);
+  const [savedDrafts,setSavedDrafts] = useState<MailSavedDraft[]>([]);
+  const [editingDraftId,setEditingDraftId] = useState<string|null>(null);
+  const [replyMessageId,setReplyMessageId] = useState<string|undefined>(undefined);
+  const [openedBody,setOpenedBody] = useState<{key:string;text:string}|null>(null);
 
   useEffect(() => {
     let active=true;
     const update=() => {
-      void Promise.all([window.desktop.mail.status(),window.desktop.mail.list(),window.desktop.mail.candidates()])
-        .then(([next,list,suggestions]) => {
+      void Promise.all([window.desktop.mail.status(),window.desktop.mail.list(),window.desktop.mail.candidates(),window.desktop.mail.savedDrafts()])
+        .then(([next,list,suggestions,drafts]) => {
           if (!active) return;
           setStatus(next);
           setMessages(list);
           setCandidates(suggestions);
+          setSavedDrafts(drafts);
         }).catch(reason => { if (active) setError(message(reason)); });
     };
     const unsubscribe=window.desktop.mail.onSyncUpdated(update);
@@ -58,6 +63,7 @@ export default function CampusMail() {
         window.desktop.mail.list(),window.desktop.mail.candidates(),
       ]);
       setMessages(headers);setCandidates(suggestions);
+      setSavedDrafts(await window.desktop.mail.savedDrafts());
       setNotice("邮箱已连接。后续自动同步邮件头并整理任务候选；不会未经确认创建任务。");
     } catch (reason) {
       setError(message(reason));
@@ -84,10 +90,12 @@ export default function CampusMail() {
 
   async function disconnect():Promise<void>{
     if (!window.confirm("断开交大邮箱并删除本机加密凭据及同步的邮件头缓存？此操作不会删除服务器上的邮件。")) return;
-    setBusy(true);setError("");setPreview(null);
+    setBusy(true);setError("");setPreview(null);setOpenedBody(null);
     try {
       await window.desktop.mail.disconnect();
-      setStatus(initial);setMessages([]);setCandidates([]);setEmail("");setUsername("");setPassword("");
+      setStatus(initial);setMessages([]);setCandidates([]);setSavedDrafts([]);setEditingDraftId(null);
+      setReplyMessageId(undefined);setRecipientText("");setSubject("");setBody("");
+      setEmail("");setUsername("");setPassword("");
       setNotice("已删除本机邮箱凭据和邮件头缓存；学校邮箱中的邮件未发生改变。");
     } catch(reason){setError(message(reason));}
     finally{setBusy(false);}
@@ -116,7 +124,7 @@ export default function CampusMail() {
     setBusy(true);setError("");setNotice("");
     try {
       const to=recipientText.split(/[;,]/).map(value=>value.trim()).filter(Boolean);
-      const response=await window.desktop.mail.prepareSend({to,subject,body});
+      const response=await window.desktop.mail.prepareSend({to,subject,body,...(replyMessageId ? {replyMessageId} : {})});
       setPreview(response);
     } catch(reason){setError(message(reason));}
     finally{setBusy(false);}
@@ -129,12 +137,73 @@ export default function CampusMail() {
     setBusy(true);setError("");setNotice("");
     try {
       await window.desktop.mail.confirmSend(preview.confirmationId);
-      setPreview(null);setRecipientText("");setSubject("");setBody("");
+      setPreview(null);setRecipientText("");setSubject("");setBody("");setReplyMessageId(undefined);
+      if (editingDraftId) {
+        await window.desktop.mail.deleteDraft(editingDraftId);
+        setSavedDrafts(await window.desktop.mail.savedDrafts());setEditingDraftId(null);
+      }
       setNotice("SMTP 服务器已确认接受邮件。发送行为仅发生在这次明确确认之后。");
     } catch(reason){
       setPreview(null);
       setError(message(reason));
     } finally{setBusy(false);}
+  }
+
+
+  async function openMessage(record:MailRecord):Promise<void>{
+    if (busy) return;
+    const key=record.account+":"+record.uidValidity+":"+record.uid;
+    if (openedBody?.key===key) {setOpenedBody(null);return;}
+    if (!window.confirm("仅本次通过 IMAP 只读获取这封邮件的纯文本正文（最多 2400 字），不保存附件或正文到数据库。继续？")) return;
+    setBusy(true);setError("");setOpenedBody(null);
+    try {
+      const text=await window.desktop.mail.readBody(record);
+      setOpenedBody({key,text});
+    } catch (reason) {setError(message(reason));}
+    finally {setBusy(false);}
+  }
+
+  function startReply(record:MailRecord):void {
+    try {
+      const address=replyAddress(record.from);
+      setEditingDraftId(null);setReplyMessageId(record.messageId ?? undefined);
+      setRecipientText(address);setSubject(/^re:/i.test(record.subject)?record.subject:"Re: "+record.subject);
+      setBody("");setPreview(null);setNotice("已准备回复草稿，请核对收件人并撰写正文；不会自动发送。");
+    } catch (reason) {setError("无法安全识别该发件人的邮箱地址，请手动填写："+message(reason));}
+  }
+
+  async function saveCurrentDraft():Promise<void>{
+    if (busy || preview) return;
+    setBusy(true);setError("");setNotice("");
+    try {
+      const to=recipientText.split(/[;,]/).map(value=>value.trim()).filter(Boolean);
+      const saved=await window.desktop.mail.saveDraft({
+        ...(editingDraftId ? {id:editingDraftId}:{}),to,subject,body,
+        ...(replyMessageId ? {replyMessageId}:{}),
+      });
+      setEditingDraftId(saved.id);
+      setSavedDrafts(await window.desktop.mail.savedDrafts());
+      setNotice("草稿已在此设备通过系统安全存储加密保存；不会自动发送。");
+    } catch(reason){setError(message(reason));}
+    finally{setBusy(false);}
+  }
+
+  function loadDraft(draft:MailSavedDraft):void {
+    setEditingDraftId(draft.id);setRecipientText(draft.to.join(", "));
+    setSubject(draft.subject);setBody(draft.body);setReplyMessageId(draft.replyMessageId);
+    setPreview(null);setNotice("已载入本机草稿；编辑后请再次保存。");
+  }
+
+  async function removeDraft(draft:MailSavedDraft):Promise<void>{
+    if (busy || !window.confirm("永久删除这份设备上的加密草稿？此操作不会删除任何已发送邮件。")) return;
+    setBusy(true);setError("");
+    try {
+      await window.desktop.mail.deleteDraft(draft.id);
+      setSavedDrafts(await window.desktop.mail.savedDrafts());
+      if (editingDraftId===draft.id) setEditingDraftId(null);
+      setNotice("已删除草稿。");
+    } catch(reason){setError(message(reason));}
+    finally{setBusy(false);}
   }
 
   return (
@@ -147,7 +216,8 @@ export default function CampusMail() {
       <div className="connector-warning" role="note">
         <strong>隐私与发送控制</strong>
         收件箱每 10 分钟自动同步最近邮件的发件人、主题与日期，保存在此设备。
-        当前不下载正文或附件，只根据邮件主题自动整理可能的任务候选（不等于确认存在截止日期）。
+        默认不下载正文或附件；你可单独同意读取指定邮件纯文本正文（仅限本次界面展示）。
+        邮件主题会自动整理可能的任务候选（不等于确认存在截止日期）。
         只有点击「创建个人任务」才写入日历；密码使用系统安全加密保存；
         发送邮件必须先预览完整内容，再由你手动点击「确认发送」。
         请勿在聊天或 GitHub 中提交邮箱密码。
@@ -196,11 +266,19 @@ export default function CampusMail() {
               <strong>{item.subject}</strong>
               <div className="mail-meta"><span>发件人：{item.from}</span>
                 <span>{date(item.date)}</span></div>
+              <div className="button-row">
+                <button className="secondary-button" disabled={busy} onClick={()=>void openMessage(item)}>
+                  {openedBody?.key===`${item.account}:${item.uidValidity}:${item.uid}`?"收起正文":"授权读取本封正文"}
+                </button>
+                <button className="secondary-button" disabled={busy} onClick={()=>startReply(item)}>回复此邮件</button>
+              </div>
+              {openedBody?.key===`${item.account}:${item.uidValidity}:${item.uid}` &&
+                <div className="mail-preview-body" aria-label="本次授权阅读的纯文本正文">{openedBody.text}</div>}
               {/作业|截止|报名|deadline|assignment|meeting|提交/i.test(item.subject) &&
                 <small className="mail-candidate">可能包含待办事项 · 尚未自动创建任务</small>}
             </li>)}</ul>
           ) : <p className="empty-state">{status.connected ? "暂无最近的收件箱邮件头。" : "连接后在这里查看你邮箱中最近的邮件元数据。"}</p>}
-          <p className="privacy-note">仅 INBOX，最多保留 200 条邮件头；不自动下载正文、附件、其他文件夹，也不会标记服务器邮件已读。</p>
+          <p className="privacy-note">仅 INBOX，最多保留 200 条邮件头；正文只在逐封确认后临时获取，切换页面或断开连接会清空显示；附件及其他文件夹不会下载，也不会标记邮件已读。</p>
         </section>
       </div>
       {status.connected && <section className="panel mail-candidates">
@@ -242,13 +320,24 @@ export default function CampusMail() {
       </section>}
       {status.connected && <MailAIReviewPanel messages={messages}/>}
       {status.connected && <section className="panel mail-compose">
-        <div className="eyebrow">CONFIRMED SEND ONLY</div><h2>撰写并发送纯文本邮件</h2>
+        <div className="eyebrow">CONFIRMED SEND ONLY</div><h2>撰写、保存草稿与回复纯文本邮件</h2>
+        <p className="privacy-note">最多保存 20 份仅在本机 OS 安全加密的草稿；支持重启恢复，断开邮箱后会清除。草稿不会自动上传或发送。</p>
+        {savedDrafts.length>0 && <div className="mail-drafts" aria-label="本机已保存草稿">
+          <h3>本机草稿（{savedDrafts.length}）</h3>
+          <ul className="mail-list">{savedDrafts.map(item=><li key={item.id}>
+            <strong>{item.subject||"（无主题）"}</strong>
+            <div className="mail-meta"><span>{item.to.join("、")||"未填写收件人"}</span><span>{date(item.updatedAt)}</span></div>
+            <div className="button-row"><button className="secondary-button" disabled={busy} onClick={()=>loadDraft(item)}>载入编辑</button>
+            <button className="secondary-button" disabled={busy} onClick={()=>void removeDraft(item)}>删除草稿</button></div>
+          </li>)}</ul>
+        </div>}
         {preview ? (
           <div className="mail-preview" role="region" aria-label="邮件发送确认预览">
             <strong className="review-stage-label">待确认 · 邮件尚未发送</strong>
             <p><strong>发件人：</strong>{preview.from}</p>
             <p><strong>收件人：</strong>{preview.to.join("、")}</p>
             <p><strong>主题：</strong>{preview.subject}</p>
+            {preview.replyMessageId&&<p><strong>回复邮件：</strong>{preview.replyMessageId}</p>}
             <div className="mail-preview-body">{preview.body}</div>
             <p className="privacy-note">此次确认有效至 {date(preview.expiresAt)}，且只能使用一次。请仔细核对所有收件人和内容。</p>
             <div className="button-row">
@@ -266,7 +355,11 @@ export default function CampusMail() {
               onChange={event=>setSubject(event.target.value)} /></label>
             <label>正文<textarea rows={8} value={body} required maxLength={10000}
               onChange={event=>setBody(event.target.value)} /></label>
-            <button className="primary-button" disabled={busy} type="submit">预览并请求发送确认</button>
+            <div className="button-row">
+              <button className="primary-button" disabled={busy} type="submit">预览并请求发送确认</button>
+              <button className="secondary-button" disabled={busy} type="button" onClick={()=>void saveCurrentDraft()}>{editingDraftId?"更新本机草稿":"保存本机草稿"}</button>
+            </div>
+            {replyMessageId&&<p className="privacy-note">正在回复邮件 {replyMessageId}。收件人由发件地址预填，仍须你亲自核对。</p>}
             <p className="privacy-note">当前支持纯文本邮件；不支持附件、HTML、抄送或自动群发。SMTP 发送没有自动重试，出现不确定投递结果时先在学校邮箱「已发送」中核对。</p>
           </form>
         )}
