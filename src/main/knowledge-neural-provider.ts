@@ -46,27 +46,33 @@ export class OfflineNeuralPythonProvider implements LocalEmbeddingProvider {
       try{this.reply(JSON.parse(line) as WireReply);}
       catch{this.abort("Invalid local model response");}
     });
+    this.process.stdin.on("error",()=>this.abort("Cannot send offline inference request"));
     this.process.on("error",()=>this.abort("Python offline runtime not available"));
     this.process.on("exit",()=>this.abort("Offline neural process exited"));
   }
   static async open(directory:string,kind:NeuralKind,expected:LocalEmbeddingModel):
     Promise<OfflineNeuralPythonProvider>{
     const instance=new OfflineNeuralPythonProvider(directory,kind,expected);
+    let timeout:ReturnType<typeof setTimeout>|null=null;
     try{
       await Promise.race([
         new Promise<void>((resolve,reject)=>{
           instance.readyResolve=resolve;instance.readyReject=reject;
           if(instance.closed)reject(Error("Neural worker unavailable"));
         }),
-        new Promise<never>((_,reject)=>setTimeout(
-          ()=>reject(Error("Neural worker initialization timed out")),
-          STARTUP_TIMEOUT_MS)),
+        new Promise<never>((_,reject)=>{
+          timeout=setTimeout(
+            ()=>reject(Error("Neural worker initialization timed out")),
+            STARTUP_TIMEOUT_MS);
+        }),
       ]);
       if(instance.closed)throw Error("Neural runtime stopped");
       return instance;
     }catch{
       instance.close();
       throw Error("Local neural ONNX runtime unavailable or model failed validation");
+    }finally{
+      if(timeout)clearTimeout(timeout);
     }
   }
   private reply(message:WireReply):void{

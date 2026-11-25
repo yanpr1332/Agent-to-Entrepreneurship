@@ -38,6 +38,17 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
+      # Compile fixed application-owned Python source on each platform.
+      # This does NOT imply we have downloaded third-party model weights or
+      # verified a user's external ONNX / Python dependency environment.
+      - name: Set up Python for neural worker syntax check
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate offline Python neural worker syntax
+        run: python -m py_compile scripts/neural-inference-worker.py
+
       - name: Run unit tests
         run: npm test
 

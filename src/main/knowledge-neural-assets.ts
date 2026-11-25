@@ -43,9 +43,11 @@ function readHash(path:string,name:string,destination?:string):string{
     throw Error("Invalid or oversized local ONNX model asset");
   const input=openSync(path,constants.O_RDONLY|
     (process.platform==="win32"?0:constants.O_NOFOLLOW));
-  const target=destination===undefined?null:
-    openSync(destination,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
+  let target:number|null=null;
   try{
+    if(destination!==undefined)
+      target=openSync(destination,
+        constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL,0o600);
     const opened=fstatSync(input);
     if(!opened.isFile()||opened.size!==stat.size||opened.size>sizeLimit)
       throw Error("ONNX asset changed during verification");
