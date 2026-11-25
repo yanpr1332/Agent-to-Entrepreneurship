@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 
 import type {
-  CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary, FocusTitleUpdate,
+  CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary, FocusInsights, FocusReward, FocusRewardOverview, FocusRewardCreateInput,
+  FocusRewardEditInput, FocusRewardRedeemInput, FocusRewardRedemption, FocusGuardStartInput, FocusGuardStatus, FocusTitleUpdate,
   LocalTask, UpdateTaskInput,
 } from "../../shared/local-model";
 
@@ -10,6 +11,7 @@ import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPers
 import type {
   CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
 } from "../../shared/mail-model";
+import type {MailAISelection,MailAIApply,MailAIReview} from "../../shared/mail-ai";
 import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } from "../../shared/mail-candidates";
 
 import type {WorkspaceHistoryItems,WorkspaceHistoryMarker} from "../../shared/workspace-history-contract";
@@ -28,7 +30,10 @@ import type {
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage,
+  KnowledgeBatchImportResult, KnowledgeSourceAuditEntry,
+  KnowledgeSourceRefreshRequest, KnowledgeSourceRefreshResult,
+  KnowledgeReviewCard, ReviewCardInput, ReviewCardEditInput, ReviewCardRebindInput,
+  ReviewCardEvidenceHistory, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport, KnowledgeEvidenceExportResult, KnowledgeEvidenceCatalogPage, KnowledgeLocalLabels, KnowledgeLabelsSaveResult,
 } from "../../shared/knowledge-model";
 
 import type {
@@ -65,6 +70,10 @@ declare global {
         connect: (input: CampusMailConnectInput) => Promise<MailSyncState>;
         list: () => Promise<MailRecord[]>;
         candidates: () => Promise<MailCandidate[]>;
+        aiPrepare: (selection:MailAISelection) => Promise<AIPreview>;
+        aiConfirm: (approvalId:string) => Promise<MailAIReview>;
+        aiApply: (input:MailAIApply) => Promise<MailCandidateChoiceResult>;
+        aiCancel: () => Promise<{canceled:true}>;
         reviewCandidate: (choice: MailCandidateChoice) => Promise<MailCandidateChoiceResult>;
         syncNow: () => Promise<MailSyncState>;
         disconnect: () => Promise<{disconnected:true}>;
@@ -78,6 +87,7 @@ declare global {
         login: (input: CloudCredentials) => Promise<CloudSessionStatus>;
         signup: (input: CloudCredentials) => Promise<{emailVerificationRequired:true}>;
         logout: () => Promise<CloudSessionStatus>;
+        clearTeamHistory: (confirmation:"ERASE_CURRENT_TEAM_CACHE") => Promise<{workspaces:number;checkpointed:boolean}>;
         workspaces: () => Promise<SharedWorkspace[]>;
         createWorkspace: (name: string, displayName: string) => Promise<string>;
         createInvite: (workspaceId: string) => Promise<string>;
@@ -169,10 +179,26 @@ declare global {
         get: (id: string) => Promise<KnowledgeSnapshot>;
         passage: (id: string, ordinal: number) => Promise<KnowledgePassage>;
         importFile: () => Promise<{document:KnowledgeDocument;changed:boolean}|null>;
+        importBatch: () => Promise<KnowledgeBatchImportResult|null>;
+        auditSources: (ids:string[]) => Promise<KnowledgeSourceAuditEntry[]>;
+        refreshSources: (consent:boolean,items:KnowledgeSourceRefreshRequest[]) => Promise<KnowledgeSourceRefreshResult>;
         delete: (id: string) => Promise<boolean>;
         search: (query: string) => Promise<KnowledgeSearchHit[]>;
+        embeddingStatus: () => Promise<KnowledgeEmbeddingStatus>;
+        importOfflineModel: (acknowledged:boolean) => Promise<KnowledgeEmbeddingStatus|null>;
+        importNeuralModel: (accepted:boolean,kind:"e5"|"bge") => Promise<KnowledgeEmbeddingStatus|null>;
+        startOfflineIndex: () => Promise<KnowledgeEmbeddingStatus>;
+        cancelOfflineIndex: () => Promise<KnowledgeEmbeddingStatus>;
+        removeOfflineModel: (confirmation:"REMOVE_LOCAL_MODEL_AND_VECTORS") => Promise<KnowledgeEmbeddingStatus>;
+        evaluateOfflineModel: (consent:boolean) => Promise<KnowledgeEvaluationReport|null>;
+        exportEvidenceCatalog: (consent:boolean) => Promise<KnowledgeEvidenceExportResult|null>;
+        evidencePage: (offset:number) => Promise<KnowledgeEvidenceCatalogPage>;
+        saveEvaluationLabels: (consent:boolean,labels:KnowledgeLocalLabels) => Promise<KnowledgeLabelsSaveResult|null>;
         cards: () => Promise<KnowledgeReviewCard[]>;
         createCard: (input: ReviewCardInput) => Promise<KnowledgeReviewCard>;
+        editCard: (input:ReviewCardEditInput) => Promise<KnowledgeReviewCard>;
+        rebindCard: (input:ReviewCardRebindInput) => Promise<KnowledgeReviewCard>;
+        cardEvidenceHistory: (id:string) => Promise<ReviewCardEvidenceHistory[]>;
         removeCard: (id: string) => Promise<boolean>;
         reviewCard: (id: string, rating: ReviewRating) => Promise<KnowledgeReviewCard>;
         progress: () => Promise<ReviewProgress>;
@@ -183,6 +209,15 @@ declare global {
         finish: (input: FocusCompletionInput) => Promise<FocusSession>;
         rename: (input: FocusTitleUpdate) => Promise<FocusSession>;
         summary: () => Promise<FocusSummary>;
+        insights: (timeZone:string) => Promise<FocusInsights>;
+        guardStart: (input:FocusGuardStartInput) => Promise<FocusGuardStatus>;
+        guardStatus: () => Promise<FocusGuardStatus>;
+        guardStop: () => Promise<FocusGuardStatus>;
+        rewards: () => Promise<FocusRewardOverview>;
+        createReward: (input:FocusRewardCreateInput) => Promise<FocusReward>;
+        editReward: (input:FocusRewardEditInput) => Promise<FocusReward>;
+        redeemReward: (input:FocusRewardRedeemInput) => Promise<FocusRewardRedemption>;
+
       };
     };
   }

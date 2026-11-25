@@ -1,6 +1,6 @@
 # ALPHA-KB-005：精确 + 容错 + 本地向量语义检索（后续规划与技术可行性）
 
-> 状态：**已列入开发 Backlog，尚未实施、安装模型或新增依赖**。形成于 2026-11-19，基于已实现的知识库 FTS5 和单段 AI 辅助解释。此项不等于现有 PR #32 已实现向量语义搜索。截至 2026-11-19，PR #32 已合并；按新的 [同步优先计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)，ALPHA-KB-005 仍保留但排在同步核心门槛之后。继续遵守**同一时间只维护一个开发 PR**，不与 ALPHA-SYNC 并行实施。
+> 状态：**ALPHA-KB-005A SQLite 向量索引已合并；005B 开发可选的自备本机静态词向量 .vec 导入与 Worker 推理（并非 E5/BGE/ONNX）**。形成于 2026-11-19，基于已实现的知识库 FTS5 和单段 AI 辅助解释。此项不等于现有 PR #32 已实现向量语义搜索。截至 2026-11-19，PR #32 已合并；按新的 [同步优先计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)，ALPHA-KB-005 仍保留但排在同步核心门槛之后。继续遵守**同一时间只维护一个开发 PR**，不与 ALPHA-SYNC 并行实施。
 
 ## 1. 产品目标与用户价值
 
@@ -55,8 +55,8 @@
 
 建议未来**按一个 PR 一轮的方式**迭代，且新一轮必须在上一 PR 关闭/合并后开始：
 
-1. **ALPHA-KB-005A / PoC：** 用两种小模型和脱敏中英文测试集实测命中率、CPU 延迟、占用内存、权重尺寸及许可证；做“完全离线”断网验证。初版只在测试环境，不修改用户真实库。
-2. **ALPHA-KB-005B / 本地索引：** 用户可选安装/卸载模型；向量分块、索引增量更新、版本迁移/恢复、进度取消、分离的资源配额；不上传私有资料。
+1. **ALPHA-KB-005A / 本轮基础设施：** 已开始 SQLite v4 向量索引、严格模型/向量版本校验、增量更新与失效清理、精确优先的 RRF 融合和 P@5/Recall@10/MRR@10 质量指标；使用**仅测试的合成向量模型桩**，不算真实模型 PoC。细节见 [43](43_ALPHA_KB_005A_VECTOR_FOUNDATION.md)。**真正两种模型、真实硬件性能及断网验证仍待下轮**。
+2. **ALPHA-KB-005B / 静态词向量闭环：** 用户确认并手动导入 32 MiB 内本地 UTF-8 .vec，SHA 校验和专用 Worker 真实 CPU 编码，索引可取消/重启/卸载。该阶段不代替 E5/BGE 神经模型，详见 [44](44_ALPHA_KB_005B_OFFLINE_WORD_VECTORS.md)。
 3. **ALPHA-KB-005C / 搜索融合：** 搜索 UI 精确+模糊+语义合流，标注匹配类型、原文跳转、去重和用户开关，模型不可用时仍按旧方法检索；Windows/macOS GUI、安装包和性能验收。
 
 ## 5. 验收标准与不得误报的事项
@@ -77,3 +77,8 @@
 - [BGE-M3 模型](https://huggingface.co/BAAI/bge-m3)
 - [Transformers.js 本地模型和禁用网络文档](https://huggingface.co/docs/transformers.js/api/env)
 - [sqlite-vec 项目](https://github.com/asg017/sqlite-vec)
+
+
+### 2026-11-25 可靠性与模型质量补充
+
+005A 和 005B 已合并。当前 [45 KB-005C 本地词表覆盖与真实标注评测](45_ALPHA_KB_005C_INDEX_COVERAGE_EVALUATION.md) 把静态词向量在大词汇缺失文档上的阻塞行为改成可持久恢复的跳过状态，增加索引覆盖率与同机成对检索质量/延迟评测。真正的 E5/BGE 神经模型仍需要独立审核 Transformers.js/ONNX 运行时、完整 npm lockfile、Windows/macOS 二进制与离线 tokenizer；**不在没有可复现供应链和实测结果的情况下把权重/依赖合并**。

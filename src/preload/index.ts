@@ -1,7 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc-channels";
 import type {
-  CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary, FocusTitleUpdate,
+  CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary, FocusInsights, FocusReward, FocusRewardOverview, FocusRewardCreateInput,
+  FocusRewardEditInput, FocusRewardRedeemInput, FocusRewardRedemption, FocusGuardStartInput, FocusGuardStatus, FocusTitleUpdate,
   LocalTask, UpdateTaskInput,
 } from "../shared/local-model";
 
@@ -10,6 +11,7 @@ import type { CanvasAssignment, CanvasConnectionStatus, CanvasCourse, CanvasPers
 import type {
   CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
 } from "../shared/mail-model";
+import type {MailAISelection,MailAIApply,MailAIReview} from "../shared/mail-ai";
 import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } from "../shared/mail-candidates";
 
 import type {WorkspaceHistoryItems,WorkspaceHistoryMarker} from "../shared/workspace-history-contract";
@@ -28,7 +30,10 @@ import type {
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage,
+  KnowledgeBatchImportResult, KnowledgeSourceAuditEntry,
+  KnowledgeSourceRefreshRequest, KnowledgeSourceRefreshResult,
+  KnowledgeReviewCard, ReviewCardInput, ReviewCardEditInput, ReviewCardRebindInput,
+  ReviewCardEvidenceHistory, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport, KnowledgeEvidenceExportResult, KnowledgeEvidenceCatalogPage, KnowledgeLocalLabels, KnowledgeLabelsSaveResult,
 } from "../shared/knowledge-model";
 
 import type {
@@ -68,6 +73,14 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.mailConnect, input) as Promise<MailSyncState>,
     list: () => ipcRenderer.invoke(IPC_CHANNELS.mailList) as Promise<MailRecord[]>,
     candidates: () => ipcRenderer.invoke(IPC_CHANNELS.mailCandidates) as Promise<MailCandidate[]>,
+    aiPrepare: (selection:MailAISelection) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailAIPrepare,selection) as Promise<AIPreview>,
+    aiConfirm: (approvalId:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailAIConfirm,approvalId) as Promise<MailAIReview>,
+    aiApply: (input:MailAIApply) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailAIApply,input) as Promise<MailCandidateChoiceResult>,
+    aiCancel: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.mailAICancel) as Promise<{canceled:true}>,
     reviewCandidate: (choice: MailCandidateChoice) =>
       ipcRenderer.invoke(IPC_CHANNELS.mailReviewCandidate, choice) as Promise<MailCandidateChoiceResult>,
     syncNow: () => ipcRenderer.invoke(IPC_CHANNELS.mailSyncNow) as Promise<MailSyncState>,
@@ -92,6 +105,8 @@ const desktopApi = Object.freeze({
     signup: (input: CloudCredentials) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudSignup, input) as Promise<{emailVerificationRequired:true}>,
     logout: () => ipcRenderer.invoke(IPC_CHANNELS.cloudLogout) as Promise<CloudSessionStatus>,
+    clearTeamHistory: (confirmation:"ERASE_CURRENT_TEAM_CACHE") =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudClearTeamHistory,confirmation) as Promise<{workspaces:number;checkpointed:boolean}>,
     workspaces: () => ipcRenderer.invoke(IPC_CHANNELS.cloudWorkspaces) as Promise<SharedWorkspace[]>,
     createWorkspace: (name: string, displayName: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudCreateWorkspace, name, displayName) as Promise<string>,
@@ -240,10 +255,47 @@ const desktopApi = Object.freeze({
     passage: (id: string, ordinal: number) =>
       ipcRenderer.invoke(IPC_CHANNELS.knowledgePassage,id,ordinal) as Promise<KnowledgePassage>,
     importFile: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeImport) as Promise<{document:KnowledgeDocument;changed:boolean}|null>,
+    importBatch: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeBatchImport) as Promise<KnowledgeBatchImportResult|null>,
+    auditSources: (ids:string[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeAuditSources,ids) as Promise<KnowledgeSourceAuditEntry[]>,
+    refreshSources: (consent:boolean,items:KnowledgeSourceRefreshRequest[]) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeRefreshSources,consent,items) as
+        Promise<KnowledgeSourceRefreshResult>,
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeDelete,id) as Promise<boolean>,
     search: (query: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeSearch,query) as Promise<KnowledgeSearchHit[]>,
+    embeddingStatus: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeEmbeddingStatus) as Promise<KnowledgeEmbeddingStatus>,
+    importOfflineModel: (acknowledged:boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeImportOfflineModel,acknowledged) as
+        Promise<KnowledgeEmbeddingStatus|null>,
+    importNeuralModel: (accepted:boolean,kind:"e5"|"bge") =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeImportNeuralModel,accepted,kind) as
+        Promise<KnowledgeEmbeddingStatus|null>,
+    startOfflineIndex: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeStartOfflineIndex) as Promise<KnowledgeEmbeddingStatus>,
+    cancelOfflineIndex: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCancelOfflineIndex) as Promise<KnowledgeEmbeddingStatus>,
+    removeOfflineModel: (confirmation:"REMOVE_LOCAL_MODEL_AND_VECTORS") =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeRemoveOfflineModel,confirmation) as
+        Promise<KnowledgeEmbeddingStatus>,
+    evaluateOfflineModel: (consent:boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeEvaluateOfflineModel,consent) as
+        Promise<KnowledgeEvaluationReport|null>,
+    exportEvidenceCatalog: (consent:boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeExportEvidenceCatalog,consent) as
+        Promise<KnowledgeEvidenceExportResult|null>,
+    evidencePage: (offset:number) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeEvidencePage,offset) as
+        Promise<KnowledgeEvidenceCatalogPage>,
+    saveEvaluationLabels: (consent:boolean,labels:KnowledgeLocalLabels) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeSaveEvaluationLabels,consent,labels) as
+        Promise<KnowledgeLabelsSaveResult|null>,
     cards: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCards) as Promise<KnowledgeReviewCard[]>,
     createCard: (input: ReviewCardInput) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeCreateCard,input) as Promise<KnowledgeReviewCard>,
+    editCard: (input:ReviewCardEditInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeEditCard,input) as Promise<KnowledgeReviewCard>,
+    rebindCard: (input:ReviewCardRebindInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeRebindCard,input) as Promise<KnowledgeReviewCard>,
+    cardEvidenceHistory: (id:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeCardEvidenceHistory,id) as Promise<ReviewCardEvidenceHistory[]>,
     removeCard: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeRemoveCard,id) as Promise<boolean>,
     reviewCard: (id: string, rating: ReviewRating) =>
       ipcRenderer.invoke(IPC_CHANNELS.knowledgeReviewCard,id,rating) as Promise<KnowledgeReviewCard>,
@@ -259,6 +311,22 @@ const desktopApi = Object.freeze({
     rename: (input: FocusTitleUpdate) =>
       ipcRenderer.invoke(IPC_CHANNELS.focusRename, input) as Promise<FocusSession>,
     summary: () => ipcRenderer.invoke(IPC_CHANNELS.focusSummary) as Promise<FocusSummary>,
+    insights: (timeZone:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusInsights,timeZone) as Promise<FocusInsights>,
+    guardStart: (input:FocusGuardStartInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusGuardStart,input) as Promise<FocusGuardStatus>,
+    guardStatus: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusGuardStatus) as Promise<FocusGuardStatus>,
+    guardStop: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusGuardStop) as Promise<FocusGuardStatus>,
+    rewards: () => ipcRenderer.invoke(IPC_CHANNELS.focusRewards) as Promise<FocusRewardOverview>,
+    createReward: (input:FocusRewardCreateInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusRewardCreate,input) as Promise<FocusReward>,
+    editReward: (input:FocusRewardEditInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusRewardEdit,input) as Promise<FocusReward>,
+    redeemReward: (input:FocusRewardRedeemInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusRewardRedeem,input) as Promise<FocusRewardRedemption>,
+
   }),
 });
 

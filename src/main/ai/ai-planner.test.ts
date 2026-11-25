@@ -16,7 +16,7 @@ function setup(){
   const store=new PlanningStore(":memory:");
   let tasks=[task(id1,"Math revision"),task(id2,"Lab report")];
   const prepare=vi.fn((prompt:string)=>({
-    approvalId,prompt,model:"gpt-4.1-mini",
+    approvalId,prompt,model:"gpt-4.1-mini",provider:"openai" as const,endpointLabel:"openai",
     expiresAt:"2026-11-12T00:00:00Z",maxOutputTokens:512,
   }));
   const confirm=vi.fn(async()=>({

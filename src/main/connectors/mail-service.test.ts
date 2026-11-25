@@ -77,6 +77,52 @@ describe("mail read-sync versus explicit SMTP consent",()=>{
     store.close();
   });
 
+  it("reads text for one approved cached UID only and never persists body",async()=>{
+    const {store,vault,imap,smtp,credentials}=setup();
+    const readBody=vi.fn(async(_creds:typeof credentials,uid:number,validity:number)=>({
+      envelope:{uid,uidValidity:validity,from:"Teacher",
+        subject:"Homework",date:null,messageId:null},
+      body:"Report due 2026-12-13",
+    }));
+    const service=new CampusMailService(vault,store,{readRecent:imap.readRecent,readBody},smtp);
+    await service.connect(credentials);
+    const record=store.list(credentials.email)[0];
+    expect(readBody).not.toHaveBeenCalled();
+    const text=await service.readApprovedBody(record);
+    expect(text).toContain("Report due 2026-12-13");
+    expect(readBody).toHaveBeenCalledWith(
+      expect.objectContaining({email:credentials.email}),7,3,
+    );
+    expect(store.list(credentials.email)[0]).not.toHaveProperty("body");
+    await service.sync();
+    expect(readBody).toHaveBeenCalledTimes(1);
+    await expect(service.readApprovedBody({...record,uid:99})).rejects.toThrow("changed");
+    store.close();
+  });
+  it("rejects in-flight body content after mailbox authorization is revoked",async()=>{
+    const {store,vault,imap,smtp,credentials}=setup();
+    let done:(value:{envelope:{uid:number;uidValidity:number;from:string;subject:string;
+      date:null;messageId:null};body:string})=>void=()=>{};
+    const readBody=vi.fn(()=>new Promise<{
+      envelope:{uid:number;uidValidity:number;from:string;subject:string;
+        date:null;messageId:null};body:string;
+    }>(resolve=>{done=resolve;}));
+    const service=new CampusMailService(vault,store,{readRecent:imap.readRecent,readBody},smtp);
+    await service.connect(credentials);
+    const original=store.list(credentials.email)[0];
+    const reading=service.readApprovedBody(original);
+    // Wait until the mocked network reader is entered.
+    for(let attempt=0;!readBody.mock.calls.length&&attempt<100;attempt++)
+      await new Promise(resolve=>setTimeout(resolve,2));
+    expect(readBody).toHaveBeenCalledTimes(1);
+    await service.disconnect();
+    done({envelope:{uid:7,uidValidity:3,from:"Teacher",
+      subject:"Homework",date:null,messageId:null},body:"secret"});
+    await expect(reading).rejects.toThrow("authorization changed");
+    expect(store.list(credentials.email)).toHaveLength(0);
+    store.close();
+  });
+
   it("failed IMAP login never saves a password",async()=>{
     const {store,vault,credentials}=setup();
     const service=new CampusMailService(vault,store,{

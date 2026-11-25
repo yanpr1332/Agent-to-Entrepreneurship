@@ -40,6 +40,21 @@
 
 ## 3. 切片状态
 
+### ALPHA-CLOSE-02 八模块工作台与本机布局（2026-11-25）
+
+- **代码**：[53 工作台实施及验收](53_ALPHA_CLOSE_02_EIGHT_MODULE_WORKBENCH.md)。主页复用真实 SQLite/IPC 的任务、确认日程、专注、知识复习、团队、Canvas、邮箱和 AI 状态，独立错误/未连接提示，不显示未经授权内容。
+- **用户自定义**：八组件显隐/上移下移、三套布局预设、版本化本机 localStorage、异常配置自动回默认，隐藏全部仍可恢复；不修改 #48 的视觉规划与全局 CSS。
+- **CI 与真机不可混淆**：双平台最新提交的 TypeScript、Vitest、Electron build、离线 Worker 以实际 workflow 结果登记；真实 Windows/macOS GUI 点击、布局重启、五账号 Supabase、Canvas/邮箱真实接入与付费模型验收尚未执行，不能作为发布通过证据。
+
+
+
+### ALPHA-CLOSE-01 五人 V0.1 收尾计划 + 邮件 AI 人工审核（2026-11-25）
+
+- **交付计划**：[51](51_V01_FIVE_PERSON_ALPHA_CLOSEOUT.md) 将五人 Alpha 的剩余工作固定为约 4–7 个大批次，仍要求八大模块、Windows/macOS 真实安装、真实五账号 Supabase RLS/Realtime、Canvas 课程/作业、交大邮箱 IMAP/SMTP、个人 AI Provider 调用与安全/恢复证据。外部审批未获授权的情况必须标记 Blocked。
+- **本轮功能开发**：[52](52_ALPHA_CLOSE_01_MAIL_AI_REVIEW.md) 增加明确选择 1–3 封本机邮箱邮件头、OpenAI 付费调用前完整 prompt 预览、模型严格 JSON 候选/日期校验、二次人工编辑确认与 SQLite 原任务表幂等写入。撤权、来源变化、过期审阅令牌安全失败；不读正文、不自动发信或创建任务。
+- **代码 CI / 真机必须分离**：双平台最新 SHA 的 npm/TypeScript/Vitest/Electron bundle/offline Worker smoke 单独记录；真实 SJTU 邮箱、OpenAI 用户 Key、费用与实际候选、Windows/macOS GUI 的人工证据目前缺失，不能标注验收通过。
+
+
 状态定义：**代码**＝仓库有实现；**单测**＝有 Vitest 覆盖并通过；**CI**＝Windows+macOS 双平台工作流通过；**真机**＝实际运行过（⚠️ 自动化＝由 CDP 脚本真实点击 DOM 验证，未由人手工走查）。
 
 | # | 切片 | 设计文档 | 代码 | 单测 | CI | 真机 |
@@ -114,11 +129,42 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - 单测与 CI 结果以 PR #32 的**最新提交检查**为准。真人 Windows/macOS GUI 与自愿的真 API 计费验收**尚未执行**。
 - 详细本机测试用例见 [25](25_ALPHA_KB_004_AI_SOURCE_EXPLANATION.md)。
 
-### ALPHA-KB-005 本地三路检索（后续规划，未实现）
+### ALPHA-KB-005 本地三路检索（005C 索引覆盖率和可重复评测开发中）
 
 - 用户希望继续演进为**精确搜索 + 模糊搜索 + 本地向量语义搜索**，已记录在 Backlog 与 [26 选型及工程难度评估](26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md)。
-- **当前未安装 embedding 模型、未建立向量索引、未运行 CPU/内存性能测试**。后续分 PoC、增量向量索引、三路结果合并，均须独立 CI 与真实 Windows/macOS GUI 验收。
+- **005A 已完成**：SQLite v4 向量索引、模型版本和严格源证据失效、RRF 融合及引用；[43](43_ALPHA_KB_005A_VECTOR_FOUNDATION.md)。**005B PR #52 已合并**：本机用户手动确认的小型静态词向量 .vec、独立 Worker CPU 编码、可取消增量索引、卸载/重启恢复和打包 Worker smoke；详见 [44](44_ALPHA_KB_005B_OFFLINE_WORD_VECTORS.md)。**并非 E5/BGE 神经模型，不保证真实双语质量，仍待 Windows/macOS GUI**。
+- **005C：当前开发，未做真实模型质量或双平台 GUI 验收**。SQLite v5 的模型词表外跳过/跨重启继续、覆盖率、本机分页人工标注/独占文件保存与用户亲自判定证据的 P@5/Recall@10/MRR@10/延迟比较，见 [45](45_ALPHA_KB_005C_INDEX_COVERAGE_EVALUATION.md)。没有真实 E5/BGE Transformer/ONNX 推理，也没有任何私有资料外传。
 - 不把 PR #32 的可选 OpenAI 单段解释误称为全库本地语义检索。
+
+### ALPHA-FOC-003/004 + KB-005D 同轮双主线（2026-11-25）
+
+- **安全专注**：用户明确选择监测/全屏模式，Main 绑定安全快捷键 `Ctrl/Cmd+Shift+F12`、按钮/暂停/取消/超时/关闭窗口释放；Windows/macOS 前台应用检测若不可用须如实提示，绝不杀进程或阻断任务管理器。这里实现的是可逆辅助保护，**未完成真正第三方应用强制限制**。
+- **本地神经 ONNX**：受限原生目录选择、逐文件 SHA 与模型版本固定、E5/BGE Python ONNX Runtime CPU 预检、池化与 L2、既有语义索引/质量评测/静态词向量降级；第三方 Python 依赖及模型权重须用户手动准备，未随安装包分发。CI 中的假权重只能验证接口和资产保护，不能证明真实神经推理成功。
+- **验收待做**：真实 Windows/macOS 权限与紧急退出、模型文件和 Python 发行安全、真实离线推理、精度/内存/速度以及打包后的 Python 文件位置，参见 [50](50_ALPHA_FOCUS_SAFETY_NEURAL_EMBEDDING.md)。独立 Review 和真机验收不能由 CI 取代。
+
+### ALPHA-FOC-006 自定义奖励及虚拟积分兑换账本（2026-11-25）
+
+- **本轮开发 PR，不能将代码提交代替 CI/真实 GUI**：用户可以创建、编辑、停用虚拟奖励，按本机已完成专注获得的总积分减去历史兑换计算可用余额，显式确认后消耗余额。等级/徽章仅是基于累计已赚积分的非货币称号。
+- 主 SQLite v11 采用事务防双花，兑付请求 UUID 幂等、重复 ID 不能用于不同奖励；历史凭据快照保存原名称及花费，后续编辑不改历史。Electron Main 的备份为未加密 WAL-aware v10→11 迁移前备份，需用户保护。
+- **不包含**：现实奖励购买/发放、反作弊、不受用户控制的积分凭证、网站/程序限制或安全退出。参见 [49](49_ALPHA_FOC_006_VIRTUAL_REWARDS.md)，Windows/macOS GUI 与旧库恢复待手工验收。
+
+### ALPHA-FOC-005 本机专注分析趋势（2026-11-25）
+
+- **代码开发，验收独立记录**：按本机 IANA 时区归属结束日期，聚合最近 7 / 之前 7 / 最近 30 天的专注有效分钟、完成场次与积分，连续完成天数及窗口内最佳连续天数，显示可读条形与逐日表。
+- Main 只读查询完整的有限 SQLite 时间窗口，而非渲染层最近 500 条；输入只有严格校验的时区名；跨午夜、夏令时、估算旧数据与大于 500 条记录有专门回归。见 [48](48_ALPHA_FOC_005_FOCUS_INSIGHTS.md)。
+- **不包括**：真实限制程序、强制停用系统资源、防作弊认证或积分兑换。Windows/macOS GUI 可读性、真实时区切换和连续天数需人工验收。
+
+### ALPHA-KB-007 批量导入、已授权来源检查与确认刷新（2026-11-25）
+
+- **代码状态：本轮开发 PR，CI 和 GUI 结果独立记录**。保留旧单文件导入，新增原生多选上限 20 的逐文件安全导入/失败隔离；只读审计仅接受用户已授权导入的 1–20 个 UUID；刷新必须明确确认并复查 SHA-256、SQLite 修订号、来源格式/规范化路径，不接受 Renderer 任意磁盘路径。
+- 按新原文更新时旧卡片/图谱引用标记待核对，FTS 与本地向量失效重建采用现有机制。丢失、异常或检查后再次变化的来源保留旧快照，不静默覆盖/删除。详见 [47](47_ALPHA_KB_007_SOURCE_LIFECYCLE.md)。
+- **待真实验收**：Windows/macOS 原生多选、中文文件名、PDF 提取、安全权限、批量失败/刷新竞争与旧文档重建；不以 CI 代替。
+
+### ALPHA-KB-006 复习卡编辑与人工引用核对（2026-11-25）
+
+- **代码：开发 PR，自动化/真机结果不能预判**。本地知识库 SQLite v6 新增证据历史表；卡片问答 CAS 编辑不影响历史评分及下次复习；重新导入后的旧证据必须由用户阅览新片段并明确确认才能解除需核对标记；Main 同时阻止未核对旧证据继续评分。
+- UI 在今日与以后复习列表都可编辑、核对、查看旧版本摘录；独立类型化 IPC 不允许任意文件路径或无确认的改写。详见 [46](46_ALPHA_KB_006_CARD_REVIEW.md)。
+- **待真实验收**：Windows/macOS GUI 对比旧、新原文/PDF 页码，旧用户 v5 WAL 在线备份与升级、数据保护、源资料被删及复习跨重启。单测/CI 不能替代用户手动确认。
 
 ### ALPHA-SYNC-001/002/003 同步优先队列（2026-11-24，持续实施）
 
@@ -135,8 +181,10 @@ ALPHA-UX-001 的 [PR #26](https://github.com/yanpr1332/Agent-to-Entrepreneurship
 - **002G：PR #43 已合并，真实云端/跨设备验收未做**。任务库 v10 持久拉取页检查点，在两库/冲突记录处理中断时下次手动同步先重放并原子推进 Cursor；数据损坏或账号/设备不符时失败关闭，恢复当轮先不上传本地 Outbox。仍无跨库全局事务或损坏 Cursor 自动重建。详见 [37](37_ALPHA_SYNC_002G_CRASH_SAFE_PULL.md)。
 - **002H：PR #44 已合并，隔离项目 RPC 未部署，真实验收未做**。当前账号只读设备状态/Cursor 查询，损坏本地状态/待恢复 Pull 检查点先阻断；精确 operationId + 完整请求匹配的云端回执查验，仅已接受项目本地 ACK，未知/冲突/不匹配不清空；额外后端 SQL 需明确授权人工部署。无自动 Cursor 重建/数据回写。详见 [38](38_ALPHA_SYNC_002H_RECOVERY_DIAGNOSTICS.md)。
 - **003A：PR #45 已合并（真实 Supabase 未验收）**。Main 用户 JWT WebSocket 仅推送消息/任务刷新提示；重新成员验证、REST/RLS 每 10/30 秒补拉最新 100 条、切换 workspace 防交叉、撤权时清空共享 UI；publication SQL 未部署，持久游标/历史窗口外补拉和五账号联机仍阻塞。详见 [39](39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
-- **Embedding：未开发**。ALPHA-KB-005 继续保留，待同步核心门槛后先做离线 PoC；不将 PR #32 的 AI 单段解释误算为本地 embedding。
-- **003B：开发中（真实 Supabase 未部署/未验收）**。新增事务提交顺序的 workspace 日志、历史既有行回填、消息/任务变更及删除墓碑、严格协议 Cursor 校验、独立 owner+project SQLite 原子补拉及本机历史分页。每轮最多 20×100 条；缺新 RPC（404）退回 003A 窗口。新增 SQLite **明文缓存敏感团队内容**，须评估磁盘留存与撤权清理；SQL 与 RLS 真机正反向尚无证据。详见 [40](40_ALPHA_SYNC_003B_DURABLE_HISTORY.md)。
+- **Embedding：005B 自备静态词向量模型链路开发中**。在 005A 的 SQLite/RRF 基础上新增本地 .vec 真实向量文件导入及 Worker CPU 聚合、索引启停、重启/卸载；**未实现 E5/BGE ONNX Transformer、自动下载、真实多语准确率基准**。不把 PR #32 的可选 AI 单段解释冒充本地模型。
+- **003B：PR #46 已合并（真实 Supabase 未部署/未验收）**。新增事务提交顺序的 workspace 日志、历史既有行回填、消息/任务变更及删除墓碑、严格协议 Cursor 校验、独立 owner+project SQLite 原子补拉及本机历史分页。每轮最多 20×100 条；缺新 RPC（404）退回 003A 窗口。新增 SQLite **明文缓存敏感团队内容**，须评估磁盘留存与撤权清理；SQL 与 RLS 真机正反向尚无证据。详见 [40](40_ALPHA_SYNC_003B_DURABLE_HISTORY.md)。
+- **003C：PR #49 已合并（未部署、未做真实五账号验收）**。Owner 显式检查点和服务端有限日志裁剪、成员鉴权分页 RPC、过期 Cursor 严格协议、本机 SQLite v2 暂存与全量原子替换、跨重启续传及撤权删除正式/暂存缓存；没有自动压缩或生产保留策略，明文本机文件不保证安全擦除。详见 [41](41_ALPHA_SYNC_003C_CHECKPOINT_RECOVERY.md)。
+- **003D：独立开发 PR（经用户允许与 PR #48 分开并行；真实 OS Keychain/DPAPI 未验收）**。团队历史 SQLite v3 的正式 JSON/暂存 checkpoint 由 Electron safeStorage 加密；旧 v1/v2 原文事务升级；账号退出/切换与二次确认清理当前云账号的团队缓存并作最佳努力 WAL 截断。旧明文库、迁移备份、旧 WAL/磁盘页及文件系统快照仍可能保存原文，**不构成物理安全擦除**。详见 [42](42_ALPHA_SYNC_003D_LOCAL_HISTORY_PRIVACY.md)。
 - 2026-11-25 内部 Alpha 以真实授权测试账号、RLS 反向测试、最小跨设备增量场景及已知风险记录为条件性目标；未验证项应明确阻塞，不能冒充完成。详见 [27 同步优先实施计划](27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)。
 
 ## 4. 未验证项清单（按风险排序）

@@ -60,6 +60,7 @@ export async function backupBeforeMigration(
   if(![
     "study-anchor-tasks.sqlite","study-anchor-knowledge.sqlite",
     "study-anchor-calendar.sqlite","study-anchor-planning.sqlite",
+    "study-anchor-team-history.sqlite",
     "ate-local.sqlite","ate-knowledge.sqlite","ate-fixed-calendar.sqlite","ate-plans.sqlite",
   ].includes(filename))
     throw Error("Unapproved migration backup source");

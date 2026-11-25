@@ -1,5 +1,6 @@
 import { SJTU_IMAP_PORT, SJTU_MAIL_HOST, type CampusMailCredentials, type MailEnvelope } from "../../shared/mail-model";
 import { connectMailTls, type MailWire, type MailWireFactory } from "./mail-wire";
+import {extractApprovedMailText} from "./mail-body-text";
 
 const MAX_MESSAGES_PER_SYNC = 50;
 const MAX_SEARCH_IDS = 100_000;
@@ -38,7 +39,8 @@ export function decodeMailHeader(value: string): string {
 
 export function parseMailHeaderLiteral(raw: Buffer, uid: number, uidValidity: number): MailEnvelope {
   // Headers are capped before parsing; never render HTML from untrusted mail.
-  const unfolded = raw.toString("latin1").replace(/\r?\n[ \t]+/g, " ");
+  const headerSection=raw.toString("latin1").split(/\r?\n\r?\n/,1)[0];
+  const unfolded = headerSection.replace(/\r?\n[ \t]+/g, " ");
   const fields = new Map<string, string>();
   for (const line of unfolded.split(/\r?\n/)) {
     const match = /^([a-z0-9-]+):\s*(.*)$/i.exec(line);
@@ -83,6 +85,54 @@ export class ImapInboxReader {
       lines.push(line);
     }
     throw new Error("IMAP returned too many response lines");
+  }
+
+
+  /** On-demand IMAP read-only fetch of one explicitly approved message.
+   * The body is returned to the Main coordinator, never stored in mail.sqlite. */
+  async readBody(credentials:CampusMailCredentials,uid:number,expectedValidity:number):
+    Promise<{envelope:MailEnvelope;body:string}>{
+    if(!Number.isSafeInteger(uid)||uid<1||
+       !Number.isSafeInteger(expectedValidity)||expectedValidity<1)
+      throw Error("Invalid approved IMAP message identity");
+    const wire=await this.wireFactory(this.host,this.port);
+    let n=0;const tag=()=> "A"+String(++n).padStart(4,"0");
+    try{
+      const hello=await wire.readLine();
+      if(!/^\* (OK|PREAUTH)\b/i.test(hello))
+        throw Error("IMAP greeting was not accepted");
+      if(!/^\* PREAUTH\b/i.test(hello))
+        await this.tagged(wire,tag(),
+          "LOGIN "+quoted(credentials.username)+" "+quoted(credentials.password));
+      const examine=await this.tagged(wire,tag(),'EXAMINE "INBOX"');
+      const validity=Number(examine.map(x=>/\[UIDVALIDITY\s+(\d+)\]/i.exec(x))
+        .find(Boolean)?.[1]);
+      if(validity!==expectedValidity)
+        throw Error("IMAP UIDVALIDITY changed; authorize the mail again");
+      const fetchTag=tag();
+      await wire.write(fetchTag+" UID FETCH "+uid+" (UID BODY.PEEK[]<0.65536>)\r\n");
+      let result:{envelope:MailEnvelope;body:string}|null=null;
+      for(let i=0;i<24;i++){
+        const line=await wire.readLine();
+        if(line.startsWith(fetchTag+" ")){
+          if(!new RegExp("^"+fetchTag+" OK(?:\\s|$)","i").test(line))
+            throw Error("IMAP body fetch failed");
+          if(!result)throw Error("Selected mail body no longer available");
+          return result;
+        }
+        const match=/^\* \d+ FETCH \(UID (\d+) BODY\[\](?:<0>)? \{(\d+)\}$/i.exec(line);
+        if(!match)continue;
+        if(Number(match[1])!==uid||result)
+          throw Error("IMAP body response does not match approved UID");
+        const size=Number(match[2]);
+        if(!Number.isSafeInteger(size)||size<1||size>65536)
+          throw Error("Approved mail body exceeded 64 KiB read cap");
+        const bytes=await wire.readBytes(size);
+        const envelope=parseMailHeaderLiteral(bytes,uid,expectedValidity);
+        result={envelope,body:extractApprovedMailText(bytes)};
+      }
+      throw Error("IMAP body fetch exceeded response safety limits");
+    }finally{wire.close();}
   }
 
   async readRecent(credentials: CampusMailCredentials): Promise<{uidValidity:number;messages:MailEnvelope[]}> {

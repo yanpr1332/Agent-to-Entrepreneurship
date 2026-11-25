@@ -23,7 +23,7 @@ describe("encrypted OpenAI provider configuration",()=>{
     const {file,vault}=fixture();
     await vault.save(config);
     expect(readFileSync(file,"utf8")).not.toContain(config.apiKey);
-    expect(await vault.load()).toEqual(config);
+    expect(await vault.load()).toMatchObject({...config,provider:"openai",endpoint:null});
     await vault.clear();
     expect(await vault.load()).toBeNull();
   });

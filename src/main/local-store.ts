@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync, backup } from "node:sqlite";
+import {buildFocusInsights,requireFocusTimeZone,type FocusInsightRow}
+  from "./focus-insights";
+import {parseRewardCreate,parseRewardEdit,parseRewardRedeem,virtualFocusLevel}
+  from "./focus-rewards";
 import type { CanvasAssignment, CanvasImportResult, CanvasSyncResult } from "../shared/canvas-model";
 import type { MailCandidateAction, MailCandidateChoiceResult, MailCandidateDecision } from "../shared/mail-candidates";
 import { suggestedTaskTitle } from "../shared/mail-candidates";
@@ -14,7 +18,9 @@ import type {
 } from "../shared/personal-sync-contract";
 import {
   parseCreateTask, parseFocusCompletion, parseFocusTitleUpdate, parseTaskId, parseUpdateTask,
-  type FocusSession, type FocusSummary, type LocalTask, type TaskPriority,
+  type FocusSession, type FocusSummary, type FocusInsights,
+  type FocusReward, type FocusRewardOverview,type FocusRewardRedemption,
+  type LocalTask, type TaskPriority,
 } from "../shared/local-model";
 
 interface TaskRow {
@@ -110,8 +116,8 @@ export class LocalStore {
 
   private migrate(): void {
     const version = (this.db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
-    if (version > 10) throw new Error("Database created by a newer application; refusing to downgrade");
-    if (version === 10) return;
+    if (version > 11) throw new Error("Database created by a newer application; refusing to downgrade");
+    if (version === 11) return;
 
     this.db.exec("BEGIN IMMEDIATE");
     try {
@@ -307,7 +313,29 @@ export class LocalStore {
           created_at TEXT NOT NULL
         );`);
       }
-      this.db.exec("PRAGMA user_version = 10");
+      if(version<=10){
+        this.db.exec(`
+          CREATE TABLE focus_rewards (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 100),
+            description TEXT NOT NULL CHECK(length(description)<=500),
+            cost INTEGER NOT NULL CHECK(cost BETWEEN 1 AND 1000000),
+            active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          );
+          CREATE TABLE focus_reward_redemptions (
+            id TEXT PRIMARY KEY,
+            reward_id TEXT NOT NULL REFERENCES focus_rewards(id) ON DELETE RESTRICT,
+            reward_title TEXT NOT NULL,
+            cost INTEGER NOT NULL CHECK(cost BETWEEN 1 AND 1000000),
+            redeemed_at TEXT NOT NULL
+          );
+          CREATE INDEX idx_focus_redemptions_time
+            ON focus_reward_redemptions(redeemed_at DESC,id DESC);
+        `);
+      }
+      this.db.exec("PRAGMA user_version = 11");
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -1259,7 +1287,14 @@ export class LocalStore {
    * persist its idempotency record in one SQLite transaction. Mail Date is
    * send time, not a deadline, so the resulting task has no due date.
    */
-  reviewMailCandidate(record: MailRecord, action: MailCandidateAction): MailCandidateChoiceResult {
+  reviewMailCandidate(record: MailRecord, action: MailCandidateAction,
+    aiDraft?:{title:string;dueDate:string|null}): MailCandidateChoiceResult {
+    // Only Main-side reviewed AI coordinator can supply an optional draft.
+    // Validate again here before opening SQLite's write transaction.
+    const reviewed=aiDraft===undefined?null:parseCreateTask({
+      title:aiDraft.title,dueDate:aiDraft.dueDate,
+    });
+    if(reviewed&&action!=="accept")throw Error("AI mail task requires accept");
     if (!record.account.endsWith("@sjtu.edu.cn") ||
         !Number.isSafeInteger(record.uid) || record.uid < 1 ||
         !Number.isSafeInteger(record.uidValidity) || record.uidValidity < 1 ||
@@ -1282,8 +1317,9 @@ export class LocalStore {
           const now = new Date().toISOString();
           this.db.prepare("INSERT INTO tasks(" +
             "id,title,description,due_date,priority,completed,created_at,updated_at) " +
-            "VALUES(?,?,?,NULL,'normal',0,?,?)")
-            .run(id,suggestedTaskTitle(record.subject),"",now,now);
+            "VALUES(?,?,?,?,'normal',0,?,?)")
+            .run(id,reviewed?.title??suggestedTaskTitle(record.subject),"",
+              reviewed?.dueDate??null,now,now);
           this.db.prepare("INSERT INTO mail_candidate_reviews(" +
             "account,uid_validity,uid,decision,task_id,decided_at) " +
             "VALUES(?,?,?,'accepted',?,?)").run(...args,id,now);
@@ -1512,6 +1548,118 @@ export class LocalStore {
     const row = this.db.prepare("SELECT * FROM focus_sessions WHERE id = ?")
       .get(update.id) as unknown as FocusRow;
     return focusFromRow(row);
+  }
+
+  /** Aggregate all sessions from the recent local window; the UI's list
+   * of 500 sessions is deliberately NOT the source for statistics. */
+  focusInsights(zone:unknown,now=new Date()):FocusInsights{
+    const timeZone=requireFocusTimeZone(zone);
+    if(!Number.isFinite(now.getTime()))throw Error("Invalid statistics clock");
+    // UTC window safely covers the last 30 local dates for all IANA zones.
+    const from=new Date(now.getTime()-32*86_400_000).toISOString();
+    const rows=this.db.prepare(
+      "SELECT ended_at,elapsed_seconds,completed,points,time_source "+
+      "FROM focus_sessions WHERE ended_at >= ? AND ended_at <= ? "+
+      "ORDER BY ended_at ASC LIMIT 20001"
+    ).all(from,now.toISOString()) as unknown as FocusInsightRow[];
+    if(rows.length>20000)
+      throw Error("Too many recent focus sessions for bounded statistics");
+    return buildFocusInsights(rows,timeZone,now);
+  }
+
+  /** True accounting is from the full earned session ledger minus every
+   * redemption, not the recent 500 UI rows or a client-supplied balance. */
+  private focusRewardBalance():{earned:number;spent:number;available:number}{
+    const earned=Number((this.db.prepare(
+      "SELECT COALESCE(SUM(points),0) AS total FROM focus_sessions"
+    ).get() as {total:number}).total);
+    const spent=Number((this.db.prepare(
+      "SELECT COALESCE(SUM(cost),0) AS total FROM focus_reward_redemptions"
+    ).get() as {total:number}).total);
+    if(!Number.isSafeInteger(earned)||!Number.isSafeInteger(spent)||
+      earned<0||spent<0||spent>earned)
+      throw Error("Corrupt local virtual reward balance");
+    return {earned,spent,available:earned-spent};
+  }
+  focusRewards():FocusRewardOverview{
+    const balance=this.focusRewardBalance();
+    const rewards=this.db.prepare(
+      "SELECT * FROM focus_rewards ORDER BY active DESC,created_at DESC,id DESC LIMIT 100"
+    ).all() as Array<{id:string;title:string;description:string;cost:number;
+      active:number;created_at:string;updated_at:string}>;
+    const history=this.db.prepare(
+      "SELECT * FROM focus_reward_redemptions ORDER BY redeemed_at DESC,id DESC LIMIT 100"
+    ).all() as Array<{id:string;reward_id:string;reward_title:string;cost:number;redeemed_at:string}>;
+    return {...balance,...virtualFocusLevel(balance.earned),
+      rewards:rewards.map(x=>({id:x.id,title:x.title,description:x.description,
+        cost:x.cost,active:x.active===1,createdAt:x.created_at,updatedAt:x.updated_at})),
+      recentRedemptions:history.map(x=>({id:x.id,rewardId:x.reward_id,
+        rewardTitle:x.reward_title,cost:x.cost,redeemedAt:x.redeemed_at}))};
+  }
+  createFocusReward(input:unknown,now=new Date()):FocusReward{
+    const item=parseRewardCreate(input);
+    if(!Number.isFinite(now.getTime()))throw Error("Invalid reward clock");
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const count=(this.db.prepare("SELECT COUNT(*) AS total FROM focus_rewards")
+        .get() as {total:number}).total;
+      if(count>=100)throw Error("At most 100 local rewards can be created");
+      const id=randomUUID(),stamp=now.toISOString();
+      this.db.prepare("INSERT INTO focus_rewards "+
+        "(id,title,description,cost,active,created_at,updated_at) VALUES(?,?,?,?,1,?,?)"
+      ).run(id,item.title,item.description,item.cost,stamp,stamp);
+      this.db.exec("COMMIT");
+      return {id,...item,active:true,createdAt:stamp,updatedAt:stamp};
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
+  }
+  editFocusReward(input:unknown,now=new Date()):FocusReward{
+    const item=parseRewardEdit(input);
+    if(!Number.isFinite(now.getTime()))throw Error("Invalid reward clock");
+    const stamp=new Date(Math.max(now.getTime(),
+      Date.parse(item.expectedUpdatedAt)+1)).toISOString();
+    const result=this.db.prepare(
+      "UPDATE focus_rewards SET title=?,description=?,cost=?,active=?,updated_at=? "+
+      "WHERE id=? AND updated_at=?"
+    ).run(item.title,item.description,item.cost,item.active?1:0,
+      stamp,item.id,item.expectedUpdatedAt);
+    if(Number(result.changes)!==1)
+      throw Error("Reward changed or disappeared; reload before editing");
+    return {...item,createdAt:(this.db.prepare(
+      "SELECT created_at FROM focus_rewards WHERE id=?"
+    ).get(item.id) as {created_at:string}).created_at,updatedAt:stamp};
+  }
+  /** Application-level append-only spending, serialized with BEGIN IMMEDIATE.
+   * Identical retries return the original receipt; mismatched keys fail. */
+  redeemFocusReward(input:unknown,now=new Date()):FocusRewardRedemption{
+    const item=parseRewardRedeem(input);
+    if(!Number.isFinite(now.getTime()))throw Error("Invalid reward clock");
+    this.db.exec("BEGIN IMMEDIATE");
+    try{
+      const found=this.db.prepare(
+        "SELECT * FROM focus_reward_redemptions WHERE id=?"
+      ).get(item.redemptionId) as {reward_id:string;reward_title:string;cost:number;
+        redeemed_at:string}|undefined;
+      if(found){
+        if(found.reward_id!==item.rewardId)
+          throw Error("Redemption idempotency key belongs to another reward");
+        this.db.exec("COMMIT");
+        return {id:item.redemptionId,rewardId:found.reward_id,
+          rewardTitle:found.reward_title,cost:found.cost,redeemedAt:found.redeemed_at};
+      }
+      const reward=this.db.prepare(
+        "SELECT title,cost,active FROM focus_rewards WHERE id=?"
+      ).get(item.rewardId) as {title:string;cost:number;active:number}|undefined;
+      if(!reward||reward.active!==1)throw Error("Reward is unavailable");
+      if(this.focusRewardBalance().available<reward.cost)
+        throw Error("Insufficient earned focus points for reward");
+      const redeemedAt=now.toISOString();
+      this.db.prepare("INSERT INTO focus_reward_redemptions "+
+        "(id,reward_id,reward_title,cost,redeemed_at) VALUES(?,?,?,?,?)"
+      ).run(item.redemptionId,item.rewardId,reward.title,reward.cost,redeemedAt);
+      this.db.exec("COMMIT");
+      return {id:item.redemptionId,rewardId:item.rewardId,
+        rewardTitle:reward.title,cost:reward.cost,redeemedAt};
+    }catch(error){this.db.exec("ROLLBACK");throw error;}
   }
 
   focusSummary(): FocusSummary {

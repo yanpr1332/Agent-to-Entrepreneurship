@@ -26,17 +26,24 @@
 | CAN-001 / CAN-002 / CAN-004 / CAN-006 / CAN-007 | 已完成（开发者本机 Personal Token 模式） | 无真实 Token 验收 |
 | CAN-003 / CAN-008 | **未实现**（OAuth 多用户、Developer Key 申请） | 阻塞：外部审批 |
 | MAIL-001 ~ MAIL-007 | 已完成（IMAP 邮件头只读、纯文本 SMTP、逐次确认） | 无真实邮箱验收 |
-| MAIL-008 / MAIL-009 / MAIL-010 | 部分（一次性确认防重试；候选为关键词规则而非 AI） | 待真实验收 |
+| MAIL-008 / MAIL-009 / MAIL-010 | 已有一次性确认/关键词规则；ALPHA-CLOSE-01 增加单次用户选定邮件头→真实 AI 请求两步确认→严格 JSON 候选→人工校对后事务性建任务（见 [52](../w5/52_ALPHA_CLOSE_01_MAIL_AI_REVIEW.md)） | 双平台 CI/真实邮箱与 API Key 待分别验收 |
 | KB-001 / KB-002 / KB-003 / KB-004 / KB-005 | 已完成（PDF/MD/TXT、FTS5、节点、人工关系、只读图谱） | 单测通过，待真机 |
-| KB-006 / KB-007 | 部分（复习卡需手工编写；无 AI 生成） | 待真机 |
+| KB-006 / KB-007 | 扩展开发：人工问答编辑、旧证据核对及历史、离线评分已落地；仍无 AI 自动生成 | 单测/CI 与真实 GUI 验收分别核查 |
 | FOC-001 / FOC-002 | 已完成（计时、历史、积分账本） | 单测通过，待真机 |
-| FOC-003 ~ FOC-007 | **未实现**（程序限制、安全退出、兑换奖励、统计趋势） | 未开始 |
+| FOC-005 | 7/30 天本机专注趋势、IANA 时区日期归属、连续完成天数及历史 >500 条校验，见 [48](../w5/48_ALPHA_FOC_005_FOCUS_INSIGHTS.md) | 代码开发，双平台 CI 与真实 UI 分别验收 |
+| FOC-006 | 自定义虚拟奖励、余额核算、幂等兑换与追溯（SQLite v11） | CI/真机独立验收，非真实自动兑换 |
+| FOC-003 / FOC-004 | 代码新增显式前台黑/白名单提醒、全屏保护与独立紧急退出；未具备强制系统级程序/网站阻断 | 真实 Windows/macOS OS 权限、崩溃恢复与安全验证待做，见 [50](../w5/50_ALPHA_FOCUS_SAFETY_NEURAL_EMBEDDING.md) |
+| FOC-007 | 按任务/退出原因的细粒度专注统计仍未完成；已有 FOC-005 近 7/30 天聚合 | 后续 |
 | AI-001 ~ AI-004 | 已完成（自带 Key、两阶段确认、用量上限、结构化规划审核） | 无真实 Key 验收 |
 | TEAM-001 ~ TEAM-007 | 代码完成（Supabase Auth/Workspace/任务/消息/RLS） | 未在真实项目部署验收 |
-| DASH-001 | 部分（真实任务/专注聚合 + 明暗主题） | 待真机 |
-| DASH-002 ~ DASH-008 | **未实现**（布局、预设、搜索、通知、托盘） | 未开始 |
+| DASH-001 | 已具备本机任务/专注与八模块摘要状态；工作台布局另见 [53](../w5/53_ALPHA_CLOSE_02_EIGHT_MODULE_WORKBENCH.md) | 双平台代码 CI 和 GUI 验收独立执行 |
+| DASH-002 ~ DASH-008 | ALPHA-CLOSE-02 增加组件显隐、上下排序、三套布局预设与本机持久化；全局搜索、通知与系统托盘等高级功能**未完成** | 布局真机验收待做；未实现项持续纳入后续 P0 |
 | QA-001 ~ QA-007、REL-001 ~ REL-003 | **未执行**（无安装包、无五人协作验收、无演示脚本） | 未开始 |
 
+
+## V0.1 五人内部 Alpha 收尾执行基线（2026-11-25）
+
+用户确认按照 **4–7 轮大开发/集成** 推进八模块真实闭环、五账号 Supabase 联机、Canvas/交大邮箱真实接入和双平台安装验收。总控表：[51 V0.1 Alpha 收尾计划](../w5/51_V01_FIVE_PERSON_ALPHA_CLOSEOUT.md)；本轮 ALPHA-CLOSE-01 聚焦邮件 AI 明确授权分析、候选人工确认与安全写入任务。外部账号/审批/真机证据缺失不得以 CI 代替。
 
 ## Alpha 本地验收反馈（2026-11-19）
 
@@ -48,8 +55,13 @@
 | ALPHA-TIME-004 | 本机重复课程「仅本次/从本次起/整个系列」批量修改、冲突原子回滚，见 PR #29 | 已提交；待 CI 与 GUI 验收 |
 | ALPHA-KB-003 | 本地 HTML/LaTeX 导入、Markdown/HTML/TeX 受限安全预览、离线容错检索见 PR #31；完整 TeX 与 AI 语义检索未实现 | PR 已合并，GUI 待验收 |
 | ALPHA-KB-004 | 精确/容错混合结果、用户明确授权的 AI 单段原文解释，见 PR #32；全库 embedding/多文档语义检索未实现 | PR #32 已合并；仍待核对最新 CI 与 GUI 验收 |
-| ALPHA-KB-005A/B/C | **后续**精确 + 模糊 + 本地向量语义检索：小型中英 embedding 模型 PoC → 离线增量索引 → 三路融合/跨平台验收；[可行性评估](../w5/26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md) | 后续规划，**未开发**；同步核心门槛之后先做 PoC |
-| ALPHA-SYNC-001/002/003 | **近期优先**：协议/RLS → 个人任务/手动日历增量同步 MVP → 团队 Realtime/多账号联机；见 [27](../w5/27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)、[28](../w5/28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)、[29](../w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30](../w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31](../w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md)、[32](../w5/32_ALPHA_SYNC_002D_PUSH_PULL.md)、[33](../w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md)、[34](../w5/34_ALPHA_SYNC_002E_LEGACY_REVIEW.md) | **001、002A PR #35、002B PR #36、002C PR #37、002D PR #38、002E 冲突裁决 PR #39 已合并；002E 续篇 PR #40 已合并；002F 第一部分 PR #41 已合并；002F 续篇 PR #42 已合并；002G PR #43 已合并；002H PR #44 已合并；003A PR #45 已合并；当前 003B（[40](../w5/40_ALPHA_SYNC_003B_DURABLE_HISTORY.md)）开发按工作空间提交序号的消息/任务日志、已有行回填与删除墓碑、SQLite 原子 Cursor、超过 100 条的历史分页及跨重启恢复；需隔离项目手工部署新迁移；真实五账号/双平台 RLS 验收与本地加密/保留策略仍未完成** |
+| ALPHA-FOC-003/004 + KB-005D | 同一开发 PR：可逆全屏/前台程序提醒、主进程紧急释放 + 真正离线 E5/BGE ONNX CPU 推理适配器（需用户外部 Python 环境和自备权重），详见 [50](../w5/50_ALPHA_FOCUS_SAFETY_NEURAL_EMBEDDING.md) | CI、实际 OS 权限和真实模型质量分别验收，不等于强制阻断或运行时供应链完成 |
+| ALPHA-FOC-006 | 本地可自定义虚拟奖励，已赚-历史消费余额、双窗口事务防双花、重复兑换幂等、奖励快照、SQLite v11 迁移前备份；详见 [49](../w5/49_ALPHA_FOC_006_VIRTUAL_REWARDS.md) | 自动测试、独立 Review 和真实 GUI/升级恢复分别验收；不负责现实奖励 |
+| ALPHA-FOC-005 | Focus 近 7/30 天离线趋势、连续完成天数与真实 SQLite 全窗口聚合，不改变积分规则；详见 [48](../w5/48_ALPHA_FOC_005_FOCUS_INSIGHTS.md) | 自动验证需附最终 Windows/macOS CI；真机趋势面板待用户验收 |
+| ALPHA-KB-007 | 本机资料最多 20 份批量导入、已导入来源只读变更检查与用户选择确认刷新；过期引用回流 KB-006；详见 [47](../w5/47_ALPHA_KB_007_SOURCE_LIFECYCLE.md) | 双平台 CI 与用户原生文件对话框验收分开记录；不等于后台目录监控或 ONNX/E5/BGE |
+| ALPHA-KB-006 | 个人复习卡的人工问答修改、来源版本核对、旧证据历史；SQLite v6 带迁移前备份、过期证据拒绝评分；详见 [46](../w5/46_ALPHA_KB_006_CARD_REVIEW.md) | 一次 PR 集成 Main、Renderer、IPC 及测试；不等于自动 AI 生成、真实双平台 GUI 或迁移恢复演练已通过 |
+| ALPHA-KB-005A/B/C | **后续**精确 + 模糊 + 本地向量语义检索：小型中英 embedding 模型 PoC → 离线增量索引 → 三路融合/跨平台验收；[可行性评估](../w5/26_ALPHA_KB_005_LOCAL_SEMANTIC_SEARCH_FEASIBILITY.md) | 005A PR #51 和 005B PR #52 已合并；当前 005C（[45](../w5/45_ALPHA_KB_005C_INDEX_COVERAGE_EVALUATION.md)）实现 SQLite v5 的词表外原文块可恢复跳过、覆盖率计数、离线人工标注集的本机分页创建/保存，以及实际标签质量/延迟评测。**真正 E5/BGE/ONNX 神经推理与真实多语言基准仍未交付，下一阶段单独验收运行时和模型安全** |
+| ALPHA-SYNC-001/002/003 | **近期优先**：协议/RLS → 个人任务/手动日历增量同步 MVP → 团队 Realtime/多账号联机；见 [27](../w5/27_ALPHA_SYNC_FIRST_IMPLEMENTATION_PLAN.md)、[28](../w5/28_ALPHA_SYNC_001_PROTOCOL_AND_RLS.md)、[29](../w5/29_ALPHA_SYNC_002_LOCAL_OUTBOX.md)、[30](../w5/30_ALPHA_SYNC_002_SERVER_PROTOCOL.md)、[31](../w5/31_ALPHA_SYNC_002C_OWNER_SCOPED_OUTBOX.md)、[32](../w5/32_ALPHA_SYNC_002D_PUSH_PULL.md)、[33](../w5/33_ALPHA_SYNC_002E_CONFLICT_RESOLUTION.md)、[34](../w5/34_ALPHA_SYNC_002E_LEGACY_REVIEW.md) | **001、002A PR #35、002B PR #36、002C PR #37、002D PR #38、002E 冲突裁决 PR #39 已合并；002E 续篇 PR #40 已合并；002F 第一部分 PR #41 已合并；002F 续篇 PR #42 已合并；002G PR #43 已合并；002H PR #44 已合并；003A PR #45 与 003B PR #46 已合并；003C PR #49 已合并；当前 003D（[42](../w5/42_ALPHA_SYNC_003D_LOCAL_HISTORY_PRIVACY.md)）开发团队历史 SQLite v3 OS 加密、旧版明文记录/恢复暂存事务升级、切换账号和退出时清理、用户二次确认本机缓存清理；同时保留旧版加密前备份审查要求。此前 003C 实现 Owner 显式历史检查点与受控裁剪、服务端明确的过期 Cursor、SQLite v2 原子快照暂存/续传和成员复核；三阶段迁移均需隔离项目人工审查，真实五账号/两平台 RLS、敏感缓存加密、安全擦除、自动保留策略仍未完成** |
 | ALPHA-TEAM-004 | 自愿加入的小组积分排名、隐私及反刷分 | 未开发 |
 | ALPHA-APP-005 | libpng 警告来源、安装/备份恢复/安全验收 | 待排查 |
 

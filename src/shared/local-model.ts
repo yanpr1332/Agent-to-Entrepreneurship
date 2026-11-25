@@ -71,6 +71,27 @@ export interface FocusTitleUpdate {
   title: string;
 }
 
+/** Short-lived, explicit focus guard. Never blocks OS recovery or kills apps.
+ * "shield" only controls this application's full-screen window. */
+export type FocusGuardMode="off"|"monitor"|"shield";
+export type FocusGuardListMode="block"|"allow";
+export interface FocusGuardStartInput {
+  sessionId:string;
+  durationSeconds:number;
+  mode:FocusGuardMode;
+  listMode:FocusGuardListMode;
+  appNames:string[];
+}
+export interface FocusGuardStatus {
+  active:boolean;
+  mode:FocusGuardMode;
+  endsAt:string|null;
+  monitor:"idle"|"checking"|"available"|"unavailable";
+  distraction:boolean;
+  foregroundApp:string|null;
+  warning:string|null;
+  safeExitShortcut:string;
+}
 export interface FocusSession {
   id: string;
   title: string;
@@ -84,11 +105,64 @@ export interface FocusSession {
   timeSource: "recorded" | "estimated";
 }
 
+/** Virtual, user-defined rewards: never an actual purchase or entitlement. */
+export interface FocusReward {
+  id:string;
+  title:string;
+  description:string;
+  cost:number;
+  active:boolean;
+  createdAt:string;
+  updatedAt:string;
+}
+export interface FocusRewardCreateInput {
+  title:string;description:string;cost:number;
+}
+export interface FocusRewardEditInput extends FocusRewardCreateInput {
+  id:string;active:boolean;expectedUpdatedAt:string;
+}
+export interface FocusRewardRedeemInput {
+  /** Unique client idempotency key, reused only for a retry of this reward. */
+  redemptionId:string;rewardId:string;
+}
+export interface FocusRewardRedemption {
+  id:string;rewardId:string;
+  rewardTitle:string;cost:number;redeemedAt:string;
+}
+export interface FocusRewardOverview {
+  earned:number;spent:number;available:number;
+  level:number;badge:string;
+  rewards:FocusReward[];
+  recentRedemptions:FocusRewardRedemption[];
+}
+
 export interface FocusSummary {
   sessions: number;
   completedSessions: number;
   totalMinutes: number;
   points: number;
+}
+
+/** A local day is the date when the session ENDED in the selected timezone. */
+export interface FocusInsightsTotals {
+  sessions:number;
+  completedSessions:number;
+  minutes:number;
+  points:number;
+}
+export interface FocusInsightsDay extends FocusInsightsTotals {
+  day:string;recordedSessions:number;estimatedSessions:number;
+}
+export interface FocusInsights {
+  timeZone:string;
+  asOf:string;
+  days:FocusInsightsDay[];
+  last7:FocusInsightsTotals;
+  previous7:FocusInsightsTotals;
+  last30:FocusInsightsTotals;
+  currentStreakDays:number;
+  bestStreakDays:number;
+  estimatedSessions:number;
 }
 
 type UnknownRecord = Record<string, unknown>;

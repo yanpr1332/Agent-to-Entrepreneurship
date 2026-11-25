@@ -197,3 +197,13 @@ Study Anchor 不应像企业管理后台，也不应像过度装饰的 AI 工具
 - `05_W2_ACCEPTANCE.md`：设计原型体验验收。
 
 若视觉建议与上述规范、PRD、架构或安全约束冲突，以现有权威规范为准，并先提出冲突供确认，不通过 UI 设计绕过业务规则。
+
+
+## 2026-11-25 · 与已合并 V0.1 工作台及邮件/AI 集成的视觉兼容说明
+
+- 当前 `main` 的首页主体由 `src/renderer/src/Workbench.tsx` 与作用域样式 `workbench.css` 实现八组件聚合、显隐、排序及三套预设。旧版 `App.tsx` 中仅含今日待办的 `overview-workspace` 参考画面**不应覆盖这一真实实现**。本 PR 合并时保留新版 `App.tsx`，由通用设计 token 和组件样式与新工作台自然融合。
+- `AIWorkspace.tsx` 现支持 OpenAI、Anthropic、Gemini、DeepSeek 与用户指定的兼容服务商；**不能**把发送目标、Key 来源、模型或计费告知回退为旧版只支持 OpenAI 的文字。视觉只添加阶段标签、布局类名及状态辅助说明。
+- `CampusMail.tsx` 已支持用户逐封授权、纯文本正文预览与独立 AI 调用确认；邮件视图的可见确认标签不代表自动读取正文、自动发信或上传附件。
+- `CloudWorkspace.tsx` 必须同时保留新版授权撤销/本机历史清理、加密缓存、Cursor 过期重建及补拉状态。视觉分栏不许恢复原来的“明文缓存”错误文案，也不能删掉安全清理按钮。
+- 目前 `src/renderer/src/styles.css` 的 Calm Productivity 全局 token 是审美基线；`workbench.css` 继续作为工作台作用域样式，不迁移真实数据逻辑或多模块状态到演示 UI。两套 CSS 均需在 Windows/macOS 真实窗口复测浅/深主题、布局操作和键盘焦点。
+- 本次只对旧版可兼容的 UI 调整做合并，不删减日历任务、同步、知识、团队、Canvas 或邮件的新功能。合并成功与 CI 通过不等于视觉 GUI 的人工验收。

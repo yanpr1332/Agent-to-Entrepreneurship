@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import type { FocusSession, FocusSummary, LocalTask, TaskPriority } from "../../shared/local-model";
+import type { FocusSession, FocusSummary, LocalTask, TaskPriority,
+  FocusGuardMode,FocusGuardListMode,FocusGuardStatus } from "../../shared/local-model";
 import { formatCalendarSelection, formatDueDate, localDateKey, monthCells } from "./calendar";
 import { parseFocusMinutes } from "./focus-duration";
 import { focusCalendarSegments } from "./focus-calendar";
+import FocusInsightsPanel from "./FocusInsightsPanel";
+import FocusRewardsPanel from "./FocusRewardsPanel";
 import CalendarAgenda from "./CalendarAgenda";
 import { calendarWeekDays,shiftCalendarView,type CalendarView } from "./calendar-agenda";
 import CanvasConnector from "./CanvasConnector";
@@ -13,6 +16,7 @@ import StudyPlanner from "./StudyPlanner";
 import FixedCalendarPanel from "./FixedCalendarPanel";
 import TaskSchedulePanel from "./TaskSchedulePanel";
 import type { CalendarDisplayEvent } from "../../shared/canvas-calendar-model";
+import Workbench from "./Workbench";
 import AIWorkspace from "./AIWorkspace";
 import { minuteString, type PlanBlock } from "../../shared/planning-model";
 
@@ -49,6 +53,11 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
   const [remaining, setRemaining] = useState(25 * 60);
   const [phase, setPhase] = useState<"idle" | "running" | "paused" | "finished">("idle");
   const [saving, setSaving] = useState(false);
+  const [starting,setStarting]=useState(false);
+  const [guardMode,setGuardMode]=useState<FocusGuardMode>("off");
+  const [listMode,setListMode]=useState<FocusGuardListMode>("block");
+  const [appNames,setAppNames]=useState("");
+  const [guardStatus,setGuardStatus]=useState<FocusGuardStatus|null>(null);
   const [error, setError] = useState("");
   const deadline = useRef(0);
   const sessionId = useRef<string | null>(null);
@@ -64,6 +73,8 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
         // Record the countdown endpoint instead of the eventual save-click time.
         finishedAtRef.current ??= new Date(deadline.current).toISOString();
         setPhase("finished");
+        void window.desktop.focus.guardStop().then(setGuardStatus)
+          .catch(()=>setGuardStatus(null));
       }
     };
     tick();
@@ -72,6 +83,8 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
   }, [phase]);
 
   function reset(): void {
+    void window.desktop.focus.guardStop().then(setGuardStatus)
+      .catch(()=>setGuardStatus(null));
     setPhase("idle");
     setRemaining(plannedMinutes * 60);
     sessionId.current = null;
@@ -79,7 +92,7 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
     finishedAtRef.current = null;
   }
 
-  function begin(): void {
+  async function begin(): Promise<void> {
     if (phase === "idle" && focusTitle.trim().length === 0) {
       setError("请输入专注标题");
       return;
@@ -89,25 +102,42 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
       return;
     }
     setError("");
-    if (phase === "idle") {
-      sessionId.current = crypto.randomUUID();
-      startedAtRef.current = new Date().toISOString();
-      finishedAtRef.current = null;
-      setRemaining(plannedMinutes * 60);
-      deadline.current = Date.now() + plannedMinutes * 60_000;
-    } else if (phase === "paused") {
-      deadline.current = Date.now() + remaining * 1000;
-    }
-    setPhase("running");
+    setStarting(true);
+    try {
+      const id=sessionId.current??crypto.randomUUID();
+      if(guardMode!=="off"){
+        const names=appNames.split(/[,\n]/).map(x=>x.trim()).filter(Boolean);
+        const status=await window.desktop.focus.guardStart({
+          sessionId:id,durationSeconds:phase==="idle"?plannedMinutes*60:remaining,
+          mode:guardMode,listMode,appNames:names,
+        });
+        setGuardStatus(status);
+      }
+      if (phase === "idle") {
+        sessionId.current=id;
+        startedAtRef.current=new Date().toISOString();
+        finishedAtRef.current=null;
+        setRemaining(plannedMinutes*60);
+        deadline.current=Date.now()+plannedMinutes*60_000;
+      }else if(phase==="paused"){
+        deadline.current=Date.now()+remaining*1000;
+      }
+      setPhase("running");
+    }catch(e){setError(errorMessage(e));}
+    finally{setStarting(false);}
   }
 
   function pause(): void {
+    void window.desktop.focus.guardStop().then(setGuardStatus)
+      .catch(()=>setGuardStatus(null));
     setRemaining(Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000)));
     setPhase("paused");
   }
 
   async function finish(): Promise<void> {
     if (!sessionId.current || saving) return;
+    void window.desktop.focus.guardStop().then(setGuardStatus)
+      .catch(()=>setGuardStatus(null));
     const left = phase === "running"
       ? Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000))
       : remaining;
@@ -133,6 +163,28 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
     }
   }
 
+  useEffect(()=>{
+    if(phase==="idle"||guardMode==="off")return;
+    let active=true;
+    const check=()=>{
+      void window.desktop.focus.guardStatus().then(status=>{
+        if(!active)return;
+        setGuardStatus(status);
+        if(phase==="running"&&!status.active&&
+          deadline.current>Date.now()&&remaining>0){
+          // External emergency shortcut or timeout: never silently claim a
+          // still-enforced protected session.
+          setRemaining(Math.max(0,Math.ceil((deadline.current-Date.now())/1000)));
+          setPhase("paused");
+          setError("专注窗口保护已退出，计时已暂停，可结束并记录。");
+        }
+      }).catch(()=>{if(active)setGuardStatus(null);});
+    };
+    check();
+    const interval=setInterval(check,2500);
+    return ()=>{active=false;clearInterval(interval);};
+  },[phase,guardMode]);
+
   const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
   const ss = String(remaining % 60).padStart(2, "0");
 
@@ -148,6 +200,48 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
           placeholder="例如：复习线性代数" />
       </label>
       <div className="timer-display" role="timer" aria-live="off">{mm}:{ss}</div>
+      <fieldset disabled={phase!=="idle"||saving||starting}>
+        <legend>自愿专注保护（默认关闭）</legend>
+        <label>模式
+          <select value={guardMode} onChange={e=>setGuardMode(e.target.value as FocusGuardMode)}>
+            <option value="off">不限制（仅计时）</option>
+            <option value="monitor">前台应用名单提醒（不拦截）</option>
+            <option value="shield">全屏专注窗口 + 前台应用提醒（可紧急退出）</option>
+          </select>
+        </label>
+        {guardMode!=="off"&&<>
+          <label>名单规则
+            <select value={listMode}
+              onChange={e=>setListMode(e.target.value as FocusGuardListMode)}>
+              <option value="block">黑名单：提醒所列应用</option>
+              <option value="allow">白名单：提醒非所列应用</option>
+            </select>
+          </label>
+          <label>应用进程名（每行或逗号分隔，最多 20 项）
+            <textarea rows={2} maxLength={1200} value={appNames}
+              onChange={e=>setAppNames(e.target.value)}
+              placeholder="例如 Safari, Chrome, Discord"/>
+          </label>
+        </>}
+      </fieldset>
+      {guardMode!=="off"&&<p className="privacy-note">
+        这是可随时退出的本机辅助保护，不会结束别的程序或阻止系统设置/恢复。
+        全屏模式不是不可绕过的系统封锁。紧急退出：Ctrl/Cmd+Shift+F12，或下方按钮。
+        在 Windows/macOS 缺少相关授权时，前台检测会明确降级为不可用。
+      </p>}
+      {guardStatus?.active&&<div role="status" className="connector-notice">
+        专注保护已启动 · 前台检测：{guardStatus.monitor==="available"?"可用":
+        guardStatus.monitor==="unavailable"?"不可用":"检测中"}。
+        {guardStatus.foregroundApp&&<span>当前应用：{guardStatus.foregroundApp}。</span>}
+        {guardStatus.distraction?" 检测到名单偏离。":""}
+        {guardStatus.warning&&<span>{guardStatus.warning}</span>}
+      </div>}
+      {guardStatus?.active&&<button type="button" className="secondary-button"
+        onClick={()=>void window.desktop.focus.guardStop().then(status=>{
+          setGuardStatus(status);
+          if(phase==="running")pause();
+        }).catch(e=>setError(errorMessage(e)))}>
+        紧急解除专注保护</button>}
       <div className="timer-presets">
         {[1, 15, 25, 50].map((minutes) => (
           <button
@@ -172,9 +266,9 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
       </label>
       {configuredMinutes === null && <p className="error-message" role="alert">请输入 1–180 之间的整数分钟数</p>}
       <div className="button-row centered">
-        {phase === "idle" && <button className="primary-button" disabled={configuredMinutes === null || focusTitle.trim().length === 0} onClick={begin}>开始专注</button>}
+        {phase === "idle" && <button className="primary-button" disabled={starting||configuredMinutes === null || focusTitle.trim().length === 0} onClick={()=>void begin()}>开始专注</button>}
         {phase === "running" && <button className="secondary-button" onClick={pause}>暂停</button>}
-        {phase === "paused" && <button className="primary-button" onClick={begin}>继续计时</button>}
+        {phase === "paused" && <button className="primary-button" disabled={starting} onClick={()=>void begin()}>继续计时</button>}
         {phase === "finished" && <span className="success-text">计时完成，可以保存并领取积分</span>}
         {phase !== "idle" && (
           <button className={phase === "finished" ? "primary-button" : "secondary-button"} disabled={saving} onClick={() => void finish()}>
@@ -184,7 +278,7 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
         {phase !== "idle" && <button className="ghost-button" disabled={saving} onClick={reset}>取消本次</button>}
       </div>
       {error && <p className="error-message" role="alert">{error}</p>}
-      <p className="privacy-note">计时、标题和实际起止时间仅保存在本机。暂停时间包含在日历时段中，但不计入有效专注分钟。历史估算时间不自动写入日历。当前不限制其他应用或网站。</p>
+      <p className="privacy-note">计时、标题和实际起止时间仅保存在本机。暂停时间包含在日历时段中，但不计入有效专注分钟。历史估算时间不自动写入日历。提醒和全屏窗口不会拦截其他应用或网站，程序退出后立即解除，不会自动恢复限制。</p>
     </section>
   );
 }
@@ -231,6 +325,7 @@ export default function App() {
   const today = localDateKey(new Date());
   const [page, setPage] = useState<Page>("overview");
   const [runtime, setRuntime] = useState<RuntimeStatus>("checking");
+  const [workbenchRefreshSignal,setWorkbenchRefreshSignal]=useState(0);
   const [version, setVersion] = useState("—");
   const [tasks, setTasks] = useState<LocalTask[]>([]);
   const [sessions, setSessions] = useState<FocusSession[]>([]);
@@ -332,12 +427,14 @@ export default function App() {
   useEffect(() => window.desktop.canvas.onSyncUpdated(() => {
     void refresh().catch(() => {});
     void refreshCalendar().catch(() => {});
+    setWorkbenchRefreshSignal(n=>n+1);
   }), [refresh,refreshCalendar]);
 
   // Accepted mail candidates create ordinary personal tasks in the same local
   // SQLite authority and must refresh the calendar immediately.
   useEffect(() => window.desktop.mail.onSyncUpdated(() => {
     void refresh().catch(() => {});
+    setWorkbenchRefreshSignal(n=>n+1);
   }), [refresh]);
 
   function resetTaskForm(): void {
@@ -444,7 +541,6 @@ export default function App() {
   const expiringSoon = hiddenTasks.filter((task) => task.retentionExpiresAt &&
     Date.parse(task.retentionExpiresAt) - Date.now() <= 30 * 86400000).length;
   const pendingTasks = shownTasks.filter((task) => !task.completed);
-  const todayTasks = pendingTasks.filter((task) => task.dueDate === today);
   const visibleTasks = showHidden ? hiddenTasks : shownTasks.filter((task) =>
     filter === "all" || (filter === "day" && task.dueDate === selectedDate) ||
     (filter === "undated" && task.dueDate === null),
@@ -464,7 +560,6 @@ export default function App() {
   function moveCalendar(direction:-1|1):void{
     selectCalendarDate(shiftCalendarView(selectedDate,calendarView,direction));
   }
-  const nextTasks = pendingTasks.slice(0, 5);
   const selectedModule = menu.find((item) => item.page === page)!;
 
   return (
@@ -503,58 +598,14 @@ export default function App() {
         <div className="content">
           {error && <div className="error-banner" role="alert"><strong>操作未完成：</strong> {error}<button onClick={() => setError("")}>关闭</button></div>}
 
-          {page === "overview" && (
-            <section className="overview-workspace">
-              <div className="overview-intro">
-                <div className="eyebrow">YOUR DAY, YOUR PACE</div>
-                <h1>今天，先做好一件事。</h1>
-                <p>让任务有序，让注意力回到当下。</p>
-                <div className="overview-actions">
-                  <button className="primary-button" onClick={openNewTask}>＋ 添加任务</button>
-                  <button className="secondary-button" onClick={() => setPage("focus")}>◷ 开始专注</button>
-                  <button className="text-button" onClick={() => { setPage("calendar"); setFilter("all"); }}>打开日历 →</button>
-                </div>
-              </div>
-
-              <div className="overview-main-grid">
-                <section className="panel overview-today">
-                  <div className="panel-heading">
-                    <div><div className="eyebrow">TODAY · {today}</div><h2>今日待办</h2></div>
-                    <span className="overview-count">{todayTasks.length} 项</span>
-                  </div>
-                  {todayTasks.length ? <ul className="overview-task-list">{todayTasks.slice(0,6).map(task => (
-                    <li key={task.id}>
-                      <span className="overview-task-priority">{task.priority === "high" ? "!" : "·"}</span>
-                      <div className="overview-task-copy"><strong>{task.title}</strong><small>{task.priority === "high" ? "高优先级" : task.priority === "low" ? "低优先级" : "普通任务"}</small></div>
-                      <button className="small-button" onClick={() => editTask(task)}>查看</button>
-                    </li>
-                  ))}</ul> : <div className="overview-empty"><strong>今天暂时没有安排。</strong><p>可以把想完成的事情记下来，或留一点自由时间。</p><button className="text-button" onClick={openNewTask}>创建第一项任务 →</button></div>}
-                  <div className="overview-task-footer"><button className="text-button" onClick={() => {setPage("calendar");setFilter("day");}}>查看今天日历 →</button></div>
-                </section>
-
-                <aside className="overview-side-column">
-                  <section className="panel overview-focus-card">
-                    <div className="eyebrow">FOCUS, GENTLY</div>
-                    <h2>专注记录</h2>
-                    <div className="overview-focus-number">{summary.totalMinutes}<span>分钟</span></div>
-                    <p>累计专注时间</p>
-                    <div className="overview-focus-meta"><span>{summary.completedSessions} 次完成</span><span>{summary.points} 积分</span></div>
-                    <button className="primary-button full-width" onClick={() => setPage("focus")}>进入专注计时</button>
-                  </section>
-                  <section className="panel overview-next">
-                    <div className="panel-heading"><div><div className="eyebrow">UP NEXT</div><h2>其他待办</h2></div><button className="text-button" onClick={() => {setPage("calendar");setFilter("all");}}>全部 →</button></div>
-                    {nextTasks.length ? <ul className="overview-next-list">{nextTasks.slice(0,4).map(task => <li key={task.id}><span className="task-dot"/><div><strong>{task.title}</strong><small>{formatDueDate(task.dueDate)}</small></div></li>)}</ul> : <p className="empty-state">目前没有其他待办。</p>}
-                  </section>
-                </aside>
-              </div>
-
-              <div className="overview-bottom-strip">
-                <div className="overview-status-dot"><i className={runtime === "connected" ? "online" : runtime === "unavailable" ? "offline" : ""}/></div>
-                <div><strong>{runtime === "connected" ? "本地空间运行正常" : runtime === "checking" ? "正在连接本地空间" : "本地空间暂不可用"}</strong><span>任务与专注记录保存在本机 · {runtime === "connected" ? "SQLite 已连接" : runtime === "checking" ? "检查中" : "连接异常"}</span></div>
-                <button className="text-button" onClick={() => setPage("connectors")}>管理数据接入 →</button>
-              </div>
-            </section>
-          )}
+          {page === "overview" && <Workbench
+            tasks={tasks} summary={summary} plannedBlocks={plannedBlocks}
+            fixedEvents={fixedEvents} runtime={runtime} version={version}
+            refreshSignal={workbenchRefreshSignal} busy={busy}
+            onNavigate={setPage}
+            onEditTask={editTask}
+            onCompleteTask={task=>{void toggleTask(task);}}
+          />}
 
           {page === "calendar" && (
             <>
@@ -688,7 +739,10 @@ export default function App() {
                   )}
                 </div><span>+{session.points}</span>
               </li>)}</ul> : <p className="empty-state">暂无专注记录。</p>}
-            </section></div>
+            </section>
+            <FocusInsightsPanel active={page==="focus"} refreshKey={summary.sessions}/>
+            <FocusRewardsPanel active={page==="focus"} refreshKey={summary.sessions}/>
+            </div>
           </div>
 
           {page === "knowledge" && <KnowledgeBase />}

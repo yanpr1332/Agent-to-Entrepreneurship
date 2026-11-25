@@ -132,7 +132,7 @@ export default function CloudWorkspace() {
       setMessages(snapshot.messages);
       setTasks(snapshot.tasks);
       setHistoryStatus(snapshot.history??null);
-      if((snapshot.history?.applied??0)>0){
+      if(snapshot.history?.rebuilding||(snapshot.history?.applied??0)>0){
         // An immutable journal page may contain tombstones for older items.
         // Drop historical UI pages so deleted records cannot remain visible.
         setOlderMessages([]);setOlderTasks([]);
@@ -252,7 +252,27 @@ export default function CloudWorkspace() {
       setLegacyReview({items:[],taskLimitReached:false,calendarLimitReached:false});
       setLegacySelection(null);setResolutionReview(null);setDeviceReplacement(null);
       setRecoveryHealth(null);setReceiptReconciliation(null);setReceiptReview(null);
-      setNotice("已退出云端账号；个人本地任务与其他连接器不受影响。");
+      setNotice("已退出云端账号，程序会尽力清理当前账号的本机团队历史缓存。个人任务与其他连接器不受影响；旧数据库备份可能仍留存。");
+    });
+  }
+
+  async function eraseTeamHistory():Promise<void>{
+    const confirmed=window.confirm(
+      "清除当前账号在当前云项目下，本设备保存的全部团队消息/任务历史及未完成的快照？"+
+      "这不会删除云端记录，也不会影响本地个人任务和日历。重新进入小组将重新下载数据。"+
+      "旧备份、磁盘历史块等可能仍保留旧内容，不能保证物理安全擦除。"
+    );
+    if(!confirmed)return;
+    await run(async()=>{
+      const result=await window.desktop.cloud.clearTeamHistory("ERASE_CURRENT_TEAM_CACHE");
+      // Prevent an older UI request from reviving just-cleared content.
+      selectedRef.current=null;workspaceFetchSeq.current++;
+      setSelected(null);setMembers([]);setMessages([]);setTasks([]);
+      setOlderMessages([]);setOlderTasks([]);setHistoryStatus(null);
+      setWorkspaceLivePhase("stopped");setInvite("");
+      setNotice("已清除当前账号本机团队历史分区（正式记录及暂存快照），涉及 "+
+        result.workspaces+" 个历史分区。云端资料未删除；需要时重新选择小组补拉。"+
+        (result.checkpointed?"":" 当前磁盘日志未确认完全截断，请检查设备及备份留存。"));
     });
   }
 
@@ -412,7 +432,7 @@ export default function CloudWorkspace() {
   }
 
   async function loadOlder(kind:"message"|"task"):Promise<void>{
-    if(!selected||historyStatus?.mode!=="durable"||historyLoading)return;
+    if(!selected||historyStatus?.mode!=="durable"||historyStatus.rebuilding||historyLoading)return;
     const workspace=selected;
     // A newer RLS catch-up can apply a tombstone while this history page is
     // loading. Never append an older result over that newer verified snapshot.
@@ -473,10 +493,10 @@ export default function CloudWorkspace() {
     });
   }
 
-  const visibleMessages=[...messages,...olderMessages.filter(old=>
+  const visibleMessages=historyStatus?.rebuilding?[]:[...messages,...olderMessages.filter(old=>
     !messages.some(item=>item.id===old.id))].sort((a,b)=>
       b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id));
-  const visibleTasks=[...tasks,...olderTasks.filter(old=>
+  const visibleTasks=historyStatus?.rebuilding?[]:[...tasks,...olderTasks.filter(old=>
     !tasks.some(item=>item.id===old.id))].sort((a,b)=>
       b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id));
   const messagesMore=historyStatus?.mode==="durable"&&
@@ -537,6 +557,8 @@ export default function CloudWorkspace() {
     {status.authenticated && <>
       <div className="cloud-session-row">
         <span>当前登录：{status.email}</span>
+        <button type="button" className="secondary-button" disabled={busy}
+          onClick={()=>void eraseTeamHistory()}>清除此设备的团队历史</button>
         <button className="secondary-button" disabled={busy} onClick={()=>void logout()}>退出云端账号</button>
       </div>
       <div className="cloud-layout">
@@ -582,19 +604,24 @@ export default function CloudWorkspace() {
               <p className="privacy-note" role="status">{liveLabels[workspaceLivePhase]}</p>
               <p className="privacy-note" role="status">
                 {historyStatus?.mode==="durable"
-                  ? "已启用持久补拉 · 当前工作空间变更位点 "+historyStatus.cursor+
-                    (historyStatus.hasMore?" · 历史仍在分批补拉":" · 已追上本次服务端位点")
+                  ? historyStatus.rebuilding
+                    ? "历史 Cursor 已过期：正在分批校验并重建完整快照（旧缓存暂不展示）。"+
+                      " 当前旧位点 "+historyStatus.cursor+"；下一轮将自动续传，重建完成后才会恢复列表。"
+                    : "已启用持久补拉 · 当前工作空间变更位点 "+historyStatus.cursor+
+                      (historyStatus.checkpointCursor?" · 已恢复服务端检查点 "+historyStatus.checkpointCursor:"")+
+                      (historyStatus.hasMore?" · 历史仍在分批补拉":" · 已追上本次服务端位点")
                   : "持久历史暂不可用（服务端未部署或本机缓存不可用）：仅显示服务端最近 100 条窗口。"}
               </p>
               {historyStatus?.mode==="durable"&&<p className="privacy-note">
-                本机已保存本小组已同步的消息与任务历史（SQLite 明文缓存，未额外加密）。
-                使用共享设备时请注意本机磁盘访问权限；退出登录不会自动清空历史文件。
+                本机已保存加密的团队消息/任务正文（依赖操作系统安全存储）。
+                工作空间 ID、时间索引和同步位点等元数据仍可见；升级前的明文数据库、迁移备份、磁盘旧页面和旧 WAL 可能仍保留历史内容。
+                退出账号时会尝试清理当前账号的缓存；需要时可以主动清除此设备的团队历史。
               </p>}
               <ul className="cloud-message-list">{[...visibleMessages].reverse().map(item=><li key={item.id}>
                 <div><strong>{members.find(m=>m.user_id===item.author_id)?.display_name??"成员"}</strong>
                   <small>{timestamp(item.created_at)}</small></div>
                 <p>{item.body}</p></li>)}</ul>
-              {!visibleMessages.length && <p className="empty-state">暂无消息，发送第一条小组消息。</p>}
+              {!visibleMessages.length&&!historyStatus?.rebuilding && <p className="empty-state">暂无消息，发送第一条小组消息。</p>}
               {messagesMore&&<button type="button" className="secondary-button"
                 disabled={busy||historyLoading} onClick={()=>void loadOlder("message")}>
                 {historyLoading?"正在读取历史…":"加载更早消息（每次最多 100 条）"}
@@ -612,7 +639,7 @@ export default function CloudWorkspace() {
                   onChange={()=>void toggleTask(item)} aria-label={`完成共享任务：${item.title}`} />
                 <div><strong className={item.completed?"done":""}>{item.title}</strong>
                   <small>{item.due_date??"未设置截止日期"} · {members.find(m=>m.user_id===item.assigned_to)?.display_name??"未分配"}</small></div>
-              </li>)}</ul> : <p className="empty-state">暂无共享任务；个人日历任务不会自动复制到这里。</p>}
+              </li>)}</ul> : !historyStatus?.rebuilding&&<p className="empty-state">暂无共享任务；个人日历任务不会自动复制到这里。</p>}
               {tasksMore&&<button type="button" className="secondary-button"
                 disabled={busy||historyLoading} onClick={()=>void loadOlder("task")}>
                 {historyLoading?"正在读取历史…":"加载更多历史任务（每次最多 100 条）"}

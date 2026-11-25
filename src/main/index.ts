@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, type IpcMainInvokeEvent } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, globalShortcut, type IpcMainInvokeEvent } from "electron";
 import { join,basename,extname } from "node:path";
 import { configureUserDataOverride } from "./user-data-override";
 import {migrateStudyAnchorProfile} from "./profile-migration";
@@ -6,6 +6,8 @@ import {mkdirSync} from "node:fs";
 import { randomUUID } from "node:crypto";
 import { lstat,readFile,writeFile } from "node:fs/promises";
 import { FixedCalendarStore } from "./fixed-calendar-store";
+import {parseLocalEvaluationLabels,saveLocalEvaluationLabels,
+  assertCurrentKnowledgeEvidence} from "./knowledge-quality-audit";
 import { parseICS,exportICS } from "../shared/ics-calendar";
 import type { ICSPreview,FixedEventDraft } from "../shared/fixed-calendar-model";
 import { pathToFileURL } from "node:url";
@@ -19,6 +21,7 @@ import { CanvasSyncService } from "./connectors/canvas-sync";
 import { SharedCloudClient } from "./cloud/supabase-client";
 import { WorkspaceRealtimeBridge } from "./cloud/workspace-realtime";
 import {WorkspaceHistoryStore} from "./cloud/workspace-history-store";
+import {createTeamHistoryCipher} from "./cloud/workspace-history-crypto";
 import {WorkspaceHistoryService} from "./cloud/workspace-history-service";
 import { PersonalSyncService } from "./personal-sync";
 import {
@@ -32,13 +35,19 @@ import { CampusMailService } from "./connectors/mail-service";
 import { classifyMailSubject, parseMailCandidateChoice } from "../shared/mail-candidates";
 import type { MailCandidate } from "../shared/mail-candidates";
 import { KnowledgeStore } from "./knowledge-store";
+import {KnowledgeOfflineModels} from "./knowledge-offline-models";
+import {FocusGuardController} from "./focus-guard";
+import {getForegroundApplication} from "./focus-foreground";
 import { PlanningStore } from "./planning-store";
 import { readSelectedKnowledgeFile } from "./knowledge-import";
+import {importPickedKnowledgeFiles,auditKnowledgeSources,refreshAuditedKnowledgeSources}
+  from "./knowledge-source-lifecycle";
 import { createLocalBackup, backupBeforeMigration } from "./local-backup";
 import { AIKeyVault } from "./ai/ai-vault";
 import { AIUsageLedger } from "./ai/ai-usage";
 import { AIService } from "./ai/ai-service";
 import { AIPlanningCoordinator } from "./ai/ai-planner";
+import { MailAIReviewCoordinator } from "./ai/mail-ai-coordinator";
 
 /**
  * Local runtime compatibility notice. See docs/w5/16_LOCAL_RUNTIME_TROUBLESHOOTING.md.
@@ -93,8 +102,15 @@ function report(code:DiagnosticCode,operation:"app"|"storage"|"canvas"|"mail"|"a
   diagnostics?.record(code,operation);
 }
 let mainWindow: BrowserWindow | null = null;
+const focusGuard=new FocusGuardController({
+  registerEmergencyShortcut:handler=>
+    globalShortcut.register("CommandOrControl+Shift+F12",handler),
+  unregisterEmergencyShortcut:()=>
+    globalShortcut.unregister("CommandOrControl+Shift+F12"),
+},getForegroundApplication);
 let store: LocalStore | null = null;
 let knowledgeStore: KnowledgeStore | null = null;
+let offlineModels:KnowledgeOfflineModels|null=null;
 let planningStore: PlanningStore | null = null;
 let fixedCalendarStore: FixedCalendarStore | null = null;
 let pendingICS:{id:string;expires:number;filename:string;events:FixedEventDraft[]}|null=null;
@@ -122,11 +138,27 @@ function knowledge(): KnowledgeStore {
   if(!knowledgeStore)throw new Error("Local knowledge database is unavailable");
   return knowledgeStore;
 }
+function localModels():KnowledgeOfflineModels{
+  if(!offlineModels)throw Error("Local embedding models are not initialized");
+  return offlineModels;
+}
 let canvasVault: CanvasCredentialVault | null = null;
 let canvasSync: CanvasSyncService | null = null;
 let mailStore: CampusMailStore | null = null;
 let mailService: CampusMailService | null = null;
 const MAIL_SYNC_UPDATED = "mail:sync-updated";
+let mailAIService:MailAIReviewCoordinator|null=null;
+function mailAI():MailAIReviewCoordinator{
+  if(!mailAIService){
+    mailAIService=new MailAIReviewCoordinator(assistant(),{
+      list:()=>campusMail().list(),
+      readBody:record=>campusMail().readApprovedBody(record),
+      decisions:account=>localStore().mailCandidateDecisions(account),
+      accept:(record,draft)=>localStore().reviewMailCandidate(record,"accept",draft),
+    });
+  }
+  return mailAIService;
+}
 
 function campusMail(): CampusMailService {
   if (!mailService) throw new Error("Campus email is not initialized");
@@ -139,6 +171,16 @@ let workspaceHistoryService:WorkspaceHistoryService|null=null;
 function teamHistory():WorkspaceHistoryService{
   if(!workspaceHistoryService)throw Error("Team history database is unavailable");
   return workspaceHistoryService;
+}
+/** Session changes purge this account's local TEAM cache only. Sign-out must
+ * still finish if the optional cache is unavailable; diagnostics never log
+ * account IDs, project URLs, messages or crypto error strings. */
+function purgeSignedInTeamHistory():void{
+  workspaceHistoryService?.cancel();
+  if(workspaceHistoryService&&sharedCloud.status().authenticated){
+    try{workspaceHistoryService.purgeCurrentAccountCache();}
+    catch{report("TEAM_HISTORY_CACHE_PURGE_FAILED","storage");}
+  }
 }
 const workspaceRealtime=new WorkspaceRealtimeBridge(sharedCloud,update=>{
   for(const window of BrowserWindow.getAllWindows()){
@@ -369,6 +411,7 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.aiDisconnect,event=>{
     requireTrustedSender(event);
+    mailAIService?.cancel();
     return assistant().disconnect();
   });
   handle(IPC_CHANNELS.aiPrepare,(event,prompt:unknown)=>{
@@ -434,13 +477,149 @@ function registerIpcHandlers(): void {
     const source=await readSelectedKnowledgeFile(selection.filePaths[0]);
     return source.format==="pdf" ? knowledge().importPdf(source) : knowledge().importText(source);
   });
+  handle(IPC_CHANNELS.knowledgeBatchImport,async event=>{
+    requireTrustedSender(event);
+    const owner=BrowserWindow.fromWebContents(event.sender);
+    if(!owner||owner.isDestroyed())throw Error("Batch import requires a trusted window");
+    const selection=await dialog.showOpenDialog(owner,{
+      title:"批量选择本机知识库资料（一次最多 20 份）",
+      properties:["openFile","multiSelections"],
+      filters:[{name:"PDF / Markdown / HTML / LaTeX / TXT",
+        extensions:["pdf","md","markdown","html","htm","tex","latex","txt"]}],
+    });
+    if(selection.canceled||!selection.filePaths.length)return null;
+    return importPickedKnowledgeFiles(knowledge(),selection.filePaths);
+  });
+  handle(IPC_CHANNELS.knowledgeAuditSources,(event,ids:unknown)=>{
+    requireTrustedSender(event);
+    return auditKnowledgeSources(knowledge(),ids);
+  });
+  handle(IPC_CHANNELS.knowledgeRefreshSources,
+    (event,consent:unknown,requests:unknown)=>{
+      requireTrustedSender(event);
+      if(consent!==true)throw Error("Explicit local source refresh consent required");
+      return refreshAuditedKnowledgeSources(knowledge(),requests);
+    });
   handle(IPC_CHANNELS.knowledgeDelete, (event,id:unknown) => {
     requireTrustedSender(event);
     return knowledge().deleteDocument(id);
   });
+  handle(IPC_CHANNELS.knowledgeEmbeddingStatus, event => {
+    requireTrustedSender(event);
+    return localModels().status();
+  });
+  handle(IPC_CHANNELS.knowledgeImportOfflineModel, async(event,accepted:unknown)=>{
+    requireTrustedSender(event);
+    if(accepted!==true)throw Error("Explicit local model import consent required");
+    const owner=BrowserWindow.fromWebContents(event.sender);
+    if(!owner||owner.isDestroyed())throw Error("Model import requires a trusted window");
+    const selection=await dialog.showOpenDialog(owner,{
+      title:"选择你已核对来源与许可的本机 UTF-8 词向量 .vec 文件",
+      properties:["openFile"],
+      filters:[{name:"静态词向量文件",extensions:["vec"]}],
+    });
+    if(selection.canceled||!selection.filePaths.length)return null;
+    return localModels().importFile(selection.filePaths[0]);
+  });
+  handle(IPC_CHANNELS.knowledgeImportNeuralModel,
+    async(event,consent:unknown,kind:unknown)=>{
+      requireTrustedSender(event);
+      if(consent!==true)
+        throw Error("Explicit third-party neural model license consent required");
+      if(kind!=="e5"&&kind!=="bge")throw Error("Unsupported neural model family");
+      const owner=BrowserWindow.fromWebContents(event.sender);
+      if(!owner||owner.isDestroyed())throw Error("Neural import requires a trusted window");
+      const selection=await dialog.showOpenDialog(owner,{
+        title:kind==="e5"?"选择 multilingual-e5-small 的本地 ONNX 文件夹":
+          "选择 bge-small-zh-v1.5 的本地 ONNX 文件夹",
+        properties:["openDirectory"],
+      });
+      if(selection.canceled||!selection.filePaths.length)return null;
+      return localModels().importNeuralDirectory(selection.filePaths[0],kind);
+    });
+  handle(IPC_CHANNELS.knowledgeStartOfflineIndex,event=>{
+    requireTrustedSender(event);
+    return localModels().startIndex();
+  });
+  handle(IPC_CHANNELS.knowledgeCancelOfflineIndex,event=>{
+    requireTrustedSender(event);
+    return localModels().cancel();
+  });
+  handle(IPC_CHANNELS.knowledgeRemoveOfflineModel,(event,confirmation:unknown)=>{
+    requireTrustedSender(event);
+    if(confirmation!=="REMOVE_LOCAL_MODEL_AND_VECTORS")
+      throw Error("Explicit local model removal confirmation required");
+    return localModels().remove();
+  });
+  handle(IPC_CHANNELS.knowledgeEvaluateOfflineModel,async(event,consent:unknown)=>{
+    requireTrustedSender(event);
+    if(consent!==true)throw Error("Explicit local evaluation consent required");
+    const owner=BrowserWindow.fromWebContents(event.sender);
+    if(!owner||owner.isDestroyed())throw Error("Evaluation requires trusted window");
+    const selection=await dialog.showOpenDialog(owner,{
+      title:"选择你本地编写的检索相关性标签 JSON（只在本机使用）",
+      properties:["openFile"],
+      filters:[{name:"本地检索标注",extensions:["json"]}],
+    });
+    if(selection.canceled||!selection.filePaths.length)return null;
+    return localModels().evaluateFile(selection.filePaths[0]);
+  });
+  handle(IPC_CHANNELS.knowledgeEvidencePage,(event,offset:unknown)=>{
+    requireTrustedSender(event);
+    if(!Number.isSafeInteger(offset)||(offset as number)<0||
+      (offset as number)>100000)throw Error("Invalid evidence catalog offset");
+    return knowledge().localEvidenceCatalog(50,offset as number);
+  });
+  handle(IPC_CHANNELS.knowledgeSaveEvaluationLabels,
+    async(event,consent:unknown,raw:unknown)=>{
+      requireTrustedSender(event);
+      if(consent!==true)
+        throw Error("Explicit private evaluation label export consent required");
+      const cases=parseLocalEvaluationLabels(raw);
+      const owner=BrowserWindow.fromWebContents(event.sender);
+      if(!owner||owner.isDestroyed())
+        throw Error("Private evaluation label export requires trusted window");
+      const target=await dialog.showSaveDialog(owner,{
+        title:"保存人工检索相关性标注（私人查询和证据引用）",
+        defaultPath:"study-anchor-relevance-labels.json",
+        filters:[{name:"本地检索评测标签",extensions:["json"]}],
+      });
+      if(target.canceled||!target.filePath)return null;
+      const check=(key:string)=>assertCurrentKnowledgeEvidence(key,
+        (id,ordinal)=>knowledge().getPassage(id,ordinal));
+      const count=saveLocalEvaluationLabels(
+        target.filePath,{schema:1,cases},check);
+      return {path:target.filePath,cases:count};
+    });
+  handle(IPC_CHANNELS.knowledgeExportEvidenceCatalog,async(event,consent:unknown)=>{
+    requireTrustedSender(event);
+    if(consent!==true)throw Error("Explicit local evidence export consent required");
+    const owner=BrowserWindow.fromWebContents(event.sender);
+    if(!owner||owner.isDestroyed())throw Error("Evidence export requires trusted window");
+    const target=await dialog.showSaveDialog(owner,{
+      title:"导出本机知识库证据目录（含私人原文片段摘要）",
+      defaultPath:"study-anchor-evidence-catalog.json",
+      filters:[{name:"JSON 证据目录",extensions:["json"]}],
+    });
+    if(target.canceled||!target.filePath)return null;
+    const data=knowledge().localEvidenceCatalog(500);
+    // Refuse to overwrite an existing file silently. The exported catalog
+    // may include private text and must not be auto-uploaded.
+    await writeFile(target.filePath,JSON.stringify({
+      schema:1,kind:"study-anchor-evidence-catalog",
+      createdAt:new Date().toISOString(),
+      total:data.total,truncated:data.total>data.items.length,
+      items:data.items,
+      labelFormat:{schema:1,cases:[{id:"your-case-id",
+        query:"your-manually-written-question",
+        relevant:["document-uuid:revision:ordinal"]}]},
+    },null,2),{mode:0o600,flag:"wx"});
+    return {path:target.filePath,exported:data.items.length,
+      total:data.total,truncated:data.total>data.items.length};
+  });
   handle(IPC_CHANNELS.knowledgeSearch, (event,query:unknown) => {
     requireTrustedSender(event);
-    return knowledge().search(query);
+    return localModels().search(query);
   });
   handle(IPC_CHANNELS.knowledgeCards, event => {
     requireTrustedSender(event);
@@ -449,6 +628,18 @@ function registerIpcHandlers(): void {
   handle(IPC_CHANNELS.knowledgeCreateCard, (event,body:unknown) => {
     requireTrustedSender(event);
     return knowledge().createCard(body);
+  });
+  handle(IPC_CHANNELS.knowledgeEditCard,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return knowledge().editCard(input);
+  });
+  handle(IPC_CHANNELS.knowledgeRebindCard,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return knowledge().rebindCardEvidence(input);
+  });
+  handle(IPC_CHANNELS.knowledgeCardEvidenceHistory,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return knowledge().cardEvidenceHistory(id);
   });
   handle(IPC_CHANNELS.knowledgeRemoveCard, (event,id:unknown) => {
     requireTrustedSender(event);
@@ -473,6 +664,21 @@ function registerIpcHandlers(): void {
       {name:"calendar",store:fixedCalendar()},
     ]);
   });
+  handle(IPC_CHANNELS.focusGuardStart,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    const window=BrowserWindow.fromWebContents(event.sender);
+    if(!window||window!==mainWindow||window.isDestroyed())
+      throw Error("Focus protection requires the active desktop window");
+    return focusGuard.start(input,window);
+  });
+  handle(IPC_CHANNELS.focusGuardStatus,(event)=>{
+    requireTrustedSender(event);
+    return focusGuard.status();
+  });
+  handle(IPC_CHANNELS.focusGuardStop,(event)=>{
+    requireTrustedSender(event);
+    return focusGuard.stop();
+  });
   handle(IPC_CHANNELS.focusList, (event) => {
     requireTrustedSender(event);
     return localStore().listFocusSessions();
@@ -489,6 +695,26 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return localStore().focusSummary();
   });
+  handle(IPC_CHANNELS.focusInsights,(event,zone:unknown)=>{
+    requireTrustedSender(event);
+    return localStore().focusInsights(zone);
+  });
+  handle(IPC_CHANNELS.focusRewards,(event)=>{
+    requireTrustedSender(event);
+    return localStore().focusRewards();
+  });
+  handle(IPC_CHANNELS.focusRewardCreate,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return localStore().createFocusReward(input);
+  });
+  handle(IPC_CHANNELS.focusRewardEdit,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return localStore().editFocusReward(input);
+  });
+  handle(IPC_CHANNELS.focusRewardRedeem,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return localStore().redeemFocusReward(input);
+  });
   handle(IPC_CHANNELS.mailStatus, (event) => {
     requireTrustedSender(event);
     return campusMail().snapshot();
@@ -504,6 +730,28 @@ function registerIpcHandlers(): void {
   handle(IPC_CHANNELS.mailSyncNow, async (event) => {
     requireTrustedSender(event);
     return campusMail().sync();
+  });
+  handle(IPC_CHANNELS.mailAIPrepare,async(event,selection:unknown)=>{
+    requireTrustedSender(event);
+    return mailAI().prepare(selection);
+  });
+  handle(IPC_CHANNELS.mailAIConfirm,async(event,approvalId:unknown)=>{
+    requireTrustedSender(event);
+    return mailAI().confirm(approvalId);
+  });
+  handle(IPC_CHANNELS.mailAIApply,async(event,input:unknown)=>{
+    requireTrustedSender(event);
+    const result=await mailAI().apply(input);
+    for(const window of BrowserWindow.getAllWindows()){
+      if(!window.isDestroyed())window.webContents.send(MAIL_SYNC_UPDATED);
+    }
+    return result;
+  });
+  handle(IPC_CHANNELS.mailAICancel,event=>{
+    requireTrustedSender(event);
+    mailAIService?.cancel();
+    assistant().cancel();
+    return {canceled:true as const};
   });
   handle(IPC_CHANNELS.mailCandidates, async (event) => {
     requireTrustedSender(event);
@@ -536,6 +784,8 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.mailDisconnect, async (event) => {
     requireTrustedSender(event);
+    mailAIService?.cancel();
+    assistant().cancel();
     const account = campusMail().snapshot().email;
     await campusMail().disconnect();
     if (account) localStore().clearMailCandidateDecisions(account);
@@ -648,23 +898,25 @@ function registerIpcHandlers(): void {
   handle(IPC_CHANNELS.cloudConfigure, (event, input: unknown) => {
     requireTrustedSender(event);
     workspaceRealtime.stop();
-    workspaceHistoryService?.cancel();
+    purgeSignedInTeamHistory();
     return sharedCloud.configure(input);
   });
   handle(IPC_CHANNELS.cloudLogin, (event, input: unknown) => {
     requireTrustedSender(event);
     workspaceRealtime.stop();
-    workspaceHistoryService?.cancel();
+    purgeSignedInTeamHistory();
     return sharedCloud.login(input);
   });
   handle(IPC_CHANNELS.cloudSignup, (event, input: unknown) => {
     requireTrustedSender(event);
+    workspaceRealtime.stop();
+    purgeSignedInTeamHistory();
     return sharedCloud.signUp(input);
   });
   handle(IPC_CHANNELS.cloudLogout, (event) => {
     requireTrustedSender(event);
     workspaceRealtime.stop();
-    workspaceHistoryService?.cancel();
+    purgeSignedInTeamHistory();
     sharedCloud.signOut();
     return sharedCloud.status();
   });
@@ -697,6 +949,12 @@ function registerIpcHandlers(): void {
     return workspaceHistoryService
       ? workspaceHistoryService.snapshot(workspaceId)
       : sharedCloud.workspaceSnapshot(workspaceId);
+  });
+  handle(IPC_CHANNELS.cloudClearTeamHistory, (event,confirmation:unknown)=>{
+    requireTrustedSender(event);
+    if(confirmation!=="ERASE_CURRENT_TEAM_CACHE")
+      throw Error("Explicit team cache deletion confirmation required");
+    return teamHistory().purgeCurrentAccountCache();
   });
   handle(IPC_CHANNELS.cloudWorkspaceHistoryOlder, (event,workspaceId:unknown,
     kind:"message"|"task",before:unknown) => {
@@ -851,7 +1109,7 @@ function createWindow(): void {
   } else {
     void mainWindow.loadFile(join(__dirname, "../renderer/index.html"));
   }
-  mainWindow.on("closed", () => { mainWindow = null; });
+  mainWindow.on("closed", () => { focusGuard.close(); mainWindow = null; });
 }
 
 app.whenReady().then(async () => {
@@ -882,12 +1140,16 @@ app.whenReady().then(async () => {
   if(sandboxDisabled)report("SANDBOX_DISABLED","app");
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
-    await backupBeforeMigration(app.getPath("userData"),"study-anchor-tasks.sqlite",10);
-    await backupBeforeMigration(app.getPath("userData"),"study-anchor-knowledge.sqlite",3);
+    await backupBeforeMigration(app.getPath("userData"),"study-anchor-tasks.sqlite",11);
+    await backupBeforeMigration(app.getPath("userData"),"study-anchor-knowledge.sqlite",6);
     await backupBeforeMigration(app.getPath("userData"),"study-anchor-calendar.sqlite",5);
     await backupBeforeMigration(app.getPath("userData"),"study-anchor-planning.sqlite",2);
     store = new LocalStore(join(app.getPath("userData"), "study-anchor-tasks.sqlite"));
     knowledgeStore = new KnowledgeStore(join(app.getPath("userData"), "study-anchor-knowledge.sqlite"));
+    // No downloads or cloud lookups. Optional models are restored only from
+    // already verified assets in this application's private userData folder.
+    offlineModels=new KnowledgeOfflineModels(app.getPath("userData"),knowledgeStore);
+    await offlineModels.restore();
     fixedCalendarStore = new FixedCalendarStore(
       join(app.getPath("userData"),"study-anchor-calendar.sqlite"),
       ()=>planningStore?.listCommitted()??[],
@@ -897,8 +1159,15 @@ app.whenReady().then(async () => {
     // The optional cloud history cache must never make offline tasks,
     // calendar, mail or knowledge unavailable if its file is damaged.
     try{
+      // OS-backed encryption MUST exist before touching the optional cache.
+      // v1/v2 plaintext records and in-progress snapshots are converted to
+      // encrypted v3 in a single transaction. Prior backup copies can still
+      // contain legacy plaintext and require separately reviewed disposal.
+      const historyCipher=createTeamHistoryCipher(safeStorage);
+      await backupBeforeMigration(app.getPath("userData"),
+        "study-anchor-team-history.sqlite",3);
       workspaceHistoryStore=new WorkspaceHistoryStore(
-        join(app.getPath("userData"),"study-anchor-team-history.sqlite"));
+        join(app.getPath("userData"),"study-anchor-team-history.sqlite"),historyCipher);
       workspaceHistoryService=new WorkspaceHistoryService(sharedCloud,workspaceHistoryStore);
     }catch{
       workspaceHistoryStore=null;workspaceHistoryService=null;
@@ -968,6 +1237,8 @@ app.whenReady().then(async () => {
 
 let waitingForPersonalSyncShutdown=false;
 app.on("before-quit", (event) => {
+  // Always relinquish focus-window elevation even if sync shutdown waits.
+  focusGuard.close();
   const activePersonalSync=personalSync;
   if(activePersonalSync?.hasInFlightRun()){
     event.preventDefault();
@@ -985,6 +1256,8 @@ app.on("before-quit", (event) => {
   workspaceHistoryService?.cancel();
   workspaceHistoryService=null;
   workspaceHistoryStore?.close();workspaceHistoryStore=null;
+  mailAIService?.cancel();
+  mailAIService=null;
   mailService?.cancel();
   mailService?.stop();
   mailService = null;
@@ -1005,6 +1278,8 @@ app.on("before-quit", (event) => {
   planningStore = null;
   fixedCalendarStore?.close();
   fixedCalendarStore=null;
+  offlineModels?.close();
+  offlineModels=null;
   knowledgeStore?.close();
   knowledgeStore = null;
   store?.close();

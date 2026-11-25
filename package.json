@@ -16,7 +16,7 @@
     "test": "vitest run && node --test scripts/sync-rls-acceptance.node.mjs",
     "test:sync-rls": "node --test scripts/sync-rls-acceptance.node.mjs",
     "test:watch": "vitest",
-    "build": "npm run typecheck && npm test && electron-vite build",
+    "build": "npm run typecheck && npm test && electron-vite build && node scripts/verify-offline-worker.mjs",
     "preview": "electron-vite preview",
     "dist:win": "npm run build && electron-builder --win",
     "dist:mac": "npm run build && electron-builder --mac"
@@ -48,6 +48,12 @@
       "out/**/*",
       "package.json",
       "LICENSE"
+    ],
+    "extraResources": [
+      {
+        "from": "scripts/neural-inference-worker.py",
+        "to": "neural-inference-worker.py"
+      }
     ],
     "win": {
       "target": [

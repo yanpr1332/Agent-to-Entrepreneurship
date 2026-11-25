@@ -43,6 +43,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "cloud:confirm-personal-sync-device-replacement",
       "cloud:discard-personal-sync-receipt-review",
       "cloud:inspect-personal-sync-recovery",
+      "cloud:clear-team-history",
       "cloud:configure",
       "cloud:create-invite",
       "cloud:create-task",
@@ -74,12 +75,32 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "cloud:stop-workspace-watch",
       "cloud:workspaces",
       "focus:finish",
+      "focus:guard-start",
+      "focus:guard-status",
+      "focus:guard-stop",
+      "focus:insights",
+      "focus:reward-create",
+      "focus:reward-edit",
+      "focus:reward-redeem",
+      "focus:rewards",
       "focus:list",
       "focus:rename",
       "focus:summary",
       "knowledge:cards",
       "knowledge:create-card",
+      "knowledge:card-edit",
+      "knowledge:card-rebind",
+      "knowledge:card-history",
+      "knowledge:batch-import",
       "knowledge:delete",
+      "knowledge:embedding-status",
+      "knowledge:embedding-import",
+      "knowledge:embedding-import-neural","knowledge:embedding-start",
+      "knowledge:embedding-cancel","knowledge:embedding-remove",
+      "knowledge:embedding-evaluate",
+      "knowledge:embedding-evidence-catalog",
+      "knowledge:embedding-evidence-page",
+      "knowledge:embedding-save-labels",
       "knowledge:documents",
       "knowledge:graph",
       "knowledge:graph-create-edge",
@@ -94,6 +115,12 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "knowledge:review-card",
       "knowledge:review-progress",
       "knowledge:search",
+      "knowledge:source-audit",
+      "knowledge:source-refresh",
+      "mail:ai-apply",
+      "mail:ai-cancel",
+      "mail:ai-confirm",
+      "mail:ai-prepare",
       "mail:candidates",
       "mail:confirm-send",
       "mail:connect",
@@ -132,8 +159,8 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
   it("preserves all mail and cloud handlers without overlap", () => {
     const all = Object.values(IPC_CHANNELS);
     expect(new Set(all).size).toBe(all.length);
-    expect(all.filter((name) => name.startsWith("mail:"))).toHaveLength(10);
-    expect(all.filter((name) => name.startsWith("cloud:"))).toHaveLength(34);
+    expect(all.filter((name) => name.startsWith("mail:"))).toHaveLength(14);
+    expect(all.filter((name) => name.startsWith("cloud:"))).toHaveLength(35);
   });
 
   it("permits only explicit AI status, configuration, approval, cancel and disconnect calls",()=>{
@@ -153,7 +180,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
 
   it("keeps knowledge and backup operations narrowly allowlisted", () => {
     const channels=Object.values(IPC_CHANNELS);
-    expect(channels.filter(name=>name.startsWith("knowledge:"))).toHaveLength(17);
+    expect(channels.filter(name=>name.startsWith("knowledge:"))).toHaveLength(33);
     expect(channels.filter(name=>name.startsWith("backup:"))).toEqual(["backup:create"]);
   });
 
