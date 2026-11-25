@@ -39,7 +39,8 @@ export function decodeMailHeader(value: string): string {
 
 export function parseMailHeaderLiteral(raw: Buffer, uid: number, uidValidity: number): MailEnvelope {
   // Headers are capped before parsing; never render HTML from untrusted mail.
-  const unfolded = raw.toString("latin1").replace(/\r?\n[ \t]+/g, " ");
+  const headerSection=raw.toString("latin1").split(/\r?\n\r?\n/,1)[0];
+  const unfolded = headerSection.replace(/\r?\n[ \t]+/g, " ");
   const fields = new Map<string, string>();
   for (const line of unfolded.split(/\r?\n/)) {
     const match = /^([a-z0-9-]+):\s*(.*)$/i.exec(line);
