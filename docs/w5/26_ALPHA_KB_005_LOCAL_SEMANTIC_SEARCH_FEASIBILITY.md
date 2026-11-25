@@ -77,3 +77,8 @@
 - [BGE-M3 模型](https://huggingface.co/BAAI/bge-m3)
 - [Transformers.js 本地模型和禁用网络文档](https://huggingface.co/docs/transformers.js/api/env)
 - [sqlite-vec 项目](https://github.com/asg017/sqlite-vec)
+
+
+### 2026-11-25 可靠性与模型质量补充
+
+005A 和 005B 已合并。当前 [45 KB-005C 本地词表覆盖与真实标注评测](45_ALPHA_KB_005C_INDEX_COVERAGE_EVALUATION.md) 把静态词向量在大词汇缺失文档上的阻塞行为改成可持久恢复的跳过状态，增加索引覆盖率与同机成对检索质量/延迟评测。真正的 E5/BGE 神经模型仍需要独立审核 Transformers.js/ONNX 运行时、完整 npm lockfile、Windows/macOS 二进制与离线 tokenizer；**不在没有可复现供应链和实测结果的情况下把权重/依赖合并**。
