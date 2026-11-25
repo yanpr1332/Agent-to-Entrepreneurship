@@ -1,7 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc-channels";
 import type {
-  CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary, FocusInsights, FocusTitleUpdate,
+  CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary, FocusInsights, FocusReward, FocusRewardOverview, FocusRewardCreateInput,
+  FocusRewardEditInput, FocusRewardRedeemInput, FocusRewardRedemption, FocusTitleUpdate,
   LocalTask, UpdateTaskInput,
 } from "../shared/local-model";
 
@@ -300,6 +301,14 @@ const desktopApi = Object.freeze({
     summary: () => ipcRenderer.invoke(IPC_CHANNELS.focusSummary) as Promise<FocusSummary>,
     insights: (timeZone:string) =>
       ipcRenderer.invoke(IPC_CHANNELS.focusInsights,timeZone) as Promise<FocusInsights>,
+    rewards: () => ipcRenderer.invoke(IPC_CHANNELS.focusRewards) as Promise<FocusRewardOverview>,
+    createReward: (input:FocusRewardCreateInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusRewardCreate,input) as Promise<FocusReward>,
+    editReward: (input:FocusRewardEditInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusRewardEdit,input) as Promise<FocusReward>,
+    redeemReward: (input:FocusRewardRedeemInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.focusRewardRedeem,input) as Promise<FocusRewardRedemption>,
+
   }),
 });
 

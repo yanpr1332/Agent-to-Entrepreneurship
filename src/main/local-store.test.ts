@@ -317,7 +317,7 @@ describe("local-first SQLite store", () => {
       expect(upgraded.getPendingPersonalSyncPull(OWNER_A)).toBeNull();
       upgraded.close();
       const check=new DatabaseSync(file,{readOnly:true});
-      expect((check.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(10);
+      expect((check.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(11);
       check.close();
     }finally{rmSync(directory,{recursive:true,force:true});}
   });

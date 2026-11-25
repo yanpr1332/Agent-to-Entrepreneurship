@@ -646,6 +646,22 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return localStore().focusInsights(zone);
   });
+  handle(IPC_CHANNELS.focusRewards,(event)=>{
+    requireTrustedSender(event);
+    return localStore().focusRewards();
+  });
+  handle(IPC_CHANNELS.focusRewardCreate,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return localStore().createFocusReward(input);
+  });
+  handle(IPC_CHANNELS.focusRewardEdit,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return localStore().editFocusReward(input);
+  });
+  handle(IPC_CHANNELS.focusRewardRedeem,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return localStore().redeemFocusReward(input);
+  });
   handle(IPC_CHANNELS.mailStatus, (event) => {
     requireTrustedSender(event);
     return campusMail().snapshot();
@@ -1047,7 +1063,7 @@ app.whenReady().then(async () => {
   if(sandboxDisabled)report("SANDBOX_DISABLED","app");
   try {
     // Back up older local schemas BEFORE the constructor runs migrations.
-    await backupBeforeMigration(app.getPath("userData"),"study-anchor-tasks.sqlite",10);
+    await backupBeforeMigration(app.getPath("userData"),"study-anchor-tasks.sqlite",11);
     await backupBeforeMigration(app.getPath("userData"),"study-anchor-knowledge.sqlite",6);
     await backupBeforeMigration(app.getPath("userData"),"study-anchor-calendar.sqlite",5);
     await backupBeforeMigration(app.getPath("userData"),"study-anchor-planning.sqlite",2);
