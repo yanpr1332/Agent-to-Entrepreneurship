@@ -61,12 +61,12 @@ test("a path.txt alone is not sufficient evidence of a downloaded binary",()=>{
 });
 test("doctor CLI exits nonzero with useful remediation before electron-vite runs",()=>{
   fixture((root)=>{
-    const child=spawnSync(process.execPath,["scripts/electron-dev-preflight.mjs"],{
-      cwd:process.cwd(),env:{...process.env},encoding:"utf8",
+    const doctor=join(process.cwd(),"scripts","electron-dev-preflight.mjs");
+    const child=spawnSync(process.execPath,[doctor],{
+      cwd:root,env:{...process.env},encoding:"utf8",
     });
-    // The actual developer/CI environment may already have Electron, so
-    // the function-level assertions above are authoritative.
-    assert.ok(child.status===0||child.status===1);
+    assert.equal(child.status,1);
+    assert.match(child.stderr,/npm run setup:electron/);
     assert.doesNotMatch(child.stdout+child.stderr,/secret-key-example/);
     assert.deepEqual(inspectElectronBinary(root,"freebsd"),{
       ok:false,reason:"unsupported-platform",
