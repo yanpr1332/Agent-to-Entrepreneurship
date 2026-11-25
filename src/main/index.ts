@@ -499,6 +499,32 @@ function registerIpcHandlers(): void {
     if(selection.canceled||!selection.filePaths.length)return null;
     return localModels().evaluateFile(selection.filePaths[0]);
   });
+  handle(IPC_CHANNELS.knowledgeExportEvidenceCatalog,async(event,consent:unknown)=>{
+    requireTrustedSender(event);
+    if(consent!==true)throw Error("Explicit local evidence export consent required");
+    const owner=BrowserWindow.fromWebContents(event.sender);
+    if(!owner||owner.isDestroyed())throw Error("Evidence export requires trusted window");
+    const target=await dialog.showSaveDialog(owner,{
+      title:"导出本机知识库证据目录（含私人原文片段摘要）",
+      defaultPath:"study-anchor-evidence-catalog.json",
+      filters:[{name:"JSON 证据目录",extensions:["json"]}],
+    });
+    if(target.canceled||!target.filePath)return null;
+    const data=knowledge().localEvidenceCatalog(500);
+    // Refuse to overwrite an existing file silently. The exported catalog
+    // may include private text and must not be auto-uploaded.
+    await writeFile(target.filePath,JSON.stringify({
+      schema:1,kind:"study-anchor-evidence-catalog",
+      createdAt:new Date().toISOString(),
+      total:data.total,truncated:data.total>data.items.length,
+      items:data.items,
+      labelFormat:{schema:1,cases:[{id:"your-case-id",
+        query:"your-manually-written-question",
+        relevant:["document-uuid:revision:ordinal"]}]},
+    },null,2),{mode:0o600,flag:"wx"});
+    return {path:target.filePath,exported:data.items.length,
+      total:data.total,truncated:data.total>data.items.length};
+  });
   handle(IPC_CHANNELS.knowledgeSearch, (event,query:unknown) => {
     requireTrustedSender(event);
     return localModels().search(query);
