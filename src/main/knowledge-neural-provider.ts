@@ -1,4 +1,5 @@
-import {spawn,type ChildProcessWithoutNullStreams} from "node:child_process";
+import {spawn,type ChildProcessByStdio} from "node:child_process";
+import type {Readable,Writable} from "node:stream";
 import {createInterface} from "node:readline";
 import {join} from "node:path";
 import {app} from "electron";
@@ -13,7 +14,7 @@ type WireReply={
 };
 export class OfflineNeuralPythonProvider implements LocalEmbeddingProvider {
   readonly model:LocalEmbeddingModel;
-  private readonly process:ChildProcessWithoutNullStreams;
+  private readonly process:ChildProcessByStdio<Writable,Readable,null>;
   private readonly pending=new Map<number,{
     resolve:(value:WireReply)=>void;reject:(reason:Error)=>void;
     timeout:ReturnType<typeof setTimeout>;

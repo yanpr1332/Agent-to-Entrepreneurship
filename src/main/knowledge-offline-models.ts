@@ -64,7 +64,7 @@ export class KnowledgeOfflineModels {
   status():LocalModelStatus{
     return {...this.store.embeddingStatus(),installed:this.provider!==null,
       running:this.running,engine:this.provider?(this.record?.schema===2?
-        "onnx-"+this.record.kind:"static-word-vectors"):null,
+        this.record.kind==="e5"?"onnx-e5":"onnx-bge":"static-word-vectors"):null,
       error:this.error};
   }
   private removeAsset(record:InstallRecord):void{
