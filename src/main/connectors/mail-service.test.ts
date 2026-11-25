@@ -112,7 +112,9 @@ describe("mail read-sync versus explicit SMTP consent",()=>{
     const original=store.list(credentials.email)[0];
     const reading=service.readApprovedBody(original);
     // Wait until the mocked network reader is entered.
-    while(!readBody.mock.calls.length)await Promise.resolve();
+    for(let attempt=0;!readBody.mock.calls.length&&attempt<100;attempt++)
+      await new Promise(resolve=>setTimeout(resolve,2));
+    expect(readBody).toHaveBeenCalledTimes(1);
     await service.disconnect();
     done({envelope:{uid:7,uidValidity:3,from:"Teacher",
       subject:"Homework",date:null,messageId:null},body:"secret"});
