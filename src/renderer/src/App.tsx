@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import type { FocusSession, FocusSummary, LocalTask, TaskPriority } from "../../shared/local-model";
+import type { FocusSession, FocusSummary, LocalTask, TaskPriority,
+  FocusGuardMode,FocusGuardListMode,FocusGuardStatus } from "../../shared/local-model";
 import { formatCalendarSelection, formatDueDate, localDateKey, monthCells } from "./calendar";
 import { parseFocusMinutes } from "./focus-duration";
 import { focusCalendarSegments } from "./focus-calendar";
@@ -51,6 +52,11 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
   const [remaining, setRemaining] = useState(25 * 60);
   const [phase, setPhase] = useState<"idle" | "running" | "paused" | "finished">("idle");
   const [saving, setSaving] = useState(false);
+  const [starting,setStarting]=useState(false);
+  const [guardMode,setGuardMode]=useState<FocusGuardMode>("off");
+  const [listMode,setListMode]=useState<FocusGuardListMode>("block");
+  const [appNames,setAppNames]=useState("");
+  const [guardStatus,setGuardStatus]=useState<FocusGuardStatus|null>(null);
   const [error, setError] = useState("");
   const deadline = useRef(0);
   const sessionId = useRef<string | null>(null);
@@ -66,6 +72,8 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
         // Record the countdown endpoint instead of the eventual save-click time.
         finishedAtRef.current ??= new Date(deadline.current).toISOString();
         setPhase("finished");
+        void window.desktop.focus.guardStop().then(setGuardStatus)
+          .catch(()=>setGuardStatus(null));
       }
     };
     tick();
@@ -74,6 +82,8 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
   }, [phase]);
 
   function reset(): void {
+    void window.desktop.focus.guardStop().then(setGuardStatus)
+      .catch(()=>setGuardStatus(null));
     setPhase("idle");
     setRemaining(plannedMinutes * 60);
     sessionId.current = null;
@@ -81,7 +91,7 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
     finishedAtRef.current = null;
   }
 
-  function begin(): void {
+  async function begin(): Promise<void> {
     if (phase === "idle" && focusTitle.trim().length === 0) {
       setError("请输入专注标题");
       return;
@@ -91,25 +101,42 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
       return;
     }
     setError("");
-    if (phase === "idle") {
-      sessionId.current = crypto.randomUUID();
-      startedAtRef.current = new Date().toISOString();
-      finishedAtRef.current = null;
-      setRemaining(plannedMinutes * 60);
-      deadline.current = Date.now() + plannedMinutes * 60_000;
-    } else if (phase === "paused") {
-      deadline.current = Date.now() + remaining * 1000;
-    }
-    setPhase("running");
+    setStarting(true);
+    try {
+      const id=sessionId.current??crypto.randomUUID();
+      if(guardMode!=="off"){
+        const names=appNames.split(/[,\n]/).map(x=>x.trim()).filter(Boolean);
+        const status=await window.desktop.focus.guardStart({
+          sessionId:id,durationSeconds:phase==="idle"?plannedMinutes*60:remaining,
+          mode:guardMode,listMode,appNames:names,
+        });
+        setGuardStatus(status);
+      }
+      if (phase === "idle") {
+        sessionId.current=id;
+        startedAtRef.current=new Date().toISOString();
+        finishedAtRef.current=null;
+        setRemaining(plannedMinutes*60);
+        deadline.current=Date.now()+plannedMinutes*60_000;
+      }else if(phase==="paused"){
+        deadline.current=Date.now()+remaining*1000;
+      }
+      setPhase("running");
+    }catch(e){setError(errorMessage(e));}
+    finally{setStarting(false);}
   }
 
   function pause(): void {
+    void window.desktop.focus.guardStop().then(setGuardStatus)
+      .catch(()=>setGuardStatus(null));
     setRemaining(Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000)));
     setPhase("paused");
   }
 
   async function finish(): Promise<void> {
     if (!sessionId.current || saving) return;
+    void window.desktop.focus.guardStop().then(setGuardStatus)
+      .catch(()=>setGuardStatus(null));
     const left = phase === "running"
       ? Math.max(0, Math.ceil((deadline.current - Date.now()) / 1000))
       : remaining;
@@ -135,6 +162,27 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
     }
   }
 
+  useEffect(()=>{
+    if(phase==="idle"||guardMode==="off")return;
+    let active=true;
+    const check=()=>{
+      void window.desktop.focus.guardStatus().then(status=>{
+        if(!active)return;
+        setGuardStatus(status);
+        if(phase==="running"&&!status.active&&remaining>0){
+          // External emergency shortcut or timeout: never silently claim a
+          // still-enforced protected session.
+          setRemaining(Math.max(0,Math.ceil((deadline.current-Date.now())/1000)));
+          setPhase("paused");
+          setError("专注窗口保护已退出，计时已暂停，可结束并记录。");
+        }
+      }).catch(()=>{if(active)setGuardStatus(null);});
+    };
+    check();
+    const interval=setInterval(check,2500);
+    return ()=>{active=false;clearInterval(interval);};
+  },[phase,guardMode]);
+
   const mm = String(Math.floor(remaining / 60)).padStart(2, "0");
   const ss = String(remaining % 60).padStart(2, "0");
 
@@ -150,6 +198,47 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
           placeholder="例如：复习线性代数" />
       </label>
       <div className="timer-display" role="timer" aria-live="off">{mm}:{ss}</div>
+      <fieldset disabled={phase!=="idle"||saving||starting}>
+        <legend>自愿专注保护（默认关闭）</legend>
+        <label>模式
+          <select value={guardMode} onChange={e=>setGuardMode(e.target.value as FocusGuardMode)}>
+            <option value="off">不限制（仅计时）</option>
+            <option value="monitor">前台应用名单提醒（不拦截）</option>
+            <option value="shield">全屏专注窗口 + 前台应用提醒（可紧急退出）</option>
+          </select>
+        </label>
+        {guardMode!=="off"&&<>
+          <label>名单规则
+            <select value={listMode}
+              onChange={e=>setListMode(e.target.value as FocusGuardListMode)}>
+              <option value="block">黑名单：提醒所列应用</option>
+              <option value="allow">白名单：提醒非所列应用</option>
+            </select>
+          </label>
+          <label>应用进程名（每行或逗号分隔，最多 20 项）
+            <textarea rows={2} maxLength={1200} value={appNames}
+              onChange={e=>setAppNames(e.target.value)}
+              placeholder="例如 Safari, Chrome, Discord"/>
+          </label>
+        </>}
+      </fieldset>
+      {guardMode!=="off"&&<p className="privacy-note">
+        这是可随时退出的本机辅助保护，不会结束别的程序或阻止系统设置/恢复。
+        全屏模式不是不可绕过的系统封锁。紧急退出：Ctrl/Cmd+Shift+F12，或下方按钮。
+        在 Windows/macOS 缺少相关授权时，前台检测会明确降级为不可用。
+      </p>}
+      {guardStatus?.active&&<div role="status" className="connector-notice">
+        专注保护已启动 · 前台检测：{guardStatus.monitor==="available"?"可用":
+        guardStatus.monitor==="unavailable"?"不可用":"检测中"}。
+        {guardStatus.distraction?" 检测到名单偏离。":""}
+        {guardStatus.warning&&<span>{guardStatus.warning}</span>}
+      </div>}
+      {guardStatus?.active&&<button type="button" className="secondary-button"
+        onClick={()=>void window.desktop.focus.guardStop().then(status=>{
+          setGuardStatus(status);
+          if(phase==="running")pause();
+        }).catch(e=>setError(errorMessage(e)))}>
+        紧急解除专注保护</button>}
       <div className="timer-presets">
         {[1, 15, 25, 50].map((minutes) => (
           <button
@@ -174,9 +263,9 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
       </label>
       {configuredMinutes === null && <p className="error-message" role="alert">请输入 1–180 之间的整数分钟数</p>}
       <div className="button-row centered">
-        {phase === "idle" && <button className="primary-button" disabled={configuredMinutes === null || focusTitle.trim().length === 0} onClick={begin}>开始专注</button>}
+        {phase === "idle" && <button className="primary-button" disabled={starting||configuredMinutes === null || focusTitle.trim().length === 0} onClick={()=>void begin()}>开始专注</button>}
         {phase === "running" && <button className="secondary-button" onClick={pause}>暂停</button>}
-        {phase === "paused" && <button className="primary-button" onClick={begin}>继续计时</button>}
+        {phase === "paused" && <button className="primary-button" disabled={starting} onClick={()=>void begin()}>继续计时</button>}
         {phase === "finished" && <span className="success-text">计时完成，可以保存并领取积分</span>}
         {phase !== "idle" && (
           <button className={phase === "finished" ? "primary-button" : "secondary-button"} disabled={saving} onClick={() => void finish()}>
@@ -186,7 +275,7 @@ function FocusTimer({ onSaved }: { onSaved: () => Promise<void> }) {
         {phase !== "idle" && <button className="ghost-button" disabled={saving} onClick={reset}>取消本次</button>}
       </div>
       {error && <p className="error-message" role="alert">{error}</p>}
-      <p className="privacy-note">计时、标题和实际起止时间仅保存在本机。暂停时间包含在日历时段中，但不计入有效专注分钟。历史估算时间不自动写入日历。当前不限制其他应用或网站。</p>
+      <p className="privacy-note">计时、标题和实际起止时间仅保存在本机。暂停时间包含在日历时段中，但不计入有效专注分钟。历史估算时间不自动写入日历。提醒和全屏窗口不会拦截其他应用或网站，程序退出后立即解除，不会自动恢复限制。</p>
     </section>
   );
 }
