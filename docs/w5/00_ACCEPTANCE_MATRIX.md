@@ -40,6 +40,11 @@
 
 ## 3. 切片状态
 
+### ALPHA-CLOSE-07 团队撤权、Canvas 恢复与安装包校验（2026-11-25）
+
+- **代码开发中，CI 必须以最新提交为准**：[57](57_ALPHA_CLOSE_07_TEAM_CANVAS_RELEASE.md)。新增 owner-only 撤销成员、RLS 旧 JWT/旧邀请链接负向验收、任务解除指派；Canvas Token 身份验证、401 暂停轮询与人工重新授权；内部安装包下载后 SHA256/commit/平台复检的纯离线工具。
+- **未实测**：Supabase 新 SQL 未在用户授权隔离项目执行，五账号 RLS/Realtime 与撤权缓存清理未经过真实网络验证；Canvas/交大邮箱/AI Key 真实接入及 Windows/macOS 安装/恢复仍不应标绿。
+
 ### ALPHA-CLOSE-05/06 集中开发：邮箱正文/草稿/回复及 AI 来源复习卡（2026-11-25）
 
 - **代码开发中，最新 CI 需另行核对**：[56](56_ALPHA_CLOSE_05_06_MAIL_AI_CARDS.md)。邮件逐封确认只读正文，OS safeStorage 加密草稿、账户隔离、重启恢复、回复头、完整 SMTP 二次确认与不确定投递不可重试；知识库严格 JSON + 原文连续证据的 AI 候选，人工编辑/核对后才保存。
