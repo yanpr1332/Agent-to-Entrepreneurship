@@ -201,6 +201,22 @@ describe("ALPHA-SYNC-003A: Main-only Realtime transport",()=>{
     reconnected.bridge.stop();
   });
 
+  it("does not endlessly reconnect after the signed-in JWT refresh expires",async()=>{
+    vi.useFakeTimers();
+    const m=mocks();
+    await m.bridge.watch(FIRST);await tick();
+    join(m.sockets[0]);
+    m.cloud.realtimeCredentials.mockRejectedValueOnce(
+      Error("Cloud session expired or account changed; log in again"));
+    m.sockets[0].fail();
+    await vi.advanceTimersByTimeAsync(1_000);await tick();
+    expect(m.bridge.getStatus()).toMatchObject({phase:"revoked"});
+    const calls=m.cloud.realtimeCredentials.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(65_000);
+    expect(m.cloud.realtimeCredentials).toHaveBeenCalledTimes(calls);
+    m.bridge.stop();
+  });
+
   it("cancels pending offline retry when user switches workspaces or logs out",async()=>{
     vi.useFakeTimers();
     const m=mocks();
