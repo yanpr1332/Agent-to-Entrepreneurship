@@ -141,6 +141,26 @@ describe("V02-SYNC-02: opt-in durable small-file cross-device transfer",()=>{
     expect(a.pending()).toHaveLength(1);
   });
 
+  it("can stage new or replacement bytes offline, but cannot upload until network resumes",async()=>{
+    const remote=fake(),dir=root(),a=service(remote.cloud,dir);
+    remote.setOffline(true);
+    const first=await a.stagePickedFile(source(dir,"offline.md","# Offline work"));
+    const status=await a.overview();
+    expect(status).toMatchObject({cloudAvailable:false,pending:[{fileId:first.fileId}]});
+    expect(status.remote).toEqual([]); // unknown, not proof of no remote records
+    await expect(a.upload(first.fileId)).rejects.toThrow("Network offline");
+    expect(a.pending()).toHaveLength(1);
+    remote.setOffline(false);
+    expect(await a.upload(first.fileId)).toEqual({status:"uploaded",version:1});
+    remote.setOffline(true);
+    const replacement=await a.stagePickedFile(source(dir,"offline2.md","# Followup"),{
+      fileId:first.fileId,version:1,
+    });
+    expect(replacement.baseVersion).toBe(1);
+    remote.setOffline(false);
+    expect(await a.upload(first.fileId)).toEqual({status:"uploaded",version:2});
+  });
+
   it("isolates staged owner accounts and keeps local stop different from remote deletion",async()=>{
     const remote=fake(),dir=root(),a=service(remote.cloud,dir);
     const staged=await a.stagePickedFile(source(dir,"notes.txt","private-A"));
