@@ -96,7 +96,7 @@ export default function CampusMail() {
       setStatus(initial);setMessages([]);setCandidates([]);setSavedDrafts([]);setEditingDraftId(null);
       setReplyMessageId(undefined);setRecipientText("");setSubject("");setBody("");
       setEmail("");setUsername("");setPassword("");
-      setNotice("已删除本机邮箱凭据和邮件头缓存；学校邮箱中的邮件未发生改变。");
+      setNotice("已清理本机邮箱凭据、邮件头和加密草稿；学校邮箱中的邮件未发生改变。");
     } catch(reason){setError(message(reason));}
     finally{setBusy(false);}
   }
