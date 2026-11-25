@@ -34,11 +34,11 @@ test("detect disabled row level security or broad grants", () => withFixture(dir
   assert.match(inspectMigrations(dir).issues.join(" "), /disabled RLS/);
   assert.match(inspectMigrations(dir).issues.join(" "), /unrestricted table grant/);
 }));
-test("detect a malformed PostgreSQL function quote before live deployment", () => withFixture(dir => {
+test("reject malformed PostgreSQL function dollar quotes before deployment", () => withFixture(dir => {
   const path = join(dir, MIGRATIONS[6]);
   const correct = readFileSync(path, "utf8");
-  const broken = correct.replace("as $\\ndeclare v_token", "as $\\ndeclare v_token")
-    .replace("return v_token;\\nend;\\n$;", "return v_token;\\nend;\\n$;");
+  const broken = correct.replace("as $$\ndeclare v_token", "as $\ndeclare v_token")
+    .replace("return v_token;\nend;\n$$;", "return v_token;\nend;\n$;");
   assert.notEqual(broken, correct);
   writeFileSync(path, broken);
   assert.match(inspectMigrations(dir).issues.join(" "), /malformed function dollar-quote/);
