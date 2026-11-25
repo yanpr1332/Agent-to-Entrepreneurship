@@ -38,12 +38,12 @@
 | TEAM-001 ~ TEAM-007 | 代码完成（Supabase Auth/Workspace/任务/消息/RLS） | 未在真实项目部署验收 |
 | DASH-001 | 已具备本机任务/专注与八模块摘要状态；工作台布局另见 [53](../w5/53_ALPHA_CLOSE_02_EIGHT_MODULE_WORKBENCH.md) | 双平台代码 CI 和 GUI 验收独立执行 |
 | DASH-002 ~ DASH-008 | ALPHA-CLOSE-02 增加组件显隐、上下排序、三套布局预设与本机持久化；全局搜索、通知与系统托盘等高级功能**未完成** | 布局真机验收待做；未实现项持续纳入后续 P0 |
-| QA-001 ~ QA-007、REL-001 ~ REL-003 | **未执行**（无安装包、无五人协作验收、无演示脚本） | 未开始 |
+| QA-001 ~ QA-007、REL-001 ~ REL-003 | ALPHA-CLOSE-03 增加手动 Windows NSIS/macOS DMG+ZIP 构建、SHA-256 产物凭证、五库 SQLite v2 备份检查和独立新配置恢复（[54](../w5/54_ALPHA_CLOSE_03_INSTALLER_AND_RECOVERY.md)）；五人联机/实际安装及签名尚未完成 | 代码 CI 及真实安装、RLS、恢复需分别验收 |
 
 
 ## V0.1 五人内部 Alpha 收尾执行基线（2026-11-25）
 
-用户确认按照 **4–7 轮大开发/集成** 推进八模块真实闭环、五账号 Supabase 联机、Canvas/交大邮箱真实接入和双平台安装验收。总控表：[51 V0.1 Alpha 收尾计划](../w5/51_V01_FIVE_PERSON_ALPHA_CLOSEOUT.md)；本轮 ALPHA-CLOSE-01 聚焦邮件 AI 明确授权分析、候选人工确认与安全写入任务。外部账号/审批/真机证据缺失不得以 CI 代替。
+用户确认按照 **4–7 轮大开发/集成** 推进八模块真实闭环、五账号 Supabase 联机、Canvas/交大邮箱真实接入和双平台安装验收。总控表：[51 V0.1 Alpha 收尾计划](../w5/51_V01_FIVE_PERSON_ALPHA_CLOSEOUT.md)；#60 邮件 AI、#61 工作台、#48 视觉整合已合并；本轮 ALPHA-CLOSE-03 进入内部安装和离线 SQLite 数据恢复（[54](../w5/54_ALPHA_CLOSE_03_INSTALLER_AND_RECOVERY.md)）。外部账号/审批/真机证据缺失不得以 CI 代替。
 
 ## Alpha 本地验收反馈（2026-11-19）
 

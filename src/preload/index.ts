@@ -12,6 +12,7 @@ import type {
   CampusMailConnectInput, MailDraft, MailRecord, MailSendPreview, MailSyncState,
 } from "../shared/mail-model";
 import type {MailAISelection,MailAIApply,MailAIReview} from "../shared/mail-ai";
+import type {RecoveryPreview,RecoveryResult,RecoveryConfirmation} from "../shared/recovery-model";
 import type { MailCandidate, MailCandidateChoice, MailCandidateChoiceResult } from "../shared/mail-candidates";
 
 import type {WorkspaceHistoryItems,WorkspaceHistoryMarker} from "../shared/workspace-history-contract";
@@ -303,6 +304,10 @@ const desktopApi = Object.freeze({
   }),
   backup: Object.freeze({
     create: () => ipcRenderer.invoke(IPC_CHANNELS.backupCreate) as Promise<BackupResult>,
+    inspect: () => ipcRenderer.invoke(IPC_CHANNELS.backupInspect) as Promise<RecoveryPreview|null>,
+    restore: (input:RecoveryConfirmation) =>
+      ipcRenderer.invoke(IPC_CHANNELS.backupRestore,input) as Promise<RecoveryResult|null>,
+    cancel: () => ipcRenderer.invoke(IPC_CHANNELS.backupCancel) as Promise<{canceled:true}>,
   }),
   focus: Object.freeze({
     list: () => ipcRenderer.invoke(IPC_CHANNELS.focusList) as Promise<FocusSession[]>,

@@ -100,6 +100,10 @@ npm run build
 
 如需在**用户单独批准的隔离 Supabase 项目**验证实时订阅，请先审查并运行既有 `20261110_ate_workspace_poc.sql`，再审查 `supabase/migrations/20261124_ate_workspace_realtime_hints.sql`；本仓库 CI **不部署云端**。未完成五账号 RLS 反向测试、30 秒安全补拉 GUI 与历史游标验收之前，不视为完整 Realtime 发布。详见 [39 团队实时提示验收](docs/w5/39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
 
+## ALPHA-CLOSE-03 手动内部安装包与 SQLite 安全恢复
+
+新增 GitHub Actions 手动构建未签名 Windows NSIS / macOS DMG+ZIP 包，随产物上传 SHA256SUMS.txt 与确切 Commit 的 BUILD_EVIDENCE.json，保留 7 天，不创建 Release/不使用签名凭据。知识库页面可查看、验证五库 SQLite v2 备份，并恢复到从未存在过的新数据目录；会再次核对 SHA-256、数据库版本和 quick_check，不会覆盖正在运行的当前用户数据。用户须退出程序后使用 STUDY_ANCHOR_USER_DATA_DIR 指向新目录启动恢复副本；账号密钥、团队历史缓存、AI 用量账本与硬盘原文文件不包含在备份中。实际 Windows/macOS 安装、签名和恢复演练尚需真机验收，详见 [54](docs/w5/54_ALPHA_CLOSE_03_INSTALLER_AND_RECOVERY.md)。
+
 ## ALPHA-CLOSE-02 可自定义八模块真实工作台
 
 首页提供实时本机待办与确认日程、专注、知识复习、已授权小组、Canvas、邮箱和个人 AI Provider 状态。可选择“均衡/学习优先/协作优先”预设，按组件显示/隐藏或上移/下移，配置保存在本机，非法配置自动回到默认，隐藏全部仍可恢复。未连接服务不会出现虚构数据；真实 GUI 和外部账号/安装包仍需人工验收。见 [53](docs/w5/53_ALPHA_CLOSE_02_EIGHT_MODULE_WORKBENCH.md)。
