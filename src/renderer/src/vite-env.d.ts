@@ -28,7 +28,7 @@ import type {
 
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport,
+  KnowledgeReviewCard, ReviewCardInput, ReviewRating, ReviewProgress, BackupResult, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport, KnowledgeEvidenceExportResult,
 } from "../../shared/knowledge-model";
 
 import type {
@@ -178,6 +178,7 @@ declare global {
         cancelOfflineIndex: () => Promise<KnowledgeEmbeddingStatus>;
         removeOfflineModel: (confirmation:"REMOVE_LOCAL_MODEL_AND_VECTORS") => Promise<KnowledgeEmbeddingStatus>;
         evaluateOfflineModel: (consent:boolean) => Promise<KnowledgeEvaluationReport|null>;
+        exportEvidenceCatalog: (consent:boolean) => Promise<KnowledgeEvidenceExportResult|null>;
         cards: () => Promise<KnowledgeReviewCard[]>;
         createCard: (input: ReviewCardInput) => Promise<KnowledgeReviewCard>;
         removeCard: (id: string) => Promise<boolean>;
