@@ -139,8 +139,10 @@ export default function CampusMail() {
       await window.desktop.mail.confirmSend(preview.confirmationId);
       setPreview(null);setRecipientText("");setSubject("");setBody("");setReplyMessageId(undefined);
       if (editingDraftId) {
-        await window.desktop.mail.deleteDraft(editingDraftId);
-        setSavedDrafts(await window.desktop.mail.savedDrafts());setEditingDraftId(null);
+        try {
+          await window.desktop.mail.deleteDraft(editingDraftId);
+          setSavedDrafts(await window.desktop.mail.savedDrafts());setEditingDraftId(null);
+        } catch { /* SMTP accepted already; a draft cleanup problem must not imply send failure. */ }
       }
       setNotice("SMTP 服务器已确认接受邮件。发送行为仅发生在这次明确确认之后。");
     } catch(reason){
