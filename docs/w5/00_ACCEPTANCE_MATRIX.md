@@ -40,6 +40,14 @@
 
 ## 3. 切片状态
 
+### ALPHA-CLOSE-02 八模块工作台与本机布局（2026-11-25）
+
+- **代码**：[53 工作台实施及验收](53_ALPHA_CLOSE_02_EIGHT_MODULE_WORKBENCH.md)。主页复用真实 SQLite/IPC 的任务、确认日程、专注、知识复习、团队、Canvas、邮箱和 AI 状态，独立错误/未连接提示，不显示未经授权内容。
+- **用户自定义**：八组件显隐/上移下移、三套布局预设、版本化本机 localStorage、异常配置自动回默认，隐藏全部仍可恢复；不修改 #48 的视觉规划与全局 CSS。
+- **CI 与真机不可混淆**：双平台最新提交的 TypeScript、Vitest、Electron build、离线 Worker 以实际 workflow 结果登记；真实 Windows/macOS GUI 点击、布局重启、五账号 Supabase、Canvas/邮箱真实接入与付费模型验收尚未执行，不能作为发布通过证据。
+
+
+
 ### ALPHA-CLOSE-01 五人 V0.1 收尾计划 + 邮件 AI 人工审核（2026-11-25）
 
 - **交付计划**：[51](51_V01_FIVE_PERSON_ALPHA_CLOSEOUT.md) 将五人 Alpha 的剩余工作固定为约 4–7 个大批次，仍要求八大模块、Windows/macOS 真实安装、真实五账号 Supabase RLS/Realtime、Canvas 课程/作业、交大邮箱 IMAP/SMTP、个人 AI Provider 调用与安全/恢复证据。外部审批未获授权的情况必须标记 Blocked。

@@ -100,6 +100,10 @@ npm run build
 
 如需在**用户单独批准的隔离 Supabase 项目**验证实时订阅，请先审查并运行既有 `20261110_ate_workspace_poc.sql`，再审查 `supabase/migrations/20261124_ate_workspace_realtime_hints.sql`；本仓库 CI **不部署云端**。未完成五账号 RLS 反向测试、30 秒安全补拉 GUI 与历史游标验收之前，不视为完整 Realtime 发布。详见 [39 团队实时提示验收](docs/w5/39_ALPHA_SYNC_003A_REALTIME_HINTS.md)。
 
+## ALPHA-CLOSE-02 可自定义八模块真实工作台
+
+首页提供实时本机待办与确认日程、专注、知识复习、已授权小组、Canvas、邮箱和个人 AI Provider 状态。可选择“均衡/学习优先/协作优先”预设，按组件显示/隐藏或上移/下移，配置保存在本机，非法配置自动回到默认，隐藏全部仍可恢复。未连接服务不会出现虚构数据；真实 GUI 和外部账号/安装包仍需人工验收。见 [53](docs/w5/53_ALPHA_CLOSE_02_EIGHT_MODULE_WORKBENCH.md)。
+
 ## ALPHA-CLOSE-01 邮件 AI 人工确认建任务
 
 在邮件中心主动选择至多三封本机缓存邮件的基本信息（主题、发件人、发送时间和内部匹配编号），可完整预览将向 OpenAI API 外传的内容；只有再次确认才进行可能付费的 AI 提取。模型返回的候选需严格验证来源和明确截止日，用户可修改标题/日期并独立确认后创建本机个人任务。不会自动读取邮件正文、发送邮件、创建任务或上传其他邮箱内容；真实交大邮箱仍需用户自行授权验收。AI 允许用户在设置页选择 OpenAI、Anthropic、Gemini、DeepSeek，或其他支持 Chat Completions 的可信 HTTPS API 服务商；输入自己的 Key 加密保存，亦可通过 `OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`GEMINI_API_KEY`、`DEEPSEEK_API_KEY` 等环境变量提供。旧 OpenAI 加密配置仍可读取。正文仅在用户对指定邮件确认授权后按需只读获取，纯文本限长、先预览后人工确认调用；绝不自动发送附件或 SMTP 邮件。见 [52](docs/w5/52_ALPHA_CLOSE_01_MAIL_AI_REVIEW.md)。
