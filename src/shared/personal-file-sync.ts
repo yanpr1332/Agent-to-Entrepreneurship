@@ -22,7 +22,8 @@ function keys(v:Record<string,unknown>,expected:string[]):void{
 }
 export function requirePersonalFileName(raw:unknown):string{
   if(typeof raw!=="string"||raw.trim()!==raw||raw.length<1||
-    raw.length>MAX_SYNC_FILE_NAME||/[/\\\x00-\x1f\x7f]/.test(raw)||
+    raw.length>MAX_SYNC_FILE_NAME||/[/\\\x00-\x1f\x7f<>:"|?*]/.test(raw)||
+    /^(con|prn|aux|nul|com[1-9]|lpt[1-9])[.]/i.test(raw)||
     raw==="."||raw===".."||!EXT.test(raw))
     throw Error("Only bounded text, document or calendar file names are supported");
   return raw;
