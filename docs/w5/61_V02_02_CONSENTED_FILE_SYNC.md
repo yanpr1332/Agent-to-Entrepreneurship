@@ -63,3 +63,46 @@ where n.nspname='public' and proname in ('ate_file_list','ate_file_get','ate_fil
 自动化测试使用真实本地 Node SQLite 与模拟云 RPC，不对真实 Supabase 做任何修改。完整 Windows/macOS CI 通过后，仅能称代码候选；真实账号、安全隔离、安装包和双设备验收仍然 Blocked。
 
 下一轮 V0.2-03 优先推进可打包的真正本地神经 Embedding 及质量评测。
+
+
+## 单独的真实双账号 RLS 验收脚本（需要用户明确授权）
+
+新增 scripts/file-sync-rls-acceptance.mjs，默认不能联网或写入；必须具备自己授权管理的**可销毁独立测试项目、已部署第八迁移以及 A/B 两个真实测试 Auth 账号**。它会只写入随机 UUID 对应的合成小文本，不读取、上传任何真实本机文档，也不会被 CI 调用。
+
+先运行离线安全校验：
+
+    npm run test:file-rls:offline
+
+Windows PowerShell 示例（所有凭据只输入到可信本机，不放 GitHub 或聊天）：
+
+~~~powershell
+$env:ATE_FILE_URL = 'https://YOUR_PROJECT_REF.supabase.co'
+$env:ATE_FILE_ANON_KEY = Read-Host 'Public publishable / legacy anon key'
+foreach ($who in @('A','B')) {
+  $email = Read-Host "Test Auth $who email"
+  $secret = Read-Host "Test Auth $who password" -AsSecureString
+  Set-Item ("Env:ATE_FILE_{0}_EMAIL" -f $who) -Value $email
+  $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)
+  try {
+    Set-Item ("Env:ATE_FILE_{0}_PASSWORD" -f $who) -Value (
+      [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+    )
+  } finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+  }
+}
+# 明确确认是真实允许写入的可丢弃测试项目，才执行：
+$env:ATE_FILE_CONFIRM_WRITES = 'CREATE_DISPOSABLE_PERSONAL_FILE_TEST'
+npm run test:file-rls:live
+# 测试结束清理当前终端临时变量：
+Get-ChildItem Env: | Where-Object Name -like 'ATE_FILE_*' |
+  ForEach-Object { Remove-Item ("Env:" + $_.Name) }
+~~~
+
+真实脚本逐项验证：
+- A 登录后上传单个合成文件，同一账号读回一致；
+- B 以独立 JWT 查询 A 文件的列表/内容应不可见，B 可创建**自己 owner 空间**中的同名 UUID 文件而不改动 A 内容；
+- A/B 的内容交叉核对没有串号，过期 baseVersion 的编辑返回 conflict；
+- A 删除自己的云端文件后不可再读，B 的文件未受影响；最后分别删除 B 的测试文件。
+
+如果中途发生断网、SQL/RLS 错误或程序被杀，脚本**不会自动清理**可能已提交的合成文件，管理员必须核对后人工清理。请不要直接重复运行生产项目，也不要把 Token、JWT、邮箱密码和完整云端错误响应放入日志。RLS 由服务器真正执行，静态代码审核不能代替这个脚本；脚本成功也不能代替 Windows/macOS 真人 GUI 或项目生产安全审计。
