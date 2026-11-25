@@ -51,7 +51,7 @@ export default function MailAIReviewPanel({messages}:Props){
         const titles=chosen.map(ref=>messages.find(x=>mailAIKey(x)===mailAIKey(ref))?.subject)
           .filter(Boolean).join("\n• ");
         if(!window.confirm("仅本次读取下列已选邮件的纯文本正文（每封截取最多 1100 字符）。"+
-          "不会读取附件或 HTML，不保存正文；下一步还会显示实际外发文本，需再次确认才发送给所选 AI 服务商。"+
+          "IMAP 可能传输邮件 MIME 片段，但只提取纯文本供 AI 使用；附件和 HTML 不会作为 AI 输入，正文不存入数据库。下一步还会展示完整外发文本，需再次确认。"+
           "\n• "+titles+"\n确认本次授权读取正文？"))return;
       }
       setPreview(await window.desktop.mail.aiPrepare({sources:chosen,includeBodies}));
@@ -106,7 +106,7 @@ export default function MailAIReviewPanel({messages}:Props){
     <h2>邮件 AI 识别 · 人工确认建任务</h2>
     <p className="privacy-note">
       默认只使用邮件基本信息，不会自动读取正文或附件。你最多选择 3 封当前已同步的邮件；
-      选择“包含正文”并明确授权后，才会读取这几封邮件的纯文本正文（限长、不含附件或 HTML）。      所有待发送内容都先完整预览，再二次确认后发往所选 AI 服务商。
+      选择“包含正文”并明确授权后，才会读取这几封邮件的纯文本正文（限长，不把附件或 HTML 作为 AI 输入）。所有待发送内容都先完整预览，再二次确认后发往所选 AI 服务商。
       这会使用你的个人 API Key 和当日请求额度，可能产生费用。邮件日期不是任务截止日期。
       AI 建议不会自动创建任务或发送邮件。
     </p>
