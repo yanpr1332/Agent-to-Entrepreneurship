@@ -47,7 +47,7 @@ describe("verified online SQLite snapshots",()=>{
     older.exec("DROP TABLE mail_candidate_reviews; DROP TABLE personal_sync_outbox; DROP TABLE personal_task_sync_enrollment; "+
       "DROP TABLE personal_sync_legacy_outbox; DROP TABLE personal_task_sync_legacy_enrollment; "+
       "DROP TABLE personal_sync_devices; DROP TABLE personal_sync_conflicts; "+
-      "DROP TABLE personal_sync_pull_checkpoints; PRAGMA user_version=3");
+      "DROP TABLE focus_reward_redemptions; DROP TABLE focus_rewards; DROP TABLE personal_sync_pull_checkpoints; PRAGMA user_version=3");
     older.close();
     const snapshot=await backupBeforeMigration(dir,"study-anchor-tasks.sqlite",10);
     expect(snapshot).toBeTruthy();
