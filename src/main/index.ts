@@ -996,6 +996,13 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return sharedCloud.joinWorkspace(token, displayName);
   });
+  handle(IPC_CHANNELS.cloudRevokeMember, async (event, workspaceId:unknown,userId:unknown) => {
+    requireTrustedSender(event);
+    const result=await sharedCloud.revokeWorkspaceMember(workspaceId,userId);
+    // A member on another device is cut off by service RLS; local live watchers
+    // also revalidate membership on the next refresh. No client can grant access.
+    return result;
+  });
   handle(IPC_CHANNELS.cloudMembers, (event, workspaceId: unknown) => {
     requireTrustedSender(event);
     return sharedCloud.listMembers(workspaceId);
