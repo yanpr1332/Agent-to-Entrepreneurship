@@ -29,7 +29,7 @@ export class CampusMailService {
   constructor(
     private readonly vault: CampusMailVault,
     private readonly store: CampusMailStore,
-    private readonly reader: Pick<ImapInboxReader,"readRecent"> = new ImapInboxReader(),
+    private readonly reader: Pick<ImapInboxReader,"readRecent"> & Partial<Pick<ImapInboxReader,"readBody">> = new ImapInboxReader(),
     private readonly sender: Pick<SmtpSender,"send"> = new SmtpSender(),
     private readonly notify: () => void = () => {},
   ) {}
