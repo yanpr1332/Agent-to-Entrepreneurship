@@ -43,6 +43,11 @@ export function inspectMigrations(directory) {
     catch { issues.push("unreadable migration: " + name); continue; }
     if (sql.length < 100 || sql.length > 150000) issues.push("unexpected SQL size: " + name);
     const active = withoutComments(sql);
+    // Catch a previously malformed single-dollar PL/pgSQL function delimiter.
+    // This is a targeted syntax guard, not a general-purpose SQL parser.
+    if (/\bas\s+\$(?!\$|[A-Za-z_][A-Za-z0-9_]*\$)/i.test(active) ||
+        /(?:^|\n)\s*\$\s*;/m.test(active))
+      issues.push(name + ": malformed function dollar-quote delimiter");
     for (const [pattern, label] of DANGEROUS) {
       if (pattern.test(active)) issues.push(name + ": potentially unsafe " + label);
     }

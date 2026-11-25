@@ -43,7 +43,7 @@ $$;
 -- created concurrently with a revocation from surviving that revocation.
 create or replace function public.ate_create_invite(p_workspace uuid)
 returns text language plpgsql volatile security definer set search_path = ''
-as $
+as $$
 declare v_token text;
 begin
   if auth.uid() is null or p_workspace is null then
@@ -65,7 +65,7 @@ begin
   );
   return v_token;
 end;
-$;
+$$;
 
 revoke all on function public.ate_revoke_workspace_member(uuid,uuid)
   from public,anon,authenticated;
