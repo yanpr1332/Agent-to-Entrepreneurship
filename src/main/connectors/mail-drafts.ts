@@ -32,11 +32,11 @@ export class CampusMailDraftVault {
       };
       if (data.version !== 1 || typeof data.account !== "string" || !Array.isArray(data.drafts) ||
           data.drafts.length > 20) throw Error("Invalid draft file");
-      if (data.account !== account) return [];
+      if (data.account !== account) throw Error("Saved drafts belong to a different mailbox; disconnect before switching accounts");
       return data.drafts.map(value => {
         if (!value || typeof value !== "object") throw Error("Invalid draft");
         const item = value as MailSavedDraft;
-        const parsed = parseMailDraftSave(item);
+        const parsed = parseMailDraftSave({ to: item.to, subject: item.subject, body: item.body, ...(item.replyMessageId ? {replyMessageId: item.replyMessageId} : {}) });
         if (item.account !== account || typeof item.id !== "string" ||
             !/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(item.id) ||
             typeof item.updatedAt !== "string" || !Number.isFinite(Date.parse(item.updatedAt)))
