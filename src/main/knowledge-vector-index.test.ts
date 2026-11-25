@@ -165,7 +165,7 @@ describe("ALPHA-KB-005A persisted local vectors and revision-safe search",()=>{
     importText(store,"/archive.md","Archive","Local import survives");
     close(store);
     const old=new DatabaseSync(path);
-    old.exec("DROP TABLE knowledge_vector_skips; DROP TABLE knowledge_vectors; DROP TABLE knowledge_vector_config; PRAGMA user_version=3");
+    old.exec("DROP TABLE knowledge_card_evidence_history; DROP TABLE knowledge_vector_skips; DROP TABLE knowledge_vectors; DROP TABLE knowledge_vector_config; PRAGMA user_version=3");
     old.close();
     const reopened=new KnowledgeStore(path);stores.push(reopened);
     expect(reopened.embeddingStatus()).toMatchObject({model:null,indexed:0,total:1});

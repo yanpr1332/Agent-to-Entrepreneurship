@@ -104,6 +104,19 @@ export interface KnowledgeReviewCard {
   updatedAt: string;
 }
 export interface ReviewCardInput { documentId: string; sourceOrdinal: number; question: string; answer: string; }
+/** User-authored text may change without resetting scheduling or rating history. */
+export interface ReviewCardEditInput {
+  id:string;question:string;answer:string;expectedUpdatedAt:string;
+}
+/** Deliberately acknowledge replacement of old evidence with a newly seen revision. */
+export interface ReviewCardRebindInput {
+  id:string;sourceOrdinal:number;expectedDocumentRevision:number;
+  expectedUpdatedAt:string;confirmation:"CONFIRM_CURRENT_SOURCE_EVIDENCE";
+}
+export interface ReviewCardEvidenceHistory {
+  sourceOrdinal:number;evidence:string;sourceHash:string;
+  sourcePage:number|null;archivedAt:string;
+}
 export interface ReviewProgress { due: number; total: number; reviewedToday: number; }
 
 export function requireKnowledgeId(value: unknown): string {
@@ -143,6 +156,42 @@ export function parseReviewCardInput(value: unknown): ReviewCardInput {
     question: requireCardText(data.question, 500),
     answer: requireCardText(data.answer, 2000),
   };
+}
+
+function requireCardRevision(value:unknown):string{
+  if(typeof value!=="string"||value.length>40||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)||
+    Number.isNaN(Date.parse(value)))throw Error("Invalid review card edit revision");
+  return value;
+}
+export function parseReviewCardEdit(raw:unknown):ReviewCardEditInput{
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))
+    throw Error("Invalid review card edit");
+  const v=raw as Record<string,unknown>;
+  if(Object.keys(v).sort().join(",")!=="answer,expectedUpdatedAt,id,question")
+    throw Error("Invalid review card edit");
+  return {id:requireKnowledgeId(v.id),
+    question:requireCardText(v.question,500),
+    answer:requireCardText(v.answer,2000),
+    expectedUpdatedAt:requireCardRevision(v.expectedUpdatedAt)};
+}
+export function parseReviewCardRebind(raw:unknown):ReviewCardRebindInput{
+  if(!raw||typeof raw!=="object"||Array.isArray(raw))
+    throw Error("Invalid review card evidence confirmation");
+  const v=raw as Record<string,unknown>;
+  if(Object.keys(v).sort().join(",")!==
+    "confirmation,expectedDocumentRevision,expectedUpdatedAt,id,sourceOrdinal"||
+    v.confirmation!=="CONFIRM_CURRENT_SOURCE_EVIDENCE"||
+    !Number.isSafeInteger(v.sourceOrdinal)||(v.sourceOrdinal as number)<0||
+    (v.sourceOrdinal as number)>2500||
+    !Number.isSafeInteger(v.expectedDocumentRevision)||
+    (v.expectedDocumentRevision as number)<1)
+    throw Error("Invalid review card evidence confirmation");
+  return {id:requireKnowledgeId(v.id),
+    sourceOrdinal:v.sourceOrdinal as number,
+    expectedDocumentRevision:v.expectedDocumentRevision as number,
+    expectedUpdatedAt:requireCardRevision(v.expectedUpdatedAt),
+    confirmation:"CONFIRM_CURRENT_SOURCE_EVIDENCE"};
 }
 
 export function parseReviewRating(value: unknown): ReviewRating {

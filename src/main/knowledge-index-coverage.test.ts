@@ -160,7 +160,7 @@ describe("ALPHA-KB-005C durable vocabulary coverage and safe recovery",()=>{
     await finish(store,model);
     dispose(store);
     const db=new DatabaseSync(path);
-    db.exec("DROP TABLE knowledge_vector_skips; PRAGMA user_version=4");
+    db.exec("DROP TABLE knowledge_card_evidence_history; DROP TABLE knowledge_vector_skips; PRAGMA user_version=4");
     db.close();
     const migrated=new KnowledgeStore(path);stores.push(migrated);
     expect(migrated.embeddingStatus()).toMatchObject({indexed:1,skipped:0,pending:0});
