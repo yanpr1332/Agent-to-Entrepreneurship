@@ -7,7 +7,7 @@ import type { LocalTask } from "../../shared/local-model";
 import { eligibleAIPlanTasks, buildAIPlanPrompt, parseAIPlanDraft, type AIPlanSuggestion } from "../../shared/ai-planning";
 
 const empty:AIStatus={
-  connected:false,running:false,provider:"openai",model:null,usedToday:0,
+  connected:false,running:false,provider:"openai",model:null,keySource:null,usedToday:0,
   remainingToday:12,dailyRequestLimit:12,maxOutputTokens:512,lastRequestAt:null,
 };
 type Entry={id:number;question:string;answer:AIAnswer};
@@ -54,19 +54,22 @@ export default function AIWorkspace(){
       const next=await window.desktop.ai.connect({apiKey,model});
       setStatus(next);
       setPreview(null);
-      setNotice("API Key 已加密保存在此设备。尚未发起付费测试请求，密钥可用性将在首次确认提问时验证。");
+      setNotice("API Key 已加密保存在此设备，并优先于环境变量。尚未发起付费测试请求，密钥可用性将在首次确认提问时验证。");
     }catch(e){setError(describeError(e));}
     finally{setApiKey("");setBusy(false);}
   }
 
   async function disconnect():Promise<void>{
-    if(!window.confirm("断开 OpenAI API 连接并删除此设备的加密 Key？这不会撤销平台中的 Key；如需彻底吊销，请到服务商控制台处理。"))return;
+    if(!window.confirm("删除此设备加密保存的 API Key？如果 OPENAI_API_KEY 环境变量已设置，删除后会自动切换使用它；否则 AI 将断开。这不会撤销服务商中的 Key。"))return;
     if(busy||sending)return;
     setBusy(true);setError("");
     try{
-      setStatus(await window.desktop.ai.disconnect());
+      const next=await window.desktop.ai.disconnect();
+      setStatus(next);
       setPreview(null);setQuestion("");setAnswers([]);setPlanDraft(null);
-      setNotice("本地加密 Key 已清除。已使用的每日请求次数不会重置。");
+      setNotice(next.keySource==="environment"
+        ?"本机加密 Key 已清除，当前已切换为 OPENAI_API_KEY 环境变量。每日请求次数不会重置。"
+        :"本机加密 Key 已清除，AI 已断开。每日请求次数不会重置。");
     }catch(e){setError(describeError(e));}
     finally{setBusy(false);}
   }
@@ -146,7 +149,9 @@ export default function AIWorkspace(){
         <h1>AI 学习助手 · 单轮问答</h1>
         <p>自己配置 OpenAI API Key，先预览，再明确确认后发送单次问题</p>
       </div>
-      <span className="count-chip">{status.connected?"已保存个人 API Key":"尚未连接"}</span>
+      <span className="count-chip">{status.connected
+        ?status.keySource==="environment"?"使用环境变量 API Key":"使用本机加密 API Key"
+        :"尚未连接"}</span>
     </div>
     <div className="connector-warning" role="note">
       <strong>付费与隐私告知</strong>
@@ -162,30 +167,43 @@ export default function AIWorkspace(){
     {notice&&<div className="connector-notice" role="status">{notice}</div>}
     <div className="ai-layout">
       <section className="panel">
-        <div className="eyebrow">LOCAL KEY STORAGE</div>
+        <div className="eyebrow">PERSONAL KEY / ENVIRONMENT</div>
         <h2>模型连接</h2>
         {status.connected&&<div className="ai-connection">
           <p>服务商：OpenAI Responses API</p>
           <p>已设置模型：<strong>{status.model}</strong></p>
+          <p>Key 来源：<strong>{status.keySource==="environment"?"环境变量 OPENAI_API_KEY":"本机系统凭据加密存储"}</strong></p>
+          {status.keySource==="environment"&&<p className="privacy-note">
+            环境变量仅由 Electron 主进程读取，不会保存到应用凭据库或暴露给页面。
+            如需停用，请在操作系统中移除该变量并重启应用。
+          </p>}
+          {status.keySource==="saved"&&<p className="privacy-note">
+            本机保存的 Key 优先于环境变量。删除它后，如环境变量存在会自动切换使用环境变量。
+          </p>}
           <p>当前 UTC 日请求：<strong>{status.usedToday}/{status.dailyRequestLimit}</strong></p>
           <p>剩余请求：<strong>{status.remainingToday}</strong></p>
           <p className="privacy-note">已保存不代表密钥或模型一定有效；第一次明确确认提问才会连接服务商。</p>
-          <button className="secondary-button" disabled={busy||sending}
-            onClick={()=>void disconnect()}>断开并删除本机 Key</button>
+          {status.keySource==="saved"&&<button className="secondary-button" disabled={busy||sending}
+            onClick={()=>void disconnect()}>删除本机保存的 Key</button>}
         </div>}
         <form className="ai-config-form" onSubmit={event=>void connect(event)}>
           <label>模型标识（GPT 系列）
             <input value={model} required maxLength={68} autoComplete="off"
               onChange={event=>setModel(event.target.value)} placeholder="gpt-4.1-mini"/>
           </label>
-          <label>个人项目 API Key
+          <label>手动输入个人项目 API Key（保存到本机安全凭据库）
             <input value={apiKey} required type="password" autoComplete="off"
               placeholder="sk-…" onChange={event=>setApiKey(event.target.value)}/>
           </label>
           <button type="submit" className="primary-button" disabled={busy||sending}>
             {status.connected?"替换本地模型配置与 Key":"加密保存配置（不进行付费测试）"}
           </button>
-          <p className="privacy-note">只使用系统凭据加密；如果安全加密不可用，会拒绝保存，不退回明文存储。当前仅支持固定 OpenAI 官方 API 端点，不支持自定义 URL。</p>
+          <p className="privacy-note">
+            手动输入会使用系统凭据加密；如果安全加密不可用，会拒绝保存，不退回明文存储。
+            也可在启动应用前设置操作系统环境变量 <code>OPENAI_API_KEY</code>，无需在此输入。
+            本机加密 Key 优先；删除本机 Key 后才会回退到环境变量。环境变量不写入应用数据库或凭据文件。
+            当前仅支持固定 OpenAI 官方 API 端点，不支持自定义 URL。
+          </p>
         </form>
       </section>
 

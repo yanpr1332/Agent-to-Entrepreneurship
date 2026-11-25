@@ -97,8 +97,8 @@ export default function MailAIReviewPanel({messages}:Props){
     <div className="eyebrow">OPTIONAL MAIL AI · TWO-STEP CONSENT</div>
     <h2>邮件 AI 识别 · 人工确认建任务</h2>
     <p className="privacy-note">
-      不会自动分析任何邮件，也不会读取邮件正文或附件。你最多选择 3 封当前已同步的邮件头；
-      先预览完整请求，再明确确认后，才把邮件主题、发件人和发送日期发往 OpenAI API。
+      不会自动分析任何邮件，也不会读取邮件正文或附件。你最多选择 3 封当前已同步邮件的基本信息；
+      先预览完整请求，再明确确认后，才把邮件主题、发件人、发送日期及用于匹配本机邮件的内部编号发往 OpenAI API。
       这会使用你的个人 API Key 和当日请求额度，可能产生费用。邮件日期不是任务截止日期。
       AI 建议不会自动创建任务或发送邮件。
     </p>
@@ -126,7 +126,7 @@ export default function MailAIReviewPanel({messages}:Props){
           <div className="mail-meta">{item.from} · {item.date??"日期未提供"}</div>
         </li>)}
       </ul>
-      <p className="privacy-note">这里列出最近 30 封缓存邮件头供主动选择，不会自动发送全部收件箱。</p>
+      <p className="privacy-note">这里列出最近 30 封已缓存邮件的基本信息（主题、发件人、发送时间）供主动选择，不会自动发送全部收件箱。</p>
       <button type="button" className="primary-button" disabled={
         busy||!configured||chosen.length===0}
         onClick={()=>void prepare()}>预览所选邮件的 AI 外发内容（不收费）</button>
@@ -142,7 +142,7 @@ export default function MailAIReviewPanel({messages}:Props){
         <button type="button" className="primary-button" disabled={busy}
           onClick={()=>void confirm()}>确认调用 OpenAI 生成候选（可能付费）</button>
         <button type="button" className="secondary-button" disabled={busy}
-          onClick={()=>void cancel()}>取消，不发送邮件头</button>
+          onClick={()=>void cancel()}>取消，不发送所选邮件信息</button>
       </div>
     </div>}
     {review&&<div role="region" aria-label="人工核对 AI 邮件候选">
