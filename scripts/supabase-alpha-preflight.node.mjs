@@ -36,7 +36,7 @@ test("detect disabled row level security or broad grants", () => withFixture(dir
 }));
 test("reject malformed PostgreSQL function dollar quotes before deployment", () => withFixture(dir => {
   const path = join(dir, MIGRATIONS[6]);
-  const correct = readFileSync(path, "utf8");
+  const correct = readFileSync(path, "utf8").replace(/\r\n/g, "\n");
   const broken = correct.replace("as $$\ndeclare v_token", "as $\ndeclare v_token")
     .replace("return v_token;\nend;\n$$;", "return v_token;\nend;\n$;");
   assert.notEqual(broken, correct);
