@@ -33,6 +33,10 @@ export interface KnowledgeEmbeddingStatus {
   }|null;
   indexed:number;
   total:number;
+  /** Persisted, revision-pinned passages with no dictionary vocabulary. */
+  skipped?:number;
+  /** Not yet indexed or explicitly classified as unencodable. */
+  pending?:number;
   /** Index worker state; unavailable in older builds. */
   installed?:boolean;
   running?:boolean;
