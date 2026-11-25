@@ -9,10 +9,12 @@ export const AI_PREVIEW_TTL_MS = 120_000;
 export interface AIConnectInput { apiKey: string; model: string }
 export interface AIPrivateSettings extends AIConnectInput {}
 export type AIKeySource = "saved" | "environment";
+export type AIConfigurationWarning = "invalid_environment_key";
 export interface AIStatus {
   connected: boolean;
   /** Source label only; never exposes the credential itself. */
   keySource: AIKeySource | null;
+  configurationWarning: AIConfigurationWarning | null;
   running: boolean;
   provider: typeof AI_PROVIDER;
   model: string | null;

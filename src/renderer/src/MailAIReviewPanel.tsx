@@ -36,7 +36,7 @@ export default function MailAIReviewPanel({messages}:Props){
     if(preview||review)return;
     const key=mailAIKey(item);
     if(checked){
-      if(chosen.length>=3){setError("每次最多选 3 封邮件头");return;}
+      if(chosen.length>=3){setError("每次最多选择 3 封邮件的基本信息");return;}
       setChosen(previous=>previous.some(x=>mailAIKey(x)===key)?previous:
         [...previous,{uid:item.uid,uidValidity:item.uidValidity}]);
     }else setChosen(previous=>previous.filter(x=>mailAIKey(x)!==key));
@@ -103,7 +103,7 @@ export default function MailAIReviewPanel({messages}:Props){
       AI 建议不会自动创建任务或发送邮件。
     </p>
     {!configured&&<p className="privacy-note" role="note">
-      需先在「AI 学习助手」页面保存你自己的 OpenAI API Key，返回这里后即可选择性分析。
+      需先在「AI 学习助手」页面手动保存自己的 OpenAI API Key，或在启动程序前设置 OPENAI_API_KEY 环境变量，返回这里后即可选择性分析。
       不需要也不允许把邮箱密码交给 AI。
     </p>}
     {error&&<p role="alert" className="error-banner">{error}</p>}

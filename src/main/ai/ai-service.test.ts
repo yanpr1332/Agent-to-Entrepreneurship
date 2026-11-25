@@ -97,7 +97,10 @@ describe("paid AI requires explicit one-time approval",()=>{
     expect(await vault.load()).toBeNull();
     const preview=service.prepare("Use my environment key");
     await service.confirm(preview.approvalId);
-    expect(ask.mock.calls[0][0]).toMatchObject({apiKey:key,model:AI_DEFAULT_MODEL});
+    expect(ask).toHaveBeenCalledWith(
+      expect.objectContaining({apiKey:key,model:AI_DEFAULT_MODEL}),
+      "Use my environment key",expect.any(AbortSignal),
+    );
     expect(await vault.load()).toBeNull();
     ledger.close();
   });
@@ -125,9 +128,10 @@ describe("paid AI requires explicit one-time approval",()=>{
   it("rejects malformed environment keys without exposing their value",async()=>{
     const invalid="not-a-real-secret";
     const {service,ledger}=fixture(()=>invalid);
-    await expect(service.initialize()).rejects.toThrow("OPENAI_API_KEY");
-    expect(JSON.stringify(service.status())).not.toContain(invalid);
-    expect(service.status().connected).toBe(false);
+    const status=await service.initialize();
+    expect(status.configurationWarning).toBe("invalid_environment_key");
+    expect(JSON.stringify(status)).not.toContain(invalid);
+    expect(status.connected).toBe(false);
     ledger.close();
   });
 });

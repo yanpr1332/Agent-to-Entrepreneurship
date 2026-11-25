@@ -7,7 +7,7 @@ import type { LocalTask } from "../../shared/local-model";
 import { eligibleAIPlanTasks, buildAIPlanPrompt, parseAIPlanDraft, type AIPlanSuggestion } from "../../shared/ai-planning";
 
 const empty:AIStatus={
-  connected:false,running:false,provider:"openai",model:null,keySource:null,usedToday:0,
+  connected:false,running:false,provider:"openai",model:null,keySource:null,configurationWarning:null,usedToday:0,
   remainingToday:12,dailyRequestLimit:12,maxOutputTokens:512,lastRequestAt:null,
 };
 type Entry={id:number;question:string;answer:AIAnswer};
@@ -165,6 +165,9 @@ export default function AIWorkspace(){
     {error&&<div className="error-banner" role="alert"><span>{error}</span>
       <button onClick={()=>setError("")}>关闭</button></div>}
     {notice&&<div className="connector-notice" role="status">{notice}</div>}
+    {status.configurationWarning==="invalid_environment_key"&&<div className="error-banner" role="alert">
+      检测到环境变量 OPENAI_API_KEY，但格式无效。请检查变量值，或在下方手动输入有效的个人项目 Key。
+    </div>}
     <div className="ai-layout">
       <section className="panel">
         <div className="eyebrow">PERSONAL KEY / ENVIRONMENT</div>

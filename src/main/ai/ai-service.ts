@@ -16,6 +16,7 @@ type PendingIntent={
 /** Explicit two-step approval. No background AI calls, task/calendar writes or telemetry. */
 export class AIService {
   private active:ActiveKey|null=null;
+  private configurationWarning:AIStatus["configurationWarning"]=null;
   private intent:PendingIntent|null=null;
   private inflight:AbortController|null=null;
   private generation=0;
@@ -28,7 +29,7 @@ export class AIService {
   ){}
 
   private fingerprint(settings:AIPrivateSettings):string{
-    return createHash("sha256").update(settings.apiKey).update("\\0")
+    return createHash("sha256").update(settings.apiKey).update("\u0000")
       .update(settings.model).digest("hex");
   }
 
@@ -37,16 +38,25 @@ export class AIService {
    * management. Its value is never returned in status or written to the vault. */
   private async resolveActiveKey():Promise<ActiveKey|null>{
     const saved=await this.vault.load();
-    if(saved)return {settings:saved,source:"saved"};
+    if(saved){
+      this.configurationWarning=null;
+      return {settings:saved,source:"saved"};
+    }
     const raw=this.environmentKey();
-    if(raw===undefined||raw.trim()==="")return null;
+    if(raw===undefined||raw.trim()===""){
+      this.configurationWarning=null;
+      return null;
+    }
     try{
-      return {
+      const active={
         settings:parseAIConnect({apiKey:raw.trim(),model:AI_DEFAULT_MODEL}),
-        source:"environment",
+        source:"environment" as const,
       };
+      this.configurationWarning=null;
+      return active;
     }catch{
-      throw new Error("OPENAI_API_KEY is set but invalid; check its format and use a personal OpenAI project key");
+      this.configurationWarning="invalid_environment_key";
+      return null;
     }
   }
 
@@ -61,6 +71,7 @@ export class AIService {
       connected:this.active!==null,running:this.inflight!==null,
       provider:"openai",model:this.active?.settings.model??null,
       keySource:this.active?.source??null,
+      configurationWarning:this.configurationWarning,
       usedToday:quota.used,remainingToday:quota.remaining,
       dailyRequestLimit:AI_DAILY_REQUEST_CAP,maxOutputTokens:AI_OUTPUT_TOKEN_CAP,
       lastRequestAt:quota.lastRequestAt,
@@ -80,6 +91,7 @@ export class AIService {
     this.cancel();
     await this.vault.save(config);
     this.active={settings:config,source:"saved"};
+    this.configurationWarning=null;
     return this.status();
   }
 
