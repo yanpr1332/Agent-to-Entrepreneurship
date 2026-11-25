@@ -10,6 +10,10 @@ begin
   if auth.uid() is null or p_workspace is null or p_user is null then
     raise exception 'Authenticated owner and valid workspace/member required';
   end if;
+  -- Redemption obtains invitation row lock before workspace lock. Take locks
+  -- in that same order to avoid a cross-transaction revoke/join deadlock.
+  perform id from public.ate_workspace_invites
+    where workspace_id=p_workspace order by id for update;
   -- Serialize this transaction with invitation redemption / five-person joins.
   perform 1 from public.ate_workspaces where id=p_workspace for update;
   if not found or not exists (
