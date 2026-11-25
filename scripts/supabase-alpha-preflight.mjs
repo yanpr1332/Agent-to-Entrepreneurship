@@ -14,6 +14,7 @@ export const MIGRATIONS = Object.freeze([
   "20261124_ate_workspace_realtime_hints.sql",
   "20261124_ate_workspace_durable_history.sql",
   "20261124_ate_workspace_checkpoint_recovery.sql",
+  "20261125_ate_workspace_member_revoke.sql",
 ]);
 const DANGEROUS = [
   [/\bdrop\s+schema\s+public\b/i, "DROP SCHEMA public"],
@@ -61,6 +62,13 @@ export function inspectMigrations(directory) {
   const checkpoint = readText(directory, MIGRATIONS[5]);
   if (history && !/cursor/i.test(history)) issues.push("history cursor protocol missing");
   if (checkpoint && !/checkpoint/i.test(checkpoint)) issues.push("workspace checkpoint protocol missing");
+  const revoke = readText(directory, MIGRATIONS[6]);
+  if (revoke && (
+    !/ate_revoke_workspace_member\s*\(/i.test(revoke) ||
+    !/role\s*=\s*'owner'/i.test(revoke) ||
+    !/delete\s+from\s+public\.ate_workspace_invites/i.test(revoke) ||
+    !/update\s+public\.ate_workspace_tasks\s+set\s+assigned_to\s*=\s*null/i.test(revoke)
+  )) issues.push("workspace member revocation authorization, assignment or invite rotation missing");
   return { ok: issues.length === 0, issues, migrations };
 }
 function readText(directory, name) {

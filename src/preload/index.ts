@@ -118,6 +118,8 @@ const desktopApi = Object.freeze({
     workspaces: () => ipcRenderer.invoke(IPC_CHANNELS.cloudWorkspaces) as Promise<SharedWorkspace[]>,
     createWorkspace: (name: string, displayName: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudCreateWorkspace, name, displayName) as Promise<string>,
+    revokeMember: (workspaceId:string,userId:string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.cloudRevokeMember, workspaceId, userId) as Promise<{revoked:true}>,
     createInvite: (workspaceId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.cloudCreateInvite, workspaceId) as Promise<string>,
     joinWorkspace: (token: string, displayName: string) =>

@@ -25,11 +25,14 @@ function environment() {
   return env;
 }
 
-function fakeService({ outsiderLeak = false, allowAuthorSpoof = false, sameAccount = false } = {}) {
+function fakeService({ outsiderLeak = false, allowAuthorSpoof = false, sameAccount = false,
+  revokedLeak = false, allowInviteReplay = false } = {}) {
   const joined = new Set();
   const messages = [];
   const tasks = [];
-  let calls = 0;
+  let calls = 0, inviteCounter=0;
+  const validInvites=new Set();
+  const revoked=new Set();
   const userByEmail = Object.fromEntries(["A", "B", "C", "D", "E"].map(who =>
     [who.toLowerCase() + "@test.example", sameAccount ? uuid.A : uuid[who]]));
   const jwtFor = (who) => "hdr." + Buffer.from(JSON.stringify({
@@ -61,14 +64,30 @@ function fakeService({ outsiderLeak = false, allowAuthorSpoof = false, sameAccou
       joined.add(uid);
       return respond(uuid.workspace);
     }
-    if (path.endsWith("/rpc/ate_create_invite"))
-      return isMember && uid === uuid.A ? respond("a".repeat(48)) : respond({error: "forbidden"}, 403);
+    if (path.endsWith("/rpc/ate_create_invite")) {
+      if (!isMember || uid !== uuid.A) return respond({error:"forbidden"},403);
+      const token=(++inviteCounter).toString(16).padStart(48,"a");
+      validInvites.add(token);
+      return respond(token);
+    }
     if (path.endsWith("/rpc/ate_join_workspace")) {
-      joined.add(uid);
+      if (!validInvites.has(body.p_token) && !allowInviteReplay)
+        return respond({error:"invite expired"},403);
+      joined.add(uid); revoked.delete(uid);
       return respond(uuid.workspace);
     }
+    if (path.endsWith("/rpc/ate_revoke_workspace_member")) {
+      if (!isMember || uid !== uuid.A || body.p_user===uid ||
+          !joined.has(body.p_user)) return respond({error:"forbidden"},403);
+      joined.delete(body.p_user);
+      revoked.add(body.p_user);
+      if (!allowInviteReplay) validInvites.clear();
+      for(const task of tasks) if(task.assigned_to===body.p_user)
+        task.assigned_to=null;
+      return respond(true);
+    }
     if (init.method === "GET") {
-      const isVisible = isMember || outsiderLeak;
+      const isVisible = isMember || outsiderLeak || (revokedLeak && revoked.has(uid));
       if (path.endsWith("/ate_workspace_messages"))
         return respond(isVisible ? messages : []);
       if (path.endsWith("/ate_workspace_tasks"))
@@ -89,7 +108,8 @@ function fakeService({ outsiderLeak = false, allowAuthorSpoof = false, sameAccou
       if (!isMember || (!allowAuthorSpoof && body.created_by !== uid) ||
           (body.assigned_to && !joined.has(body.assigned_to)))
         return respond({error: "forbidden"}, 403);
-      const row = {id: uuid.task, title: body.title, completed: false};
+      const row = {id: uuid.task, title: body.title, completed: false,
+        assigned_to:body.assigned_to??null};
       tasks.push(row);
       return respond([row], 201);
     }
@@ -133,7 +153,8 @@ test("five-account RLS flow succeeds on a mock without any live network", async 
   const result = await runRlsAcceptance(environment(), service.fetcher);
   assert.equal(result.verifiedAccounts, 5);
   assert.equal(result.workspaceId, uuid.workspace);
-  assert.ok(service.count() >= 20);
+  assert.equal(result.revokedAccounts, 1);
+  assert.ok(service.count() >= 30);
 });
 
 test("rejects a server that leaks an outsider's workspace rows", async () => {
@@ -154,5 +175,18 @@ test("rejects five emails that actually log in to the same Supabase identity", a
   await assert.rejects(
     runRlsAcceptance(environment(), fakeService({sameAccount: true}).fetcher),
     /five distinct user IDs/
+  );
+});
+
+test("rejects servers that leak records to a revoked member", async () => {
+  await assert.rejects(
+    runRlsAcceptance(environment(),fakeService({revokedLeak:true}).fetcher),
+    /revoked member .* leaked restricted records/
+  );
+});
+test("rejects servers that allow removed members to reuse unspent invitations", async () => {
+  await assert.rejects(
+    runRlsAcceptance(environment(),fakeService({allowInviteReplay:true}).fetcher),
+    /stale invitation replay unexpectedly succeeded/
   );
 });

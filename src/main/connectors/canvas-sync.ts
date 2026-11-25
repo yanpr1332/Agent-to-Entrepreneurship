@@ -1,6 +1,7 @@
 import type { CanvasAutoSyncSummary, CanvasCourseSetting } from "../../shared/canvas-model";
 import { LocalStore } from "../local-store";
 import { CanvasApi } from "./canvas-api";
+import { canvasFailureKind,canvasFailureHelp } from "./canvas-failure";
 import { FixedCalendarStore } from "../fixed-calendar-store";
 
 const SYNC_INTERVAL_MS = 30 * 60 * 1000;
@@ -15,6 +16,7 @@ const MAX_COURSES_PER_RUN = 100;
 export class CanvasSyncService {
   private pending: Promise<CanvasAutoSyncSummary> | null = null;
   private generation = 0;
+  private reconnectRequired=false;
   private activeContext:{origin:string;accountId:number}|null=null;
   scope():{origin:string;accountId:number}|null{return this.activeContext?{...this.activeContext}:null;}
   private interval: ReturnType<typeof setInterval> | null = null;
@@ -52,6 +54,7 @@ export class CanvasSyncService {
 
   cancel(): void {
     this.generation++;
+    this.reconnectRequired=false;
     this.activeContext=null;
     this.pending = null;
     this.latest = { ...this.latest, connected: false, running: false,
@@ -61,16 +64,21 @@ export class CanvasSyncService {
 
   sync(): Promise<CanvasAutoSyncSummary> {
     if (this.pending) return this.pending;
+    // Bad credentials must not trigger periodic 401 traffic every 30 minutes.
+    // Explicit reconnect calls cancel(), clearing this gate only after validation.
+    if(this.reconnectRequired) return Promise.resolve(this.snapshot());
     const generation = this.generation;
     this.latest = { ...this.latest, running: true };
     const job = this.execute().then((result) => {
       if (generation === this.generation) this.latest = result;
       return this.latest;
-    }).catch(() => {
+    }).catch((reason:unknown) => {
       if (generation === this.generation) {
+        const kind=canvasFailureKind(reason);
+        if(kind==="authentication")this.reconnectRequired=true;
         this.latest = { ...this.latest, connected: false,
-          lastAttempt: new Date().toISOString(),
-          lastError: "Canvas 同步未完成，请检查网络或重新授权。" };
+          lastAttempt: new Date().toISOString(),failureKind:kind,
+          lastError:canvasFailureHelp(kind) };
       }
       return this.latest;
     }).finally(() => {
@@ -113,6 +121,7 @@ export class CanvasSyncService {
       calendarEventsSeen:0,calendarCreated:0,calendarChanged:0,
       calendarMissing:0,calendarSkipped:0,calendarFailedCourses:0,
       lastAttempt: now, lastSuccess: this.latest.lastSuccess, lastError: null,
+      failureKind:null,
     };
 
     const api = await this.apiFactory();
@@ -122,8 +131,12 @@ export class CanvasSyncService {
     let accountId: number;
     try {
       [accountId] = await Promise.all([api.getCurrentUserId()]);
-    } catch {
-      summary.lastError = "Canvas 账号身份验证失败，请检查 Token 或网络。";
+    } catch (reason) {
+      if(generation!==this.generation)return summary;
+      const kind=canvasFailureKind(reason);
+      summary.failureKind=kind;
+      summary.lastError=canvasFailureHelp(kind);
+      if(kind==="authentication")this.reconnectRequired=true;
       return summary;
     }
 
@@ -135,8 +148,11 @@ export class CanvasSyncService {
     let courses;
     try {
       courses = await api.listCourses();
-    } catch {
-      summary.lastError = "Canvas 课程列表读取失败，旧的本地任务已保留。";
+    } catch (reason) {
+      const kind=canvasFailureKind(reason);
+      summary.failureKind=kind;
+      summary.lastError=canvasFailureHelp(kind);
+      if(kind==="authentication")this.reconnectRequired=true;
       this.store.updateCanvasSyncState(api.origin, accountId, false, summary.lastError);
       return summary;
     }
@@ -168,9 +184,18 @@ export class CanvasSyncService {
         summary.changed += report.changed;
         summary.preserved += report.preserved;
         summary.missing += report.missing;
-      } catch {
-        // Other courses still sync. No remote error body or bearer token is logged.
+      } catch (reason) {
+        if(generation!==this.generation)return summary;
+        // Auth expiry and rate limits stop the batch instead of hammering
+        // the remaining courses with a token that cannot currently succeed.
+        const kind=canvasFailureKind(reason);
         summary.failedCourses++;
+        if(kind==="authentication" || kind==="rate-limit"){
+          summary.failureKind=kind;
+          summary.lastError=canvasFailureHelp(kind);
+          if(kind==="authentication")this.reconnectRequired=true;
+          break;
+        }
       }
       if(this.calendar){
         try{
@@ -184,15 +209,23 @@ export class CanvasSyncService {
           summary.calendarChanged=(summary.calendarChanged??0)+report.changed;
           summary.calendarMissing=(summary.calendarMissing??0)+report.missing;
           summary.calendarSkipped=(summary.calendarSkipped??0)+report.skipped;
-        }catch{
+        }catch(reason){
+          if(generation!==this.generation)return summary;
           summary.calendarFailedCourses=(summary.calendarFailedCourses??0)+1;
+          const kind=canvasFailureKind(reason);
+          if(kind==="authentication"||kind==="rate-limit"){
+            summary.failureKind=kind;
+            summary.lastError=canvasFailureHelp(kind);
+            if(kind==="authentication")this.reconnectRequired=true;
+            break;
+          }
         }
       }
     }
 
     if (generation !== this.generation) return summary;
     if (summary.failedCourses||summary.calendarFailedCourses) {
-      summary.lastError = `有 ${summary.failedCourses} 门作业课程及 ${summary.calendarFailedCourses??0} 门日历课程未能同步，已有数据保留。`;
+      summary.lastError ||= `有 ${summary.failedCourses} 门作业课程及 ${summary.calendarFailedCourses??0} 门日历课程未能同步，已有数据保留。`;
     } else {
       summary.lastSuccess = new Date().toISOString();
     }

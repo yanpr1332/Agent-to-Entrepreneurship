@@ -12,7 +12,7 @@ node --test scripts/supabase-alpha-preflight.node.mjs
 npm run test:sync-rls
 ```
 
-预检使用本机 `supabase/migrations` 下已审查的六个 SQL 文件，检查文件缺失、额外未审查 SQL、危险的 RLS 关闭或宽泛授权、核心表的 RLS 声明及历史 Cursor/Checkpoint 关键字。**仅字符串启发式检查，不是真正 SQL 解析器或权限证明**。它没有网络请求，不读取账号凭据，不连接数据库，也不执行迁移。新增迁移必须独立审查后更新清单及测试，缺失/异常会使 CI 失败。
+预检使用本机 `supabase/migrations` 下已审查的七个 SQL 文件，检查文件缺失、额外未审查 SQL、危险的 RLS 关闭或宽泛授权、核心表的 RLS 声明及历史 Cursor/Checkpoint 关键字。**仅字符串启发式检查，不是真正 SQL 解析器或权限证明**。它没有网络请求，不读取账号凭据，不连接数据库，也不执行迁移。新增迁移必须独立审查后更新清单及测试，缺失/异常会使 CI 失败。
 
 按依赖手动核对并部署，前置基础优先：
 
@@ -22,6 +22,7 @@ npm run test:sync-rls
 4. `20261124_ate_workspace_realtime_hints.sql`（Realtime publication）
 5. `20261124_ate_workspace_durable_history.sql`（持久增量日志）
 6. `20261124_ate_workspace_checkpoint_recovery.sql`（检查点恢复，依赖 durable history）
+7. `20261125_ate_workspace_member_revoke.sql`（owner-only 撤权与旧邀请码失效，见 [57](57_ALPHA_CLOSE_07_TEAM_CANVAS_RELEASE.md)）
 
 **这只是审查顺序**，不能盲目在已有数据的项目上重复部署；管理员必须先查看项目当前迁移状态、已存在表和备份，再选择实际需要的文件。只能用于用户授权的隔离非生产 Supabase 项目；不允许将 service_role/secret key 输入应用或任何测试脚本。
 

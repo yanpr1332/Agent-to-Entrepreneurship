@@ -248,6 +248,15 @@ export class SharedCloudClient {
     return requireInvite(token);
   }
 
+  /** Owner-only RPC; server determines authority from user JWT and invalidates invites. */
+  async revokeWorkspaceMember(workspaceId:unknown,userId:unknown):Promise<{revoked:true}>{
+    const result=await this.rpc("ate_revoke_workspace_member",{
+      p_workspace:requireUuid(workspaceId),p_user:requireUuid(userId),
+    });
+    if(result!==true)throw Error("Server did not confirm member revocation");
+    return {revoked:true};
+  }
+
   async joinWorkspace(token:unknown,displayName:unknown):Promise<string>{
     const id=await this.rpc("ate_join_workspace",{
       p_token:requireInvite(token),p_display_name:requireDisplayName(displayName),

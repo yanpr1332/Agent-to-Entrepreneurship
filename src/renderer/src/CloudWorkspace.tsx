@@ -309,6 +309,21 @@ export default function CloudWorkspace() {
     });
   }
 
+  async function revokeMember(member:SharedMember):Promise<void>{
+    if(!selected || !status.userId || member.role==="owner" || member.user_id===status.userId)
+      return;
+    if(!window.confirm(
+      "确认从当前小组撤销「"+member.display_name+"」的访问权限？这会解除他的任务指派、作废所有旧邀请码；原消息和任务仍保留。成员其他设备须等下一次服务端权限检查才会清空已缓存内容。"
+    ))return;
+    const workspaceId=selected;
+    await run(async()=>{
+      await window.desktop.cloud.revokeMember(workspaceId,member.user_id);
+      setInvite(""); // Previously issued invite tokens were revoked server-side.
+      await refreshSelected(workspaceId);
+      setNotice("已由服务端撤销成员权限，旧邀请码已作废，相关任务改为未分配。远端设备会在权限复检时停止同步并清理本机共享缓存。");
+    });
+  }
+
   async function makeInvite():Promise<void>{
     if(!selected)return;
     await run(async()=>{
@@ -592,6 +607,9 @@ export default function CloudWorkspace() {
                 <span className="muted-tag">{members.length}/5</span></div>
               <div className="cloud-members">{members.map(member=><span className="chip" key={member.user_id}>
                 {member.display_name} {member.role==="owner"?"· 所有者":""}
+                {owner&&member.role==="member"&&<button className="text-button" disabled={busy}
+                  type="button" onClick={()=>void revokeMember(member)}
+                  aria-label={"撤销成员 "+member.display_name+" 的工作空间权限"}>撤销成员</button>}
               </span>)}</div>
               {owner && <div className="cloud-invite">
                 <button className="secondary-button" disabled={busy} onClick={()=>void makeInvite()}>生成邀请码</button>

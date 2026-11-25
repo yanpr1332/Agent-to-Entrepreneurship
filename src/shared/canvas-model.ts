@@ -87,4 +87,6 @@ export interface CanvasAutoSyncSummary {
   lastAttempt: string | null;
   lastSuccess: string | null;
   lastError: string | null;
+  /** Sanitized transient classification. Never contains the access token. */
+  failureKind?: "authentication" | "permissions" | "rate-limit" | "network" | "other" | null;
 }

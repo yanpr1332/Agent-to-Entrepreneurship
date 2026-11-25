@@ -50,3 +50,7 @@ STUDY_ANCHOR_USER_DATA_DIR="$HOME/Documents/Study Anchor Recovered 2026-11-25" n
 仍需五人测试用合法隔离账号和两种系统在真实设备下载包、核验 SHA、安装/启动/重启/卸载、主动快照/隔离恢复、模拟坏库与旧版升级、回滚，并保留脱敏验收记录。只有这些完成后才可以在验收矩阵中标注“真机通过”。
 
 下一轮 ALPHA-CLOSE-04 才进入五个独立账号的真实 Supabase RLS/Realtime 及撤权测试。云端部署需要授权，不允许自动运行迁移脚本。
+
+## E. 五人下载后的独立验证（ALPHA-CLOSE-07）
+
+为了避免团队成员误拿错误版本，已补充纯离线 `scripts/verify-downloaded-alpha.mjs`，以**从 GitHub 独立核对的 40 位 SHA** 比对下载 artifact 中的 `BUILD_EVIDENCE.json` 与 `SHA256SUMS.txt` 并重新哈希各 EXE/DMG/ZIP；不运行安装包。操作、局限及负向测试见 [57](57_ALPHA_CLOSE_07_TEAM_CANVAS_RELEASE.md)。即使校验通过，也不能代替可信发布来源、代码签名、系统安装与恢复真机验收。

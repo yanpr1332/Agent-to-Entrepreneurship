@@ -308,3 +308,7 @@ PR #36 已合并：个人同步服务端 SQL/RLS、owner 认证的设备注册/�
 ## ALPHA-CLOSE-05/06 邮箱人工回复与 AI 证据闪卡（2026-11-25）
 
 [56 邮箱完整工作流和来源复习卡](56_ALPHA_CLOSE_05_06_MAIL_AI_CARDS.md)：邮箱头默认只读、正文逐封授权预览、系统密钥加密本机草稿与回复 SMTP 单次发送；知识库选定单片段经授权的 AI JSON 候选，人工核对引用/版本后保存可编辑复习卡。真实交大 IMAP/SMTP、合法 AI Key、Windows/macOS GUI 仍待验收，不能由模拟加密或 CI 冒充。
+
+## ALPHA-CLOSE-07：团队撤权、Canvas 恢复和离线安装包核验（2026-11-25）
+
+[57 代码与验收步骤](57_ALPHA_CLOSE_07_TEAM_CANVAS_RELEASE.md)：成员撤销 RPC 与五账号 RLS 的旧 JWT/旧邀请码反向用例、Canvas API 身份验证及 Token 过期后的手动重连、Windows/macOS 未签名安装包完整性复检。**未部署 SQL、未触发真实邮件/模型调用、未在真实电脑下载和安装。**

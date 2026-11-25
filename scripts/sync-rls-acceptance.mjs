@@ -3,7 +3,8 @@
  * ALPHA-SYNC-001: opt-in, state-changing RLS acceptance on an ISOLATED
  * Supabase test project. NO service_role, remote cleanup, or automatic CI run.
  * Accounts: A owner; B, D, E members; C outsider until final fifth join.
- * Five distinct identities test both isolation and five-person membership.
+ * Five distinct identities test both isolation, five-person membership and
+ * owner-only revocation. Revocation requires 20261125 migration in test project.
  */
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -157,7 +158,7 @@ export async function runRlsAcceptance(env, fetcher = fetch) {
   const messagesPath = "rest/v1/ate_workspace_messages?workspace_id=eq." +
     workspace + "&select=id,body";
   const tasksPath = "rest/v1/ate_workspace_tasks?workspace_id=eq." +
-    workspace + "&select=id,title,completed";
+    workspace + "&select=id,title,completed,assigned_to";
   const membersPath = "rest/v1/ate_workspace_members?workspace_id=eq." +
     workspace + "&select=user_id";
   const workspacesPath = "rest/v1/ate_workspaces?id=eq." +
@@ -237,12 +238,56 @@ export async function runRlsAcceptance(env, fetcher = fetch) {
   if (!Array.isArray(fifthRead) || !fifthRead.some(row => row.id === taskId))
     fail("fifth member cannot read shared work");
 
+  // Revocation occurs only after reaching the 5-account state. This requires
+  // the separately reviewed 20261125 SQL migration in the isolated project.
+  const unspentInvite = requireAllowed(await request(
+    "rest/v1/rpc/ate_create_invite", "POST", users.A.token,
+    {p_workspace:workspace}), "fresh owner invite before revocation");
+  if(typeof unspentInvite!=="string" || !/^[a-f0-9]{48}$/.test(unspentInvite))
+    fail("fresh owner invite format invalid");
+  const revokePath = "rest/v1/rpc/ate_revoke_workspace_member";
+  requireDenied(await request(revokePath,"POST",users.B.token,
+    {p_workspace:workspace,p_user:users.D.id}),"non-owner revocation");
+  requireDenied(await request(revokePath,"POST",users.A.token,
+    {p_workspace:workspace,p_user:users.A.id}),"owner self revocation");
+  const revoked=requireAllowed(await request(revokePath,"POST",users.A.token,
+    {p_workspace:workspace,p_user:users.B.id}),"owner revokes member B");
+  if(revoked!==true) fail("revocation not confirmed by server");
+  for(const [path,label] of [
+    [messagesPath,"messages"],[tasksPath,"tasks"],
+    [membersPath,"members"],[workspacesPath,"workspace"],
+  ]) requireInvisible(await request(path,"GET",users.B.token),
+    "revoked member "+label+" read");
+  requireDenied(await request("rest/v1/ate_workspace_messages","POST",users.B.token,{
+    workspace_id:workspace,author_id:users.B.id,body:"revoked member must not post",
+  }),"revoked member message write");
+  const stalePatch=await request(
+    "rest/v1/ate_workspace_tasks?id=eq."+taskId+"&workspace_id=eq."+workspace,
+    "PATCH",users.B.token,{completed:false});
+  if(stalePatch.ok && (!Array.isArray(stalePatch.value)||stalePatch.value.length!==0))
+    fail("revoked member modified a task with an old JWT");
+  requireDenied(await request("rest/v1/rpc/ate_join_workspace","POST",users.B.token,{
+    p_token:unspentInvite,p_display_name:"Replay B",
+  }),"revoked member stale invitation replay");
+  const afterRevoke=requireAllowed(await request(membersPath,"GET",users.A.token),
+    "owner membership after revocation");
+  if(!Array.isArray(afterRevoke)||afterRevoke.length!==4||
+      afterRevoke.some(row=>row.user_id===users.B.id))
+    fail("revoked member still appears as authorized");
+  const ownerTasks=requireAllowed(await request(tasksPath,"GET",users.A.token),
+    "owner task list after revocation");
+  if(!Array.isArray(ownerTasks)||!ownerTasks.some(row=>row.id===taskId&&row.assigned_to===null))
+    fail("revoked member task assignment not cleared");
+
   return {
     workspaceId: workspace,
     verifiedAccounts: 5,
+    revokedAccounts: 1,
     tested: ["member read/write", "outsider read/write isolation",
       "spoofed author denial", "nonmember assignment denial",
-      "owner-only invitations", "five-account membership"],
+      "owner-only invitations", "five-account membership",
+      "owner-only revocation", "stale-JWT RLS isolation",
+      "stale invitation invalidation", "task unassignment"],
   };
 }
 
@@ -251,6 +296,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     const result = await runRlsAcceptance(process.env);
     console.log("PASS: five-account Supabase RLS acceptance on an isolated test project.");
     console.log("Workspace ID:", result.workspaceId);
+    console.log("PASS: owner revoked one account; subsequent old-JWT reads/writes and old invites denied.");
     console.log("Test workspace and records remain; remove manually using test-project administration.");
   } catch (error) {
     console.error(error instanceof Error ? error.message : "RLS acceptance failed");
