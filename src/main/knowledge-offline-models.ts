@@ -166,8 +166,12 @@ export class KnowledgeOfflineModels {
       this.generation++;
       const old=this.provider;
       this.provider=next;this.record=record;this.error=null;next=null;
-      old?.close();
-      if(prior&&prior.file!==record.file)this.removeAsset(prior);
+      committed=true;
+      try{old?.close();}catch{/* New model must remain installed. */}
+      if(prior&&prior.file!==record.file){
+        try{this.removeAsset(prior);}
+        catch{this.error="新模型已启用，但旧模型文件清理失败；请人工检查本机模型目录。";}
+      }
       return this.status();
     }catch{
       next?.close();
@@ -185,6 +189,7 @@ export class KnowledgeOfflineModels {
     const dest=join(this.directory,record.file);
     const prior=this.record;
     let added=false,next:Handle|null=null,temp:string|null=null;
+    let committed=false;
     try{
       if(existsSync(dest)){
         verifyNeuralRecord(dest,record);
@@ -200,12 +205,15 @@ export class KnowledgeOfflineModels {
       this.generation++;
       const old=this.provider;
       this.provider=next;this.record=record;this.error=null;next=null;
-      old?.close();
-      if(prior&&prior.file!==record.file)this.removeAsset(prior);
+      try{old?.close();}catch{/* New model must remain installed. */}
+      if(prior&&prior.file!==record.file){
+        try{this.removeAsset(prior);}
+        catch{this.error="新模型已启用，但旧模型文件清理失败；请人工检查本机模型目录。";}
+      }
       return this.status();
     }catch{
       next?.close();
-      if(added)rmSync(dest,{recursive:true,force:true});
+      if(added&&!committed)rmSync(dest,{recursive:true,force:true});
       throw Error("Neural ONNX installation failed (assets or offline runtime)");
     }finally{
       if(temp)rmSync(temp,{force:true});

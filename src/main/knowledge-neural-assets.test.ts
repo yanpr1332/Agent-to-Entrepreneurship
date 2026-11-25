@@ -151,6 +151,22 @@ describe("KB-005D local E5/BGE asset supply chain and index integration",()=>{
     expect(JSON.parse(readFileSync(join(root,"knowledge-models","installed.json"),
       "utf8")).model.revision).toBe(original);
   });
+  it("keeps newly committed neural model if old-asset cleanup fails",async()=>{
+    const root=makeRoot(),{service}=manager(root);
+    await service.importNeuralDirectory(source(root,"e5"),"e5");
+    const delegate=service as unknown as {removeAsset:(record:unknown)=>void};
+    const original=delegate.removeAsset;
+    delegate.removeAsset=()=>{throw Error("EPERM: old model is busy");};
+    try{
+      const result=await service.importNeuralDirectory(source(root,"bge"),"bge");
+      expect(result.engine).toBe("onnx-bge");
+      expect(result.installed).toBe(true);
+      expect(result.error).toContain("清理失败");
+      expect(JSON.parse(readFileSync(join(root,"knowledge-models","installed.json"),
+        "utf8")).model.id).toBe("baai/bge-small-zh-v1.5");
+    }finally{delegate.removeAsset=original;}
+  });
+
   it("rejects model tampering at startup and retains lexical fallback",async()=>{
     const root=makeRoot(),{store,service}=manager(root);
     const dir=source(root,"bge");
