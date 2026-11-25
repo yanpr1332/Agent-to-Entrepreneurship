@@ -128,6 +128,10 @@ describe("ALPHA-KB-005C user-labelled local search evaluation",()=>{
     const {dir,store,manager,modelPath}=fixture();
     const doc=store.importText({sourcePath:"/old.md",title:"Old",
       format:"markdown",text:"mitochondria energy"}).document;
+    // Keep a second valid indexed passage so the stale-reference guard is
+    // reached after the general "requires some indexed evidence" precondition.
+    store.importText({sourcePath:"/still-valid.md",title:"Valid",
+      format:"markdown",text:"mitochondria energy"});
     await manager.importFile(modelPath);await index(store,manager);
     const file=join(dir,"labels.json");
     writeFileSync(file,JSON.stringify({schema:1,cases:[
