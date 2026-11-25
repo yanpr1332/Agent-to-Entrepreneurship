@@ -51,7 +51,7 @@ describe("local-first SQLite store", () => {
         DROP TABLE personal_sync_legacy_outbox;
         DROP TABLE personal_sync_devices;
         DROP TABLE personal_sync_conflicts;
-        DROP TABLE personal_sync_pull_checkpoints;
+        DROP TABLE focus_reward_redemptions; DROP TABLE focus_rewards; DROP TABLE personal_sync_pull_checkpoints;
         CREATE TABLE personal_task_sync_enrollment(
           task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
           server_version INTEGER,enabled_at TEXT NOT NULL
@@ -287,7 +287,7 @@ describe("local-first SQLite store", () => {
       const task=initial.createTask({title:"Preserve through conflict migration"});
       initial.close();
       const raw=new DatabaseSync(file);
-      raw.exec("DROP TABLE personal_sync_conflicts; DROP TABLE personal_sync_pull_checkpoints; PRAGMA user_version=8");
+      raw.exec("DROP TABLE personal_sync_conflicts; DROP TABLE focus_reward_redemptions; DROP TABLE focus_rewards; DROP TABLE personal_sync_pull_checkpoints; PRAGMA user_version=8");
       raw.close();
       const upgraded=new LocalStore(file);
       expect(upgraded.listTasks()).toMatchObject([{id:task.id,title:task.title}]);
@@ -308,7 +308,7 @@ describe("local-first SQLite store", () => {
       const oldOutbox=initial.listPersonalSyncOutbox(OWNER_A);
       initial.close();
       const v9=new DatabaseSync(file);
-      v9.exec("DROP TABLE personal_sync_pull_checkpoints; PRAGMA user_version=9");
+      v9.exec("DROP TABLE focus_reward_redemptions; DROP TABLE focus_rewards; DROP TABLE personal_sync_pull_checkpoints; PRAGMA user_version=9");
       v9.close();
       const upgraded=new LocalStore(file);
       expect(upgraded.listTasks()).toMatchObject([{id:local.id,title:"Preserve v9 task"}]);
@@ -317,7 +317,7 @@ describe("local-first SQLite store", () => {
       expect(upgraded.getPendingPersonalSyncPull(OWNER_A)).toBeNull();
       upgraded.close();
       const check=new DatabaseSync(file,{readOnly:true});
-      expect((check.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(10);
+      expect((check.prepare("PRAGMA user_version").get() as {user_version:number}).user_version).toBe(11);
       check.close();
     }finally{rmSync(directory,{recursive:true,force:true});}
   });

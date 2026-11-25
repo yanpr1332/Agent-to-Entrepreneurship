@@ -4,6 +4,7 @@ import { formatCalendarSelection, formatDueDate, localDateKey, monthCells } from
 import { parseFocusMinutes } from "./focus-duration";
 import { focusCalendarSegments } from "./focus-calendar";
 import FocusInsightsPanel from "./FocusInsightsPanel";
+import FocusRewardsPanel from "./FocusRewardsPanel";
 import CalendarAgenda from "./CalendarAgenda";
 import { calendarWeekDays,shiftCalendarView,type CalendarView } from "./calendar-agenda";
 import CanvasConnector from "./CanvasConnector";
@@ -667,6 +668,7 @@ export default function App() {
               </li>)}</ul> : <p className="empty-state">暂无专注记录。</p>}
             </section>
             <FocusInsightsPanel active={page==="focus"} refreshKey={summary.sessions}/>
+            <FocusRewardsPanel active={page==="focus"} refreshKey={summary.sessions}/>
             </div>
           </div>
 

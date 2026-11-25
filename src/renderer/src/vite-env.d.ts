@@ -1,7 +1,8 @@
 /// <reference types="vite/client" />
 
 import type {
-  CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary, FocusInsights, FocusTitleUpdate,
+  CreateTaskInput, FocusCompletionInput, FocusSession, FocusSummary, FocusInsights, FocusReward, FocusRewardOverview, FocusRewardCreateInput,
+  FocusRewardEditInput, FocusRewardRedeemInput, FocusRewardRedemption, FocusTitleUpdate,
   LocalTask, UpdateTaskInput,
 } from "../../shared/local-model";
 
@@ -203,6 +204,11 @@ declare global {
         rename: (input: FocusTitleUpdate) => Promise<FocusSession>;
         summary: () => Promise<FocusSummary>;
         insights: (timeZone:string) => Promise<FocusInsights>;
+        rewards: () => Promise<FocusRewardOverview>;
+        createReward: (input:FocusRewardCreateInput) => Promise<FocusReward>;
+        editReward: (input:FocusRewardEditInput) => Promise<FocusReward>;
+        redeemReward: (input:FocusRewardRedeemInput) => Promise<FocusRewardRedemption>;
+
       };
     };
   }
