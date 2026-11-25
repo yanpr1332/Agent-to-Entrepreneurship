@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import KnowledgeGraph from "./KnowledgeGraph";
 import SafeKnowledgePreview from "./SafeKnowledgePreview";
+import KnowledgeAIFlashcard from "./KnowledgeAIFlashcard";
 import KnowledgeAIHelper from "./KnowledgeAIHelper";
 import LocalEvaluationLab from "./LocalEvaluationLab";
 import ReviewCardMaintenance from "./ReviewCardMaintenance";
@@ -429,6 +430,9 @@ export default function KnowledgeBase(){
               忽略 HTML 属性和远程资源，未实现的 TeX 命令可能以文本显示。源码与复习卡引用均来自本机快照。</p>
             {passage&&<KnowledgeAIHelper
               key={selected.id+":"+selected.revision+":"+passage.ordinal} passage={passage}/>}
+            {passage&&<KnowledgeAIFlashcard
+              key={"card:"+selected.id+":"+selected.revision+":"+passage.ordinal}
+              passage={passage} onCreated={reload}/>}
             <form className="kb-card-form" onSubmit={event=>void addCard(event)}>
               <h3>以这段原文创建复习卡</h3>
               <label>问题<input value={question} required maxLength={500}
