@@ -203,6 +203,12 @@
 - **KB-006/007 + AI-004（当前 PR #64）**：从单个用户选定本机原文请求个人 AI 模型产生严格引用的候选复习卡，手工修改并复核版本后才写入 SQLite；无真实自选 Key API 证据，见 [56](../w5/56_ALPHA_CLOSE_05_06_MAIL_AI_CARDS.md)。
 - **QA-003/004/005/007 与 REL-001/002**：仍须合法五账号、独立 Supabase 测试项目、学校 Canvas/交大邮箱账号、真实 OS 安装和 Keychain/DPAPI；独立 Review + 真机/外部服务的证据必须齐全才能标「已通过」。
 
+## ALPHA-CLOSE-07 集中开发记录（2026-11-25）
+
+- **TEAM-006 / QA-003/007：** 新增仅 owner 可撤销普通成员、任务指派解除、全部旧邀请码失效，并扩展五账号旧 JWT/旧邀请码真实 RLS 测试脚本；SQL 需人工在隔离项目部署，真实五人/跨设备/撤权仍 Blocked。[57](../w5/57_ALPHA_CLOSE_07_TEAM_CANVAS_RELEASE.md)
+- **CAN-002 / CAN-007：** 新 Token 同时验证课程读取和当前账号；遇 401 暂停重复请求、用户主动重新授权、保留本机任务并防旧请求竞态；OAuth 仍需学校审批，真实 Token 未验收。[57](../w5/57_ALPHA_CLOSE_07_TEAM_CANVAS_RELEASE.md)
+- **REL-001/002：** 新增下载后 EXE/DMG/ZIP、哈希与独立 Git SHA 的只读复检和篡改测试；与数字签名、真实安装及 GUI/数据恢复验收有严格区别。[57](../w5/57_ALPHA_CLOSE_07_TEAM_CANVAS_RELEASE.md)
+
 ## 任务领取与冲突控制
 - 本表不把任务永久分配给具体成员。团队按当周时间、能力和兴趣动态认领。
 - 每项进入“进行中”的任务必须记录一名临时 Driver、一名 Reviewer、关联 Issue/PR、负责文件/目录、依赖和验收人；这不是永久岗位。
