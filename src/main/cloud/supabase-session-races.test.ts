@@ -129,6 +129,39 @@ describe("cloud session generation isolation under concurrent network responses"
     expect(cloud.status().userId).toBe(B);
   });
 
+  it("a refresh token cannot silently switch the signed-in user identity",async()=>{
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-25T01:00:00Z"));
+    const cloud=configured(async(url)=>{
+      if(url.includes("grant_type=password"))return auth(A,"a",120);
+      if(url.includes("grant_type=refresh_token"))return auth(B,"wrong-user");
+      throw Error("No user-scoped request should occur after identity mismatch");
+    });
+    await cloud.login({email:"a@example.edu",password:"valid-password"});
+    vi.setSystemTime(new Date("2026-11-25T01:01:05Z"));
+    await expect(cloud.listWorkspaces()).rejects.toThrow("Cloud session expired");
+    expect(cloud.status()).toMatchObject({authenticated:false,userId:null});
+  });
+
+  it("stale realtime credentials cannot escape after project change during refresh",async()=>{
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-25T01:00:00Z"));
+    const oldRefresh=deferred<Response>();
+    const cloud=configured(async(url)=>{
+      if(url.includes("grant_type=password"))return auth(A,"a",120);
+      if(url.includes("grant_type=refresh_token"))return oldRefresh.promise;
+      throw Error("unexpected call");
+    });
+    await cloud.login({email:"a@example.edu",password:"valid-password"});
+    vi.setSystemTime(new Date("2026-11-25T01:01:05Z"));
+    const pending=cloud.realtimeCredentials();
+    await flush();
+    cloud.configure({projectUrl:OTHER_URL,publishableKey:KEY});
+    oldRefresh.resolve(auth(A,"a-renewed"));
+    await expect(pending).rejects.toThrow(/changed|expired/);
+    expect(cloud.status()).toMatchObject({authenticated:false,userId:null});
+  });
+
   it("two simultaneous protected reads share one valid refresh, not two independent refreshes",async()=>{
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-11-25T01:00:00Z"));
