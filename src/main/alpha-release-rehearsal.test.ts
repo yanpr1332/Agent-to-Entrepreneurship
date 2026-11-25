@@ -18,7 +18,7 @@ import { WorkspaceHistoryStore } from "./cloud/workspace-history-store";
 import { testHistoryCipher } from "./cloud/workspace-history-crypto.test-helper";
 import { createLocalBackup } from "./local-backup";
 import { inspectRecoveryFolder, recoverToNewProfile } from "./profile-recovery";
-import { workbenchTaskSummary,workbenchDaySchedule } from "../renderer/src/workbench-data";
+import { workbenchTaskSummary,workbenchDaySchedule } from "../shared/workbench-data";
 import type { EncryptionProvider } from "./connectors/canvas-credentials";
 
 /**
