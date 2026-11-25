@@ -66,9 +66,11 @@ export class PersonalFileSyncService {
   }
   async overview():Promise<PersonalFilesOverview>{
     const owner=this.owner();
-    const remote=await this.cloud.listPersonalFiles();
+    let remote:PersonalFilesOverview["remote"]=[],cloudAvailable=true;
+    try{remote=await this.cloud.listPersonalFiles();}
+    catch{cloudAvailable=false;} // Never use a cached remote list after access may have been revoked.
     if(this.owner()!==owner)throw Error("File sync owner changed");
-    return {pending:this.pending(),remote};
+    return {pending:this.pending(),remote,cloudAvailable};
   }
   /** file path is supplied ONLY by Main after native OpenFileDialog; NEVER by IPC. */
   async stagePickedFile(sourcePath:string,replace?:{fileId:string;version:number}):
@@ -84,17 +86,20 @@ export class PersonalFileSyncService {
         throw Error("Only regular files between 1 byte and 1 MiB may be selected");
       const bytes=readFileSync(sourcePath);
       requireFileSize(bytes.byteLength);
-      const remote=await this.cloud.listPersonalFiles();
+      // Offline staging is local-only; if remote list cannot be checked,
+      // final server quota/CAS checks remain mandatory at explicit upload.
+      let remote:PersonalFilesOverview["remote"]|null=null;
+      try{remote=await this.cloud.listPersonalFiles();}catch{/* local staging remains allowed */}
       if(this.owner()!==owner)throw Error("Account changed while staging file");
       let fileId:string,baseVersion:number;
       if(replace){
         fileId=requireUuid(replace.fileId);
         baseVersion=requireFileVersion(replace.version);
-        const current=remote.find(row=>row.fileId===fileId);
-        if(!current||current.version!==baseVersion)
+        const current=remote?.find(row=>row.fileId===fileId);
+        if(remote&&(!current||current.version!==baseVersion))
           throw Error("Remote file changed; refresh before replacing");
       }else{
-        const total=remote.length+this.pending().filter(row=>row.baseVersion===0).length;
+        const total=(remote?.length??0)+this.pending().filter(row=>row.baseVersion===0).length;
         if(total>=MAX_SYNC_FILE_COUNT)throw Error("Personal cloud file limit reached");
         fileId=randomUUID();baseVersion=0;
       }
