@@ -43,6 +43,56 @@ export function inspectMigrations(directory) {
     catch { issues.push("unreadable migration: " + name); continue; }
     if (sql.length < 100 || sql.length > 150000) issues.push("unexpected SQL size: " + name);
     const active = withoutComments(sql);
+    // A previous migration accidentally used `as #!/usr/bin/env node
+/**
+ * Read-only migration preflight. No network, database access or credentials.
+ * This does NOT establish that any migration is deployed or that RLS works.
+ */
+import { readFileSync, readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve, join } from "node:path";
+
+export const MIGRATIONS = Object.freeze([
+  "20261110_ate_workspace_poc.sql",
+  "20261124_ate_personal_sync.sql",
+  "20261124_ate_personal_sync_recovery_inspect.sql",
+  "20261124_ate_workspace_realtime_hints.sql",
+  "20261124_ate_workspace_durable_history.sql",
+  "20261124_ate_workspace_checkpoint_recovery.sql",
+  "20261125_ate_workspace_member_revoke.sql",
+]);
+const DANGEROUS = [
+  [/\bdrop\s+schema\s+public\b/i, "DROP SCHEMA public"],
+  [/\btruncate\s+(?:table\s+)?public\./i, "TRUNCATE public table"],
+  [/\balter\s+table\s+public\.[\w]+\s+disable\s+row\s+level\s+security/i, "disabled RLS"],
+  [/\bgrant\s+all\s+on\s+(?:all\s+tables|table\s+public\.)/i, "unrestricted table grant"],
+  [/\bgrant\s+[^;]+\s+to\s+(?:anon|public)\s*;/i, "grant to anon/public"],
+];
+function withoutComments(sql) {
+  // This conservative preflight strips SQL comments, not string literals. It is
+  // intentionally NOT a full SQL parser and never claims a proof of safety.
+  return sql.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+}
+export function inspectMigrations(directory) {
+  const issues = [];
+  let filenames;
+  try { filenames = readdirSync(directory); }
+  catch { return { ok: false, issues: ["migration directory unavailable"], migrations: [] }; }
+  const unexpected = filenames.filter(name => name.endsWith(".sql") && !MIGRATIONS.includes(name));
+  if (unexpected.length) issues.push("unreviewed SQL migrations: " + unexpected.sort().join(", "));
+  const migrations = [];
+  for (const name of MIGRATIONS) {
+    if (!filenames.includes(name)) { issues.push("missing migration: " + name); continue; }
+    let sql;
+    try { sql = readFileSync(join(directory, name), "utf8"); }
+    catch { issues.push("unreadable migration: " + name); continue; }
+    if (sql.length < 100 || sql.length > 150000) issues.push("unexpected SQL size: " + name);
+ / `$;` instead of
+    // PostgreSQL dollar quotes. This simple pattern detects that exact
+    // malformed delimiter without treating this heuristic as a SQL parser.
+    if (/\bas\s+\$(?!\$|[A-Za-z_][A-Za-z0-9_]*\$)/i.test(active) ||
+        /(?:^|\n)\s*\$\s*;/m.test(active))
+      issues.push(name + ": malformed function dollar-quote delimiter");
     for (const [pattern, label] of DANGEROUS) {
       if (pattern.test(active)) issues.push(name + ": potentially unsafe " + label);
     }
