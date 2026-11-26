@@ -198,7 +198,7 @@ export default function AIWorkspace(){
       }
       if(preview&&previewMode==="plan")await cancelActivePreview();
       await reloadProjectDetails(activeProject.id);
-      setNotice("项目资料授权已更新。读取权限与云端发送权限彼此独立；已有规划预览已取消，需要重新审查。");
+      setNotice("项目资料授权已更新。读取权限与模型端点发送权限彼此独立；已有规划预览已取消，需要重新审查。");
     }catch(e){setError(describeError(e));}
     finally{setBusy(false);}
   }
@@ -538,7 +538,7 @@ export default function AIWorkspace(){
                 <label>
                   <input type="checkbox" checked={remote} disabled={busy||sending||!local}
                     onChange={event=>void setTaskPermission(task.id,"remote",event.target.checked)}/>
-                  允许将此任务标题、截止日期和优先级发送给当前云端模型
+                  允许将此任务标题、截止日期和优先级发送给当前模型服务端点（通常为云端）
                 </label>
                 <label>
                   <input type="checkbox" checked={chosen.includes(task.id)}
@@ -574,7 +574,7 @@ export default function AIWorkspace(){
             <ul>{projectAudit.slice(0,8).map(event=><li key={event.id}>
               {projectAuditNames[event.kind]} ·
               {event.result==="allowed"?"授权检查通过":event.result==="denied"?"授权检查拒绝":"已记录"} ·
-              {event.destination==="cloud-model"?"云端模型":event.destination==="local"?"本机":"本地操作"} ·
+              {event.destination==="configured-model"?"模型服务端点":event.destination==="local"?"本机":"本地操作"} ·
               {new Date(event.occurredAt).toLocaleString("zh-CN")}
             </li>)}</ul>}
         </>}
