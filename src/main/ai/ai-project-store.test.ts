@@ -3,12 +3,14 @@ import {AIProjectStore} from "./ai-project-store";
 import {AI_PROJECT_ACTIONS,parseAIProjectSourceGrant} from "../../shared/ai-project-model";
 
 const now=new Date("2026-11-26T00:00:00.000Z");
-const projectId="dc926d48-ac41-46a1-8a4c-e9308b32b301";
+let projectId="";
 const taskId="ec926d48-ac41-46a1-8a4c-e9308b32b302";
 const stores:AIProjectStore[]=[];
 function store(){const value=new AIProjectStore(":memory:");stores.push(value);return value;}
 function create(db:AIProjectStore){
-  return db.createProject({name:"Coursework",purpose:"Prepare my weekly study plan"},now);
+  const created=db.createProject({name:"Coursework",purpose:"Prepare my weekly study plan"},now);
+  projectId=created.id;
+  return created;
 }
 function grant(db:AIProjectStore,options:Partial<{
   canReadLocal:boolean;canSendRemote:boolean;expiresAt:string|null;
