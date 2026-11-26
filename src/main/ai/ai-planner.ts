@@ -54,7 +54,7 @@ export class AIPlanningCoordinator {
       "任务、截止时间和允许时间窗：",
       JSON.stringify({settings,tasks:disclosed}),
     ].join("\n");
-    const preview=this.ai.prepare(prompt); // Still no network request.
+    const preview=this.ai.prepare(prompt,now,"project-plan"); // Still no network request.
     this.pending={approvalId:preview.approvalId,projectId,settings,selected};
     return preview;
   }
@@ -79,7 +79,7 @@ export class AIPlanningCoordinator {
     verify(); // Do not spend API budget on stale or revoked context.
     // AIService invokes this callback after key resolution, immediately before
     // reserving quota and making the external request.
-    const answer=await this.ai.confirm(approvalId,this.now(),verify);
+    const answer=await this.ai.confirm(approvalId,this.now(),verify,"project-plan");
     let slots:AIPlanSlot[];
     try{slots=parseAIPlanSlots(answer.text);}
     catch{
