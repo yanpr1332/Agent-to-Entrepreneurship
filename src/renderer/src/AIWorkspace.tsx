@@ -104,11 +104,19 @@ export default function AIWorkspace(){
     return()=>{active=false;};
   },[activeProjectId,projects]);
 
+  async function cancelActivePreview():Promise<void>{
+    if(!preview)return;
+    if(previewMode==="plan")await window.desktop.ai.planCancel();
+    else setStatus(await window.desktop.ai.cancel());
+    setPreview(null);
+  }
+
   async function createProject(event:FormEvent<HTMLFormElement>):Promise<void>{
     event.preventDefault();
     if(busy||sending)return;
     setBusy(true);setError("");setNotice("");
     try{
+      await cancelActivePreview();
       const created=await window.desktop.ai.projects.create({
         name:newProjectName,purpose:newProjectPurpose,
       });
@@ -139,7 +147,7 @@ export default function AIWorkspace(){
     if(!window.confirm("归档此 AI 项目？所有资料读取、云端发送和动作授权将立即撤销。审计记录会保留；不会删除原始任务。"))return;
     setBusy(true);setError("");setNotice("");
     try{
-      if(preview&&previewMode==="plan")await window.desktop.ai.planCancel();
+      await cancelActivePreview();
       await window.desktop.ai.projects.archive(activeProject.id);
       const next=await window.desktop.ai.projects.list();
       setProjects(next);setActiveProjectId(next.find(item=>!item.archivedAt)?.id??"");
@@ -151,10 +159,8 @@ export default function AIWorkspace(){
 
   async function switchProject(id:string):Promise<void>{
     if(id===activeProjectId)return;
-    if(preview&&previewMode==="plan"){
-      try{await window.desktop.ai.planCancel();}catch{/* the old preview remains unusable after the switch */}
-    }
-    setPreview(null);setPlanDraft(null);setChosen([]);
+    try{await cancelActivePreview();}catch(e){setError(describeError(e));return;}
+    setPlanDraft(null);setChosen([]);
     setActiveProjectId(id);
   }
 
@@ -182,8 +188,9 @@ export default function AIWorkspace(){
         });
         if(!canSendRemote)setChosen(items=>items.filter(id=>id!==taskId));
       }
+      if(preview&&previewMode==="plan")await cancelActivePreview();
       await reloadProjectDetails(activeProject.id);
-      setNotice("项目资料授权已更新。读取权限与云端发送权限彼此独立。");
+      setNotice("项目资料授权已更新。读取权限与云端发送权限彼此独立；已有规划预览已取消，需要重新审查。");
     }catch(e){setError(describeError(e));}
     finally{setBusy(false);}
   }
@@ -196,6 +203,7 @@ export default function AIWorkspace(){
         projectId:activeProject.id,action:"planning.propose",
         enabled,expiresAt:enabled?expiryFromDuration():null,
       });
+      if(preview&&previewMode==="plan")await cancelActivePreview();
       await reloadProjectDetails(activeProject.id);
       if(!enabled){setChosen([]);setPlanDraft(null);}
       setNotice(enabled?"已允许此项目生成待审查的学习计划草稿。":"已撤销此项目生成学习计划草稿的权限。");
@@ -510,12 +518,12 @@ export default function AIWorkspace(){
                 <strong>{task.title}</strong>
                 <span>截止 {task.dueDate??"未设置"} · {task.priority}</span>
                 <label>
-                  <input type="checkbox" checked={local} disabled={busy||sending||!!preview}
+                  <input type="checkbox" checked={local} disabled={busy||sending}
                     onChange={event=>void setTaskPermission(task.id,"local",event.target.checked)}/>
                   允许项目在本机读取此任务摘要
                 </label>
                 <label>
-                  <input type="checkbox" checked={remote} disabled={busy||sending||!!preview||!local}
+                  <input type="checkbox" checked={remote} disabled={busy||sending||!local}
                     onChange={event=>void setTaskPermission(task.id,"remote",event.target.checked)}/>
                   允许将此任务标题、截止日期和优先级发送给当前云端模型
                 </label>
