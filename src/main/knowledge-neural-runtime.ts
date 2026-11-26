@@ -3,6 +3,7 @@ import {existsSync} from "node:fs";
 import {homedir} from "node:os";
 import {isAbsolute,join} from "node:path";
 import {promisify} from "node:util";
+import type {KnowledgeNeuralRuntimeStatus} from "../shared/knowledge-model";
 
 const exec=promisify(execFile);
 export type NeuralRuntimeSource="managed"|"custom"|"system";
@@ -10,13 +11,7 @@ export type NeuralRuntimeReason=
   "ready"|"missing-python"|"invalid-config"|"unsupported-python"|
   "missing-packages"|"cpu-provider-unavailable"|"runtime-unavailable"|
   "timeout"|"invalid-response";
-export interface NeuralRuntimeStatus{
-  ready:boolean;
-  source:NeuralRuntimeSource;
-  reason:NeuralRuntimeReason;
-  pythonVersion:string|null;
-  missing:("numpy"|"onnxruntime"|"transformers")[];
-}
+export type NeuralRuntimeStatus=KnowledgeNeuralRuntimeStatus;
 export const NEURAL_RUNTIME_FOLDER=".study-anchor";
 const MISSING=["numpy","onnxruntime","transformers"] as const;
 
