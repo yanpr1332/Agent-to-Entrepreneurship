@@ -4,6 +4,7 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {
   parseNeuralDoctorReply,resolveNeuralPython,inspectNeuralRuntime,
+  neuralSubprocessEnv,
 } from "./knowledge-neural-runtime";
 
 const asJson=(status:string,missing:string[]=[])=>JSON.stringify({
@@ -27,6 +28,19 @@ describe("V0.2 neural Python provider choice and read-only diagnostics",()=>{
     expect(resolveNeuralPython({STUDY_ANCHOR_PYTHON_PATH:"relative/python"},
       home,"win32",()=>true)).toMatchObject({source:"custom",invalid:true});
   });
+  it("never inherits the user's AI keys, mail tokens or private cloud secrets in Python",()=>{
+    const safe=neuralSubprocessEnv({
+      PATH:"/usr/bin",HOME:"/test",OPENAI_API_KEY:"SECRET",
+      DEEPSEEK_API_KEY:"SECRET2",ATE_POC_A_PASSWORD:"PRIVATE",
+      PYTHONPATH:"malicious",STUDY_ANCHOR_PYTHON_PATH:"/custom/python",
+    });
+    expect(safe).toMatchObject({PATH:"/usr/bin",HOME:"/test",HF_HUB_OFFLINE:"1",
+      PYTHONNOUSERSITE:"1",OMP_NUM_THREADS:"4"});
+    for(const key of ["OPENAI_API_KEY","DEEPSEEK_API_KEY","ATE_POC_A_PASSWORD",
+      "PYTHONPATH","STUDY_ANCHOR_PYTHON_PATH"])
+      expect(safe).not.toHaveProperty(key);
+  });
+
   it("checks ready only for a strict, allowlisted fixed-size doctor reply",()=>{
     expect(parseNeuralDoctorReply(asJson("ready"),"managed")).toMatchObject({
       ready:true,source:"managed",reason:"ready",pythonVersion:"3.12.6",missing:[],
