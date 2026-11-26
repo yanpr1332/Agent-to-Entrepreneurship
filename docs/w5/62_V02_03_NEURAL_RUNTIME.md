@@ -65,7 +65,7 @@ npm run dev
 
 ## 模型准备和使用
 
-用户自行从有许可的可靠来源获取 intfloat/multilingual-e5-small（384 维，query/passage 前缀）或 BAAI/bge-small-zh-v1.5（512 维，CLS pooling），并检查模型/转换来源与许可。所选目录需要 model.onnx（或 onnx/model_quantized.onnx）、config.json、tokenizer.json 或 vocab.txt；可有 tokenizer_config.json、special_tokens_map.json。不要执行模型目录中的第三方脚本，程序只复制审核白名单中的数据文件并按 SHA-256 验证。
+用户自行从有许可的可靠来源获取 intfloat/multilingual-e5-small（384 维，query/passage 前缀）或 BAAI/bge-small-zh-v1.5（512 维，CLS pooling），并检查模型/转换来源与许可。所选目录需要 model.onnx（或官方常见的 onnx/model.onnx、onnx/model_quantized.onnx）、config.json、tokenizer.json 或 vocab.txt；可有 tokenizer_config.json、special_tokens_map.json。不要执行模型目录中的第三方脚本，程序只复制审核白名单中的数据文件并按 SHA-256 验证。
 
 Study Anchor：知识库 → 检查本机 Python/ONNX CPU 环境 → 选择 E5/BGE → 选择本地 ONNX 文件夹 → 审核许可/文件 → 导入模型 → 构建/继续索引。只有真正的 CPU 推理进程通过模型维度预检才会启用它。没有真实模型时仍可精确/模糊搜索或使用旧的静态 .vec 模型。
 
