@@ -14,7 +14,7 @@ interface PendingPlan {
 function sameTask(a:LocalTask,b:LocalTask):boolean {
   return a.id===b.id && a.title===b.title && a.dueDate===b.dueDate &&
     a.priority===b.priority && a.updatedAt===b.updatedAt &&
-    a.visible===b.visible && a.completed===b.completed;
+    a.visible===b.visible && a.completed===b.completed && a.source===b.source;
 }
 
 /** Only Main can compose trusted task context and verify the final model output. */
@@ -38,8 +38,8 @@ export class AIPlanningCoordinator {
     const all=this.listTasks();
     const selected=taskIds.map(id=>{
       const task=all.find(t=>t.id===id);
-      if(!task || !task.visible || task.completed)
-        throw Error("AI planning may only use your selected visible, incomplete tasks");
+      if(!task || !task.visible || task.completed || task.source!==null)
+        throw Error("AI project planning may only use visible, incomplete personal tasks without an external source");
       return task;
     });
     const disclosed=selected.map(t=>({
