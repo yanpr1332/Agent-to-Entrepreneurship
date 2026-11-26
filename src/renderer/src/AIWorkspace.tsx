@@ -50,6 +50,25 @@ export default function AIWorkspace(){
   const [planNames,setPlanNames]=useState<Record<string,string>>({});
 
 
+  const activeProject=projects.find(item=>item.id===activeProjectId&&!item.archivedAt)??null;
+  const planningAction=projectActions.find(item=>item.action==="planning.propose");
+  function expiryFromDuration():string|null{
+    const duration=grantDuration==="1d"?86_400_000:
+      grantDuration==="7d"?7*86_400_000:
+      grantDuration==="30d"?30*86_400_000:0;
+    return duration?new Date(Date.now()+duration).toISOString():null;
+  }
+  async function reloadProjectDetails(id:string):Promise<void>{
+    const [grants,actions,audit]=await Promise.all([
+      window.desktop.ai.projects.sourceGrants(id),
+      window.desktop.ai.projects.actionGrants(id),
+      window.desktop.ai.projects.audit(id),
+    ]);
+    if(id===activeProjectId){
+      setProjectGrants(grants);setProjectActions(actions);setProjectAudit(audit);
+    }
+  }
+
   useEffect(()=>{
     let active=true;
     void window.desktop.ai.status().then(next=>{
@@ -66,6 +85,119 @@ export default function AIWorkspace(){
     }).catch(e=>{if(active)setError(describeError(e));});
     return()=>{active=false;};
   },[]);
+
+  useEffect(()=>{
+    let active=true;
+    if(!activeProjectId){
+      setProjectGrants([]);setProjectActions([]);setProjectAudit([]);
+      return()=>{active=false;};
+    }
+    const project=projects.find(item=>item.id===activeProjectId);
+    if(project){setEditProjectName(project.name);setEditProjectPurpose(project.purpose);}
+    void Promise.all([
+      window.desktop.ai.projects.sourceGrants(activeProjectId),
+      window.desktop.ai.projects.actionGrants(activeProjectId),
+      window.desktop.ai.projects.audit(activeProjectId),
+    ]).then(([grants,actions,audit])=>{
+      if(active){setProjectGrants(grants);setProjectActions(actions);setProjectAudit(audit);}
+    }).catch(e=>{if(active)setError(describeError(e));});
+    return()=>{active=false;};
+  },[activeProjectId,projects]);
+
+  async function createProject(event:FormEvent<HTMLFormElement>):Promise<void>{
+    event.preventDefault();
+    if(busy||sending)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const created=await window.desktop.ai.projects.create({
+        name:newProjectName,purpose:newProjectPurpose,
+      });
+      const next=await window.desktop.ai.projects.list();
+      setProjects(next);setActiveProjectId(created.id);
+      setNewProjectName("");setNewProjectPurpose("");
+      setChosen([]);setPlanDraft(null);setPreview(null);
+      setNotice("已创建仅保存在本机的 AI 项目空间。项目没有自动读取任何资料。");
+    }catch(e){setError(describeError(e));}
+    finally{setBusy(false);}
+  }
+
+  async function saveProject():Promise<void>{
+    if(!activeProject||busy||sending)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const saved=await window.desktop.ai.projects.rename({
+        id:activeProject.id,name:editProjectName,purpose:editProjectPurpose,
+      });
+      setProjects(items=>items.map(item=>item.id===saved.id?saved:item));
+      setNotice("项目名称和用途已保存。");
+    }catch(e){setError(describeError(e));}
+    finally{setBusy(false);}
+  }
+
+  async function archiveProject():Promise<void>{
+    if(!activeProject||busy||sending)return;
+    if(!window.confirm("归档此 AI 项目？所有资料读取、云端发送和动作授权将立即撤销。审计记录会保留；不会删除原始任务。"))return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      if(preview&&previewMode==="plan")await window.desktop.ai.planCancel();
+      await window.desktop.ai.projects.archive(activeProject.id);
+      const next=await window.desktop.ai.projects.list();
+      setProjects(next);setActiveProjectId(next.find(item=>!item.archivedAt)?.id??"");
+      setChosen([]);setPlanDraft(null);setPreview(null);
+      setNotice("项目已归档，所有项目授权已撤销；原始任务和日历数据未删除。");
+    }catch(e){setError(describeError(e));}
+    finally{setBusy(false);}
+  }
+
+  async function switchProject(id:string):Promise<void>{
+    if(id===activeProjectId)return;
+    if(preview&&previewMode==="plan"){
+      try{await window.desktop.ai.planCancel();}catch{/* the old preview remains unusable after the switch */}
+    }
+    setPreview(null);setPlanDraft(null);setChosen([]);
+    setActiveProjectId(id);
+  }
+
+  async function setTaskPermission(taskId:string,permission:"local"|"remote",enabled:boolean):Promise<void>{
+    if(!activeProject||busy||sending)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const current=projectGrants.find(item=>item.sourceType==="task"&&item.sourceId===taskId);
+      const canReadLocal=permission==="local"?enabled:!!current?.canReadLocal;
+      const canSendRemote=permission==="remote"?enabled&&canReadLocal:
+        (enabled?!!current?.canSendRemote:false);
+      if(!canReadLocal&&!canSendRemote){
+        await window.desktop.ai.projects.revokeSourceGrant({
+          projectId:activeProject.id,sourceType:"task",sourceId:taskId,
+        });
+        setChosen(items=>items.filter(id=>id!==taskId));
+      }else{
+        await window.desktop.ai.projects.setSourceGrant({
+          projectId:activeProject.id,sourceType:"task",sourceId:taskId,
+          canReadLocal,canSendRemote,expiresAt:expiryFromDuration(),
+        });
+        if(!canSendRemote)setChosen(items=>items.filter(id=>id!==taskId));
+      }
+      await reloadProjectDetails(activeProject.id);
+      setNotice("项目资料授权已更新。读取权限与云端发送权限彼此独立。");
+    }catch(e){setError(describeError(e));}
+    finally{setBusy(false);}
+  }
+
+  async function setPlanningPermission(enabled:boolean):Promise<void>{
+    if(!activeProject||busy||sending)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      await window.desktop.ai.projects.setActionGrant({
+        projectId:activeProject.id,action:"planning.propose",
+        enabled,expiresAt:enabled?expiryFromDuration():null,
+      });
+      await reloadProjectDetails(activeProject.id);
+      if(!enabled){setChosen([]);setPlanDraft(null);}
+      setNotice(enabled?"已允许此项目生成待审查的学习计划草稿。":"已撤销此项目生成学习计划草稿的权限。");
+    }catch(e){setError(describeError(e));}
+    finally{setBusy(false);}
+  }
 
   async function connect(event:FormEvent<HTMLFormElement>):Promise<void>{
     event.preventDefault();
