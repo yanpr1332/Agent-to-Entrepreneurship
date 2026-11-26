@@ -49,8 +49,10 @@ describe("AI project scoped planning with authoritative validation",()=>{
     expect(preview.prompt).toContain("Math revision");
     expect(preview.prompt).not.toContain("Lab report");
     expect(preview.prompt).not.toContain("SECRET PERSONAL NOTES");
+    expect(f.prepare).toHaveBeenCalledWith(expect.any(String),baseTime,"project-plan");
     expect(f.confirm).not.toHaveBeenCalled();
     const next=await f.coordinator.confirm(approvalId);
+    expect(f.confirm).toHaveBeenCalledWith(approvalId,baseTime,expect.any(Function),"project-plan");
     expect(next.proposal.blocks).toHaveLength(1);
     expect(next.proposal.blocks[0]).toMatchObject({taskId:id1,day:"2026-11-27",state:"proposed"});
     expect(f.planning.listCommitted()).toHaveLength(0);
