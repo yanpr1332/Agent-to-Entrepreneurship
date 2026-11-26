@@ -1,5 +1,5 @@
 import { parseAIApprovalId, type AIPreview } from "../../shared/ai-model";
-import { parseAIPlanPrepare,parseAIPlanSlots,type AIPlanAccepted } from "../../shared/ai-plan-model";
+import {parseAIPlanPrepare,parseAIPlanSlots,type AIPlanAccepted,type AIPlanSlot} from "../../shared/ai-plan-model";
 import type { LocalTask } from "../../shared/local-model";
 import { PlanningStore } from "../planning-store";
 import type { AIService } from "./ai-service";
@@ -80,7 +80,7 @@ export class AIPlanningCoordinator {
     // AIService invokes this callback after key resolution, immediately before
     // reserving quota and making the external request.
     const answer=await this.ai.confirm(approvalId,this.now(),verify);
-    let slots;
+    let slots:AIPlanSlot[];
     try{slots=parseAIPlanSlots(answer.text);}
     catch{
       throw Error("The approved task summaries were already sent to the selected provider, but its response failed validation. No local plan proposal was saved; check provider usage.");
@@ -89,7 +89,7 @@ export class AIPlanningCoordinator {
     catch{
       throw Error("The approved task summaries were already sent to the selected provider, but the project permission or task changed during the request. No local plan proposal was saved; check provider usage.");
     }
-    let proposal;
+    let proposal:AIPlanAccepted["proposal"];
     try{
       proposal=this.planning.proposeFromAI(
         pending.settings,pending.selected,slots,this.now(),
