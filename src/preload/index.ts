@@ -233,6 +233,7 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.aiPlanPrepare,selection) as Promise<AIPreview>,
     planConfirm: (approvalId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.aiPlanConfirm,approvalId) as Promise<AIPlanAccepted>,
+    planCancel:()=>ipcRenderer.invoke(IPC_CHANNELS.aiPlanCancel) as Promise<{cancelled:true}>,
     projects:Object.freeze({
       list:()=>ipcRenderer.invoke(IPC_CHANNELS.aiProjectsList) as Promise<AIProject[]>,
       create:(input:AIProjectCreateInput)=>
