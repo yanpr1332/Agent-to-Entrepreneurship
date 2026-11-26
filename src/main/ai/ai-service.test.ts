@@ -44,6 +44,21 @@ describe("paid AI requires explicit one-time approval",()=>{
     await expect(service.confirm(preview.approvalId)).rejects.toThrow("expired");
     ledger.close();
   });
+  it("prevents chat, mail and project IPC handlers from confirming each other's approval tokens",async()=>{
+    const {service,ledger,ask}=fixture();
+    await service.connect(cfg);
+    const project=service.prepare("Project plan",new Date(),"project-plan");
+    await expect(service.confirm(project.approvalId)).rejects.toThrow("scope mismatch");
+    expect(ask).not.toHaveBeenCalled();
+    await service.confirm(project.approvalId,new Date(),undefined,"project-plan");
+    const mail=service.prepare("Mail review",new Date(),"mail");
+    await expect(service.confirm(mail.approvalId,new Date(),undefined,"project-plan"))
+      .rejects.toThrow("scope mismatch");
+    await service.confirm(mail.approvalId,new Date(),undefined,"mail");
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(ledger.today().used).toBe(2);
+    ledger.close();
+  });
   it("rechecks project authorization after key lookup and before quota reservation or network I/O",async()=>{
     const {service,ledger,ask}=fixture();
     await service.connect(cfg);
