@@ -22,7 +22,7 @@ export function parseAIPlanPrepare(raw:unknown):AIPlanPrepareInput {
   if(Object.keys(x).sort().join(",")!=="projectId,settings,taskIds" ||
       typeof x.projectId!=="string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x.projectId) ||
       !Array.isArray(x.taskIds) || x.taskIds.length<1 || x.taskIds.length>8 ||
-      !x.taskIds.every(id=>typeof id==="string" && /^[0-9a-f-]{36}$/i.test(id)) ||
+      !x.taskIds.every(id=>typeof id==="string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) ||
       new Set(x.taskIds).size!==x.taskIds.length){
     throw Error("Choose a project and one to eight distinct personal tasks");
   }
