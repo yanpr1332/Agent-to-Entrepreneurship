@@ -142,7 +142,7 @@ export class AIService {
       expiresAt:new Date(expires).toISOString(),maxOutputTokens:AI_OUTPUT_TOKEN_CAP};
   }
 
-  async confirm(idInput:unknown,now=new Date()):Promise<AIAnswer>{
+  async confirm(idInput:unknown,now=new Date(),authorizeBeforeSend?:()=>void):Promise<AIAnswer>{
     const id=parseAIApprovalId(idInput);
     if(this.inflight)throw Error("An AI request is already in progress");
     const intent=this.intent;
@@ -163,6 +163,9 @@ export class AIService {
         throw Error("AI provider key changed or was removed; review the request again");
       }
       this.active=current;
+      // Domain coordinators can re-check revocable project permissions after
+      // async credential resolution and immediately before any paid network I/O.
+      authorizeBeforeSend?.();
       this.ledger.reserve(now); // Persist BEFORE making a potentially chargeable request.
       const result=await this.client.ask(current.settings,intent.prompt,controller.signal);
       if(controller.signal.aborted || generation!==this.generation)
