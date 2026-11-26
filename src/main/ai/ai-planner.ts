@@ -70,7 +70,7 @@ export class AIPlanningCoordinator {
       // Permissions are re-read from the authoritative local registry. A
       // preview never freezes a grant: revoke/expiry/archive blocks sending.
       this.projects.authorizeSources(pending.projectId,"task",
-        pending.selected.map(t=>t.id),"cloud-model",now);
+        pending.selected.map(t=>t.id),"configured-model",now);
       this.projects.authorizeAction(pending.projectId,"planning.propose",now);
       const tasks=this.listTasks();
       if(pending.selected.some(t=>!tasks.some(current=>sameTask(current,t))))
