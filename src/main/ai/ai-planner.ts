@@ -28,6 +28,8 @@ export class AIPlanningCoordinator {
     private readonly now:()=>Date=()=>new Date(),
   ){}
 
+  cancel():void{this.pending=null;}
+
   prepare(input:unknown):AIPreview{
     const {projectId,taskIds,settings}=parseAIPlanPrepare(input);
     const now=this.now();
