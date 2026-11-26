@@ -33,7 +33,7 @@ export class AIPlanningCoordinator {
   prepare(input:unknown):AIPreview{
     const {projectId,taskIds,settings}=parseAIPlanPrepare(input);
     const now=this.now();
-    this.projects.authorizeSources(projectId,"task",taskIds,"cloud-model",now);
+    this.projects.authorizeSources(projectId,"task",taskIds,"configured-model",now);
     this.projects.authorizeAction(projectId,"planning.propose",now);
     const all=this.listTasks();
     const selected=taskIds.map(id=>{
