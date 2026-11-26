@@ -7,6 +7,7 @@
 - 知识库页面新增「检查本机 Python / ONNX CPU 环境」：调用 Main-only 的只读诊断程序，检查 Python 版本、numpy、onnxruntime、transformers 能否实际导入以及 CPUExecutionProvider 是否存在。错误报告区分缺失 Python、配置路径错误、缺少依赖、CPU 不可用、超时和无效响应，但绝不向 Renderer 返回本机 Python 路径或原始异常。
 - 离线推理和环境检测使用同一套 Python 选择优先级：显式 STUDY_ANCHOR_PYTHON_PATH（必须是存在的绝对路径）> 用户专有 HOME/.study-anchor/neural-runtime > 系统 PATH 中的 Python。
 - 用户必须手动选择安装方式：在线 PyPI wheels，或自己审核并准备的离线 wheelhouse 目录。安装只在用户手动运行 setup 后发生；Electron 启动、npm ci、单元测试和模型导入都不会下载 Python 依赖或权重。
+- Python 子进程环境改为必要操作系统路径/本机语言与临时目录的明确白名单，**不转交通过环境变量设置的个人 AI Key、邮箱密码、Supabase 凭据或 PYTHONPATH**；也不会默默复用任何代理进行模型下载。用户仍需自行审核安装/运行的第三方 Python wheels 与权重。
 - Worker 继续使用 E5 查询/片段前缀、masked-mean pooling，或 BGE CLS pooling；固定 CPUExecutionProvider，最多 4 条 CPU 线程。严格禁止未知的必填 ONNX 图输入及错误的输出 batch/维度，不再给未知输入随意填零产生伪造向量。
 - 真实用户自备 ONNX + tokenizer 数据：从原生目录对话框选择、逐资产 SHA256 校验、启动真实 CPU 推理验证后才替换先前模型。索引保留 SQLite revision pin、可中断/续建和词法 fallback。来源/许可仍需用户审查。
 
