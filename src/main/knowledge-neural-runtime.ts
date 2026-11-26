@@ -12,6 +12,22 @@ export type NeuralRuntimeReason=
   "missing-packages"|"cpu-provider-unavailable"|"runtime-unavailable"|
   "timeout"|"invalid-response";
 export type NeuralRuntimeStatus=KnowledgeNeuralRuntimeStatus;
+/** Do not expose personal API keys, mail tokens, cloud secrets or arbitrary
+ * inherited environment variables to an optional third-party Python runtime.
+ * Supplying only OS essentials also prevents env-based PYTHONPATH/PIP injection.
+ */
+export function neuralSubprocessEnv(env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv{
+  const out:NodeJS.ProcessEnv={};
+  for(const key of ["PATH","Path","PATHEXT","SystemRoot","WINDIR",
+    "HOME","USERPROFILE","HOMEDRIVE","HOMEPATH","APPDATA","LOCALAPPDATA",
+    "TEMP","TMP","TMPDIR","LANG","LC_ALL","TZ"]){
+    if(typeof env[key]==="string")out[key]=env[key];
+  }
+  return {...out,HF_HUB_OFFLINE:"1",TRANSFORMERS_OFFLINE:"1",
+    HF_HUB_DISABLE_TELEMETRY:"1",TOKENIZERS_PARALLELISM:"false",
+    PYTHONNOUSERSITE:"1",NO_PROXY:"*",HTTP_PROXY:"",HTTPS_PROXY:"",
+    ALL_PROXY:"",OMP_NUM_THREADS:"4"};
+}
 export const NEURAL_RUNTIME_FOLDER=".study-anchor";
 const MISSING=["numpy","onnxruntime","transformers"] as const;
 
@@ -74,12 +90,7 @@ export async function inspectNeuralRuntime(
   try{
     const result=await exec(target.command,["-I",scriptPath],{
       timeout:30_000,maxBuffer:4096,windowsHide:true,
-      env:{
-        ...env,
-        HF_HUB_OFFLINE:"1",TRANSFORMERS_OFFLINE:"1",
-        HF_HUB_DISABLE_TELEMETRY:"1",TOKENIZERS_PARALLELISM:"false",
-        PYTHONNOUSERSITE:"1",
-      },
+      env:neuralSubprocessEnv(env),
     });
     try{return parseNeuralDoctorReply(result.stdout,target.source);}
     catch{return safeStatus(target.source,"invalid-response");}
