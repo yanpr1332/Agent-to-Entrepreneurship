@@ -519,7 +519,7 @@ export default function AIWorkspace(){
             撤销或过期的授权会在主进程阻止新请求。
           </p>
           <div className="planner-candidates ai-draft-candidates" aria-label="项目个人任务授权">
-            {tasks.filter(task=>task.visible&&!task.completed).slice(0,50).map(task=>{
+            {tasks.filter(task=>task.visible&&!task.completed&&task.source===null).slice(0,50).map(task=>{
               const grant=projectGrants.find(item=>item.sourceType==="task"&&item.sourceId===task.id);
               const local=!!grant?.canReadLocal&&grant.revokedAt===null&&
                 (!grant.expiresAt||Date.parse(grant.expiresAt)>Date.now());
@@ -548,7 +548,7 @@ export default function AIWorkspace(){
                 {grant?.expiresAt&&<small>授权到期：{new Date(grant.expiresAt).toLocaleString("zh-CN")}</small>}
               </div>;
             })}
-            {!tasks.some(task=>task.visible&&!task.completed)&&<p>当前没有可授权的个人任务。</p>}
+            {!tasks.some(task=>task.visible&&!task.completed&&task.source===null)&&<p>当前没有可授权的个人任务。</p>}
           </div>
           <p className="privacy-note">项目已授权 {projectGrants.filter(item=>item.canReadLocal&&item.revokedAt===null&&
             (!item.expiresAt||Date.parse(item.expiresAt)>Date.now())).length} 项任务；
