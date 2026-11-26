@@ -419,6 +419,12 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return aiPlanner().confirm(approvalId);
   });
+  handle(IPC_CHANNELS.aiPlanCancel,event=>{
+    requireTrustedSender(event);
+    aiPlanner().cancel();
+    assistant().cancel();
+    return {cancelled:true as const};
+  });
   handle(IPC_CHANNELS.aiProjectsList,event=>{
     requireTrustedSender(event);
     return aiProjects().listProjects();
@@ -474,6 +480,7 @@ function registerIpcHandlers(): void {
   handle(IPC_CHANNELS.aiDisconnect,event=>{
     requireTrustedSender(event);
     mailAIService?.cancel();
+    aiPlanning?.cancel();
     return assistant().disconnect();
   });
   handle(IPC_CHANNELS.aiPrepare,(event,prompt:unknown)=>{
@@ -487,6 +494,7 @@ function registerIpcHandlers(): void {
   handle(IPC_CHANNELS.aiCancel,event=>{
     requireTrustedSender(event);
     assistant().cancel();
+    aiPlanning?.cancel();
     return assistant().status();
   });
   handle(IPC_CHANNELS.knowledgeGraph, event=>{
@@ -875,6 +883,7 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     mailAIService?.cancel();
     assistant().cancel();
+    aiPlanning?.cancel();
     return {canceled:true as const};
   });
   handle(IPC_CHANNELS.mailCandidates, async (event) => {
