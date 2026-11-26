@@ -445,6 +445,131 @@ export default function AIWorkspace(){
       </section>
     </div>
     <section className="panel ai-draft-panel">
+      <div className="eyebrow">LOCAL AI PROJECTS · EXPLICIT PERMISSIONS</div>
+      <h2>AI 项目空间与权限</h2>
+      <p className="privacy-note">
+        项目及授权记录仅保存在此设备，不会自动同步到团队空间。当前仅接入个人任务作为项目资料；
+        知识库、邮箱、Canvas 和本地文件尚未接入此项目授权层。项目权限不会自动赋予 AI 写入、发信或使用外部工具的能力。
+      </p>
+      {projects.some(item=>!item.archivedAt)&&<div className="ai-config-form">
+        <label>当前 AI 项目
+          <select value={activeProjectId} disabled={busy||sending}
+            onChange={event=>void switchProject(event.target.value)}>
+            {projects.filter(item=>!item.archivedAt).map(item=>
+              <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </label>
+        {activeProject&&<>
+          <label>项目名称
+            <input value={editProjectName} maxLength={80} disabled={busy||sending}
+              onChange={event=>setEditProjectName(event.target.value)}/>
+          </label>
+          <label>项目目的
+            <textarea rows={2} value={editProjectPurpose} maxLength={300} disabled={busy||sending}
+              onChange={event=>setEditProjectPurpose(event.target.value)}/>
+          </label>
+          <div className="button-row">
+            <button className="secondary-button" disabled={busy||sending}
+              onClick={()=>void saveProject()}>保存项目资料</button>
+            <button className="secondary-button" disabled={busy||sending}
+              onClick={()=>void archiveProject()}>归档并撤销全部授权</button>
+          </div>
+          <label>新授权有效期
+            <select value={grantDuration} disabled={busy||sending}
+              onChange={event=>setGrantDuration(event.target.value as "1d"|"7d"|"30d"|"never")}>
+              <option value="1d">1 天</option>
+              <option value="7d">7 天</option>
+              <option value="30d">30 天</option>
+              <option value="never">持续有效，直到手动撤销</option>
+            </select>
+          </label>
+          <div className="planner-select">
+            <label>
+              <input type="checkbox" checked={!!planningAction?.enabled}
+                disabled={busy||sending||!planningAction?.available}
+                onChange={event=>void setPlanningPermission(event.target.checked)}/>
+              <span>允许 AI 在此项目生成学习计划草稿（只生成待审查建议，不写入正式日历）</span>
+            </label>
+          </div>
+          <h3>项目资料访问权限</h3>
+          <p className="privacy-note">
+            本地读取与云端模型发送必须分别授权。发送前仍会完整预览实际提示词并要求你再次确认；
+            撤销或过期的授权会在主进程阻止新请求。
+          </p>
+          <div className="planner-candidates ai-draft-candidates" aria-label="项目个人任务授权">
+            {tasks.filter(task=>task.visible&&!task.completed).slice(0,50).map(task=>{
+              const grant=projectGrants.find(item=>item.sourceType==="task"&&item.sourceId===task.id);
+              const local=!!grant?.canReadLocal&&grant.revokedAt===null&&
+                (!grant.expiresAt||Date.parse(grant.expiresAt)>Date.now());
+              const remote=local&&!!grant?.canSendRemote;
+              return <div key={task.id} className="planner-select">
+                <strong>{task.title}</strong>
+                <span>截止 {task.dueDate??"未设置"} · {task.priority}</span>
+                <label>
+                  <input type="checkbox" checked={local} disabled={busy||sending||!!preview}
+                    onChange={event=>void setTaskPermission(task.id,"local",event.target.checked)}/>
+                  允许项目在本机读取此任务摘要
+                </label>
+                <label>
+                  <input type="checkbox" checked={remote} disabled={busy||sending||!!preview||!local}
+                    onChange={event=>void setTaskPermission(task.id,"remote",event.target.checked)}/>
+                  允许将此任务标题、截止日期和优先级发送给当前云端模型
+                </label>
+                <label>
+                  <input type="checkbox" checked={chosen.includes(task.id)}
+                    disabled={busy||sending||!!preview||!local||!remote||!planningAction?.enabled}
+                    onChange={event=>setChosen(items=>event.target.checked
+                      ?items.length<8?[...items,task.id]:items
+                      :items.filter(id=>id!==task.id))}/>
+                  选入本次学习计划请求
+                </label>
+                {grant?.expiresAt&&<small>授权到期：{new Date(grant.expiresAt).toLocaleString("zh-CN")}</small>}
+              </div>;
+            })}
+            {!tasks.some(task=>task.visible&&!task.completed)&&<p>当前没有可授权的个人任务。</p>}
+          </div>
+          <p className="privacy-note">项目已授权 {projectGrants.filter(item=>item.canReadLocal&&item.revokedAt===null&&
+            (!item.expiresAt||Date.parse(item.expiresAt)>Date.now())).length} 项任务；
+            已选择 {chosen.length}/8 项用于本次规划。任务描述、Canvas 链接和其他任务不会发送。</p>
+          <h3>动作权限（默认拒绝）</h3>
+          <div className="planner-candidates">
+            {projectActions.map(action=><label key={action.action} className="planner-select">
+              <input type="checkbox" checked={action.enabled}
+                disabled={!action.available||busy||sending}
+                onChange={event=>void setPlanningPermission(event.target.checked)}/>
+              <span>{action.action} · {action.available?"当前支持：仅生成规划草稿":"尚未实现，保持禁止"}</span>
+            </label>)}
+          </div>
+          <p className="privacy-note">
+            修改任务、写入日历、发送邮件、写入文件和调用外部工具目前没有执行器，即使未来出现模型请求也会被拒绝。
+            规划草稿不会自动应用。
+          </p>
+          <h3>最近权限审计</h3>
+          {projectAudit.length===0?<p className="privacy-note">尚无授权或访问记录。</p>:
+            <ul>{projectAudit.slice(0,8).map(event=><li key={event.id}>
+              {event.kind} · {event.result==="allowed"?"允许":event.result==="denied"?"拒绝":"已记录"} ·
+              {new Date(event.occurredAt).toLocaleString("zh-CN")}
+            </li>)}</ul>}
+        </>}
+      </div>}
+      <form className="ai-config-form" onSubmit={event=>void createProject(event)}>
+        <h3>新建个人 AI 项目</h3>
+        <label>项目名称
+          <input value={newProjectName} required maxLength={80} disabled={busy||sending}
+            placeholder="例如：微积分期末复习"
+            onChange={event=>setNewProjectName(event.target.value)}/>
+        </label>
+        <label>项目目的（可选）
+          <textarea rows={2} value={newProjectPurpose} maxLength={300} disabled={busy||sending}
+            placeholder="描述这个项目要完成的工作"
+            onChange={event=>setNewProjectPurpose(event.target.value)}/>
+        </label>
+        <button className="primary-button" type="submit" disabled={busy||sending}>
+          创建本机 AI 项目空间
+        </button>
+      </form>
+    </section>
+    <section className="panel ai-draft-panel">
       <div className="eyebrow">OPT-IN STRUCTURED PLANNING DRAFT</div>
       <h2>AI 学习时间草稿（不自动应用）</h2>
       <p className="privacy-note">只选择你愿意外传的任务。预览会完整展示实际发送内容；AI 结果只做格式与范围验证，不作为已确认时间块，也不自动查询课表。请不要勾选包含敏感信息的标题。</p>
@@ -452,20 +577,11 @@ export default function AIWorkspace(){
         <input type="date" value={planStart} min={new Date().toLocaleDateString("en-CA")}
           disabled={busy||sending||!!preview} onChange={event=>setPlanStart(event.target.value)}/>
       </label>
-      <div className="planner-candidates ai-draft-candidates" aria-label="允许发送的任务候选">
-        {tasks.filter(t=>t.visible&&!t.completed).slice(0,50).map(task=>
-          <label key={task.id} className="planner-select">
-            <input type="checkbox" disabled={busy||sending||!!preview}
-              checked={chosen.includes(task.id)}
-              onChange={event=>setChosen(v=>event.target.checked
-                ? v.length<8?[...v,task.id]:v : v.filter(id=>id!==task.id))}/>
-            <span>{task.title} · 截止 {task.dueDate??"未设置"} · {task.priority}</span>
-          </label>
-        )}
-      </div>
-      <p className="privacy-note">已选 {chosen.length}/8 项；隐藏或完成的任务不可选择，任务描述和来源 URL 不会发送。</p>
-      <button className="primary-button" disabled={busy||sending||!!preview||!status.connected||status.remainingToday===0||chosen.length===0}
-        onClick={()=>void preparePlan()}>预览选中任务的 AI 规划请求</button>
+      <p className="privacy-note">当前项目：{activeProject?.name??"未选择"} · 已选 {chosen.length}/8 项。
+        只有分别授予本地读取和云端发送权限的任务才可加入本次请求。</p>
+      <button className="primary-button" disabled={busy||sending||!!preview||!status.connected||
+        status.remainingToday===0||!activeProject||!planningAction?.enabled||chosen.length===0}
+        onClick={()=>void preparePlan()}>预览项目授权范围内的 AI 规划请求</button>
       {planDraft!==null&&<div className="ai-answer-list ai-draft-result" role="region" aria-label="AI 学习草稿">
         <h3>待人工核对的 AI 建议 · {planDraft.length} 段</h3>
         {planDraft.length===0?<p>模型未安排任何时间块。</p>:
