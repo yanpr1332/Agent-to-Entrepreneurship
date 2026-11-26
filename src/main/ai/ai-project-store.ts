@@ -7,7 +7,7 @@ import {
   parseAIProjectCreate,parseAIProjectRename,parseAIProjectId,
   parseAIProjectSourceGrant,parseAIProjectSourceRevoke,parseAIProjectActionGrant,
   type AIProject,type AIProjectAction,type AIProjectActionGrant,
-  type AIProjectAuditEvent,type AIProjectAuditKind,type AIProjectCreateInput,
+  type AIProjectAuditEvent,type AIProjectAuditKind,
   type AIProjectDestination,type AIProjectSourceGrant,type AIProjectSourceType,
 } from "../../shared/ai-project-model";
 
@@ -196,7 +196,7 @@ export class AIProjectStore{
       return {revoked:Number(result.changes)>0};
     });
   }
-  listActionGrants(rawProjectId:unknown):AIProjectActionGrant[]{
+  listActionGrants(rawProjectId:unknown,now=new Date()):AIProjectActionGrant[]{
     const id=parseAIProjectId(rawProjectId),owner=this.requireProject(id,true);
     const rows=this.db.prepare("SELECT * FROM ai_project_action_grants WHERE project_id=?")
       .all(id) as ActionRow[];
@@ -204,7 +204,7 @@ export class AIProjectStore{
     return AI_PROJECT_ACTIONS.map(action=>{
       const row=byAction.get(action);
       const active=owner.archived_at===null&&row?.enabled===1&&
-        (!row.expires_at||Date.parse(row.expires_at)>Date.now());
+        (!row.expires_at||Date.parse(row.expires_at)>now.getTime());
       return {projectId:id,action,enabled:!!active,expiresAt:row?.expires_at??null,
         updatedAt:row?.updated_at??owner.updated_at,available:IMPLEMENTED.has(action)};
     });
@@ -222,7 +222,7 @@ export class AIProjectStore{
         .run(value.projectId,value.action,Number(value.enabled),value.expiresAt,stamp);
       this.db.prepare("UPDATE ai_projects SET updated_at=? WHERE id=?").run(stamp,value.projectId);
       this.audit(value.projectId,"action.grant.updated",stamp,{action:value.action});
-      return this.listActionGrants(value.projectId).find(x=>x.action===value.action)!;
+      return this.listActionGrants(value.projectId,now).find(x=>x.action===value.action)!;
     });
   }
   authorizeSources(rawProjectId:unknown,sourceType:AIProjectSourceType,
