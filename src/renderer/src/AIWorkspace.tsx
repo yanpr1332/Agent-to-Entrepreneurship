@@ -488,7 +488,7 @@ export default function AIWorkspace(){
             <button className="secondary-button" disabled={busy||sending}
               onClick={()=>void archiveProject()}>归档并撤销全部授权</button>
           </div>
-          <label>新授权有效期
+          <label>新授权默认有效期
             <select value={grantDuration} disabled={busy||sending}
               onChange={event=>setGrantDuration(event.target.value as "1d"|"7d"|"30d"|"never")}>
               <option value="1d">1 天</option>
