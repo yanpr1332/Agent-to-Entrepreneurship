@@ -184,7 +184,9 @@ export default function AIWorkspace(){
       }else{
         await window.desktop.ai.projects.setSourceGrant({
           projectId:activeProject.id,sourceType:"task",sourceId:taskId,
-          canReadLocal,canSendRemote,expiresAt:expiryFromDuration(),
+          canReadLocal,canSendRemote,
+          // Editing one permission must not silently extend another active grant.
+          expiresAt:currentStillActive?current!.expiresAt:expiryFromDuration(),
         });
         if(!canSendRemote)setChosen(items=>items.filter(id=>id!==taskId));
       }
