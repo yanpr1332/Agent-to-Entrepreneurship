@@ -39,8 +39,8 @@ describe("local AI project authorization registry",()=>{
     const db=store();create(db);
     grant(db,{canReadLocal:true,canSendRemote:false});
     expect(()=>db.authorizeSources(projectId,"task",[taskId],"local",now)).not.toThrow();
-    expect(()=>db.authorizeSources(projectId,"task",[taskId],"cloud-model",now))
-      .toThrow("cloud-model transmission");
+    expect(()=>db.authorizeSources(projectId,"task",[taskId],"configured-model",now))
+      .toThrow("configured model endpoint transmission");
     grant(db,{canReadLocal:true,canSendRemote:true});
     expect(()=>db.authorizeSources(projectId,"task",[taskId],"cloud-model",now)).not.toThrow();
     const results=db.auditEvents(projectId).filter(x=>x.kind==="source.access").map(x=>x.result);
