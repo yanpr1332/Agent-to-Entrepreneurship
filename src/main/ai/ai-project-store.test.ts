@@ -42,31 +42,31 @@ describe("local AI project authorization registry",()=>{
     expect(()=>db.authorizeSources(projectId,"task",[taskId],"configured-model",now))
       .toThrow("configured model endpoint transmission");
     grant(db,{canReadLocal:true,canSendRemote:true});
-    expect(()=>db.authorizeSources(projectId,"task",[taskId],"cloud-model",now)).not.toThrow();
+    expect(()=>db.authorizeSources(projectId,"task",[taskId],"configured-model",now)).not.toThrow();
     const results=db.auditEvents(projectId).filter(x=>x.kind==="source.access").map(x=>x.result);
     expect(results).toContain("allowed");
     expect(results).toContain("denied");
   });
   it("denies implicit, expired and revoked grants, and permits explicit re-authorization",()=>{
     const db=store();create(db);
-    expect(()=>db.authorizeSources(projectId,"task",[taskId],"cloud-model",now)).toThrow();
+    expect(()=>db.authorizeSources(projectId,"task",[taskId],"configured-model",now)).toThrow();
     grant(db,{expiresAt:"2026-11-26T01:00:00.000Z"});
-    expect(()=>db.authorizeSources(projectId,"task",[taskId],"cloud-model",now)).not.toThrow();
-    expect(()=>db.authorizeSources(projectId,"task",[taskId],"cloud-model",
+    expect(()=>db.authorizeSources(projectId,"task",[taskId],"configured-model",now)).not.toThrow();
+    expect(()=>db.authorizeSources(projectId,"task",[taskId],"configured-model",
       new Date("2026-11-26T01:00:00.001Z"))).toThrow();
     expect(db.revokeSourceGrant({projectId,sourceType:"task",sourceId:taskId},now))
       .toEqual({revoked:true});
     expect(()=>db.authorizeSources(projectId,"task",[taskId],"local",now)).toThrow();
     grant(db);
-    expect(()=>db.authorizeSources(projectId,"task",[taskId],"cloud-model",now)).not.toThrow();
+    expect(()=>db.authorizeSources(projectId,"task",[taskId],"configured-model",now)).not.toThrow();
   });
   it("rejects remote send without local read, malformed resource scope and oversized grant lists",()=>{
     expect(()=>parseAIProjectSourceGrant({projectId,sourceType:"task",sourceId:taskId,
       canReadLocal:false,canSendRemote:true,expiresAt:null})).toThrow();
     const db=store();create(db);grant(db);
-    expect(()=>db.authorizeSources(projectId,"task",[taskId,taskId],"cloud-model",now)).toThrow();
-    expect(()=>db.authorizeSources(projectId,"task",[],"cloud-model",now)).toThrow();
-    expect(()=>db.authorizeSources(projectId,"mail-message" as never,[taskId],"cloud-model",now)).toThrow();
+    expect(()=>db.authorizeSources(projectId,"task",[taskId,taskId],"configured-model",now)).toThrow();
+    expect(()=>db.authorizeSources(projectId,"task",[],"configured-model",now)).toThrow();
+    expect(()=>db.authorizeSources(projectId,"mail-message" as never,[taskId],"configured-model",now)).toThrow();
   });
   it("keeps every high-impact action denied by default and only grants the implemented draft action",()=>{
     const db=store();create(db);
@@ -91,7 +91,7 @@ describe("local AI project authorization registry",()=>{
       canReadLocal:false,canSendRemote:false,revokedAt:now.toISOString(),
     });
     expect(db.listActionGrants(projectId,now).every(x=>!x.enabled)).toBe(true);
-    expect(()=>db.authorizeSources(projectId,"task",[taskId],"cloud-model",now)).toThrow();
+    expect(()=>db.authorizeSources(projectId,"task",[taskId],"configured-model",now)).toThrow();
     expect(()=>db.authorizeAction(projectId,"planning.propose",now)).toThrow();
     expect(()=>db.renameProject({id:projectId,name:"Renamed",purpose:""},now)).toThrow("archived");
     expect(db.auditEvents(projectId).some(x=>x.kind==="project.archived")).toBe(true);
