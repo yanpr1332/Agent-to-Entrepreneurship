@@ -44,6 +44,18 @@ describe("paid AI requires explicit one-time approval",()=>{
     await expect(service.confirm(preview.approvalId)).rejects.toThrow("expired");
     ledger.close();
   });
+  it("rechecks project authorization after key lookup and before quota reservation or network I/O",async()=>{
+    const {service,ledger,ask}=fixture();
+    await service.connect(cfg);
+    const preview=service.prepare("Project-scoped question");
+    const revoked=vi.fn(()=>{throw Error("project grant revoked");});
+    await expect(service.confirm(preview.approvalId,new Date(),revoked))
+      .rejects.toThrow("project grant revoked");
+    expect(revoked).toHaveBeenCalledTimes(1);
+    expect(ledger.today().used).toBe(0);
+    expect(ask).not.toHaveBeenCalled();
+    ledger.close();
+  });
   it("does not repeat paid calls after failure or approval replacement",async()=>{
     const {service,ledger,ask}=fixture();
     await service.connect(cfg);
