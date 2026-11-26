@@ -80,11 +80,24 @@ export class AIPlanningCoordinator {
     // AIService invokes this callback after key resolution, immediately before
     // reserving quota and making the external request.
     const answer=await this.ai.confirm(approvalId,this.now(),verify);
-    const slots=parseAIPlanSlots(answer.text);
-    verify(); // Recheck after network latency, before creating a local proposal.
-    const proposal=this.planning.proposeFromAI(
-      pending.settings,pending.selected,slots,this.now(),
-    );
+    let slots;
+    try{slots=parseAIPlanSlots(answer.text);}
+    catch{
+      throw Error("The approved task summaries were already sent to the selected provider, but its response failed validation. No local plan proposal was saved; check provider usage.");
+    }
+    try{verify();} // Recheck after network latency, before creating a local proposal.
+    catch{
+      throw Error("The approved task summaries were already sent to the selected provider, but the project permission or task changed during the request. No local plan proposal was saved; check provider usage.");
+    }
+    let proposal;
+    try{
+      proposal=this.planning.proposeFromAI(
+        pending.settings,pending.selected,slots,this.now(),
+      );
+    }catch(error){
+      const reason=error instanceof Error?error.message:"local schedule validation failed";
+      throw Error("The approved task summaries were already sent to the selected provider, but the returned schedule could not be saved as a local proposal ("+reason+"). No calendar change was applied; check provider usage.");
+    }
     return {proposal,providerModel:answer.model,usage:answer.usage};
   }
 }
