@@ -10,9 +10,10 @@ import { AIKeyVault } from "./ai-vault";
 import { AIUsageLedger } from "./ai-usage";
 import { OpenAIResponsesClient } from "./openai-responses";
 
+export type AIApprovalScope="chat"|"mail"|"project-plan";
 type ActiveKey={settings:AIPrivateSettings;source:AIKeySource};
 type PendingIntent={
-  id:string;prompt:string;expires:number;generation:number;credentialFingerprint:string;
+  id:string;prompt:string;expires:number;generation:number;credentialFingerprint:string;scope:AIApprovalScope;
 };
 
 /** Explicit two-step approval. No background AI calls, task/calendar writes or telemetry. */
@@ -124,7 +125,8 @@ export class AIService {
     return this.status();
   }
 
-  prepare(promptInput:unknown,now=new Date()):AIPreview {
+  prepare(promptInput:unknown,now=new Date(),scope:AIApprovalScope="chat"):AIPreview {
+    if(scope!=="chat"&&scope!=="mail"&&scope!=="project-plan")throw Error("Invalid AI approval scope");
     const prompt=parseAIPrompt(promptInput);
     if(!this.active)throw Error("Connect your own AI provider API key or set a supported API_KEY environment variable first");
     if(this.inflight)throw Error("An AI request is already in progress");
@@ -132,7 +134,7 @@ export class AIService {
     const id=randomUUID(),expires=now.getTime()+AI_PREVIEW_TTL_MS;
     this.intent={
       id,prompt,expires,generation:this.generation,
-      credentialFingerprint:this.fingerprint(this.active.settings),
+      credentialFingerprint:this.fingerprint(this.active.settings),scope,
     };
     return {approvalId:id,prompt,model:this.active.settings.model,
       provider:this.active.settings.provider,
@@ -142,15 +144,18 @@ export class AIService {
       expiresAt:new Date(expires).toISOString(),maxOutputTokens:AI_OUTPUT_TOKEN_CAP};
   }
 
-  async confirm(idInput:unknown,now=new Date(),authorizeBeforeSend?:()=>void):Promise<AIAnswer>{
+  async confirm(idInput:unknown,now=new Date(),authorizeBeforeSend?:()=>void,
+    expectedScope:AIApprovalScope="chat"):Promise<AIAnswer>{
     const id=parseAIApprovalId(idInput);
     if(this.inflight)throw Error("An AI request is already in progress");
     const intent=this.intent;
-    this.intent=null; // One-time regardless of provider response.
-    if(!intent || intent.id!==id || intent.expires<now.getTime() ||
-       intent.generation!==this.generation || !this.active){
-      throw Error("AI preview expired or was replaced. Review the question again");
+    // The generic chat IPC cannot confirm a mail or project-scoped preview,
+    // and neither coordinator can consume another domain's approval token.
+    if(!intent || intent.id!==id || intent.scope!==expectedScope ||
+       intent.expires<now.getTime() || intent.generation!==this.generation || !this.active){
+      throw Error("AI preview scope mismatch, expired or replaced. Review the request again");
     }
+    this.intent=null; // One-time only after the expected domain has matched.
     const controller=new AbortController();
     this.inflight=controller;
     const generation=this.generation;
