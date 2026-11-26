@@ -347,7 +347,7 @@ export default function AIWorkspace(){
       每日最多 {status.dailyRequestLimit} 次请求、每次最多 {status.maxOutputTokens} 个输出 token；
       这是软件端限额，<strong>不是费用金额上限</strong>，其他设备和平台用量不受此限额控制。
       API 请求指定不保存响应供模型会话使用，但服务商仍会依其 API 数据处理政策处理请求。
-      普通提问不会自动读取个人数据；下方规划功能仅在你逐项勾选任务并确认原文后，才会发送所选任务的标题、截止日、优先级和标识，不发送描述、Canvas 链接、邮箱或知识库。模型不能调用工具或写入日历。
+      普通提问不会自动读取个人数据；项目规划必须先在本机项目空间逐项授权个人任务读取，再单独允许向云模型发送。主进程会在付费请求前复核授权并完整展示实际提示词，只发送所选个人任务的标题、截止日、优先级和标识，不发送描述、Canvas 链接、邮箱或知识库。模型不能调用工具或写入日历。
       请勿在聊天或 GitHub 中分享 API Key。
     </div>
     {error&&<div className="error-banner" role="alert"><span>{error}</span>
