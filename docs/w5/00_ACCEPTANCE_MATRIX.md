@@ -285,6 +285,6 @@ GUI 冒烟清单（逐项记录 通过 / 失败 / 未验证）：
 
 ## V0.2-04 本机 AI 项目空间与细粒度授权（2026-11-26）
 
-- **代码实现**：独立本机 AI project registry、个人项目生命周期、任务级 local-read 与 remote-inference 独立许可、过期/撤销/归档、planning.propose action grant、Main 请求前后授权复核、审计元数据限额。AI 规划路径已接入 Main coordinator，Renderer 不再自己构造并发送无项目授权的结构化规划提示词；审批令牌按 chat/mail/project-plan 隔离，且项目只接受无外部来源的个人任务。详见 [63](63_V02_04_AI_PROJECT_PERMISSIONS.md)。
+- **代码实现**：独立本机 AI project registry、个人项目生命周期、任务级 local-read 与 configured-model 发送独立许可、过期/撤销/归档、planning.propose action grant、Main 请求前后授权复核、审计元数据限额。AI 规划路径已接入 Main coordinator，Renderer 不再自己构造并发送无项目授权的结构化规划提示词；审批令牌按 chat/mail/project-plan 隔离，且项目只接受无外部来源的个人任务。详见 [63](63_V02_04_AI_PROJECT_PERMISSIONS.md)。
 - **范围限制**：目前只接入个人任务摘要和学习计划草稿；不包含知识库/邮件/Canvas/本地文件 ACL、团队 AI 项目、工具执行、AI 任务写入、发信或日历写入。项目数据库只在本机，不进云同步。
 - **外部验收未完成**：真实服务商请求/费用、双平台 GUI/重启、权限撤销竞态、账户隔离及本机审计数据检查仍需用户在真实设备验证。
