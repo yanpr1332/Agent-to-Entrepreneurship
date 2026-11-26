@@ -1495,9 +1495,10 @@ app.on("before-quit", (event) => {
   canvasSync?.stop();
   canvasSync = null;
   // Sync promises may be finishing; the coordinator aborts before further writes.
+  aiPlanning?.cancel();
+  aiService?.cancel();
   aiPlanning = null;
   aiProjectStore?.close();aiProjectStore=null;
-  aiService?.cancel();
   aiService = null;
   aiLedger?.close();
   aiLedger = null;
