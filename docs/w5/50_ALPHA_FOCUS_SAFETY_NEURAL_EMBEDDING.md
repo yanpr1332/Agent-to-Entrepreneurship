@@ -17,7 +17,7 @@
 ## B. 神经模型：离线 E5 / BGE ONNX 推理接入
 
 - 两个明确模型家族：`intfloat/multilingual-e5-small`（384 维，masked mean pooling，查询带 `query: `，文档带 `passage: `）与 `BAAI/bge-small-zh-v1.5`（512 维，CLS pooling）。输入 token 长度上限 512，超长段截断，必须通过人工评测识别截断对相关性的影响。
-- 通过 Electron 原生目录选择器，选择**用户自行获得并审核许可的本地模型文件夹**。根目录允许 `model.onnx`（或 `onnx/model_quantized.onnx`）、`config.json`、`tokenizer.json` 或 `vocab.txt`、可选 `tokenizer_config.json` 和 `special_tokens_map.json`。只复制这些固定类型的数据文件；拒绝符号链接、超限体积、错误 BERT 隐藏维度、格式和路径篡改。Graph 文件上限 750 MiB、总资产上限 800 MiB。
+- 通过 Electron 原生目录选择器，选择**用户自行获得并审核许可的本地模型文件夹**。根目录允许 `model.onnx`（或 `onnx/model.onnx`、`onnx/model_quantized.onnx`）、`config.json`、`tokenizer.json` 或 `vocab.txt`、可选 `tokenizer_config.json` 和 `special_tokens_map.json`。只复制这些固定类型的数据文件；拒绝符号链接、超限体积、错误 BERT 隐藏维度、格式和路径篡改。Graph 文件上限 750 MiB、总资产上限 800 MiB。
 - 每份资产读时计算 SHA-256，模型 revision 由选定型号、资产哈希、pooling 方案和版本协议共同派生。安装先复制到私有暂存目录、通过独立 CPU 进程真实 ONNX 模型与 tokenizer 预检，才替换当前语义模型。重启后复核每个资产 SHA，异常安全退回精确和容错词法检索。
 - 使用固定打包 Python Worker（`scripts/neural-inference-worker.py`），没有动态执行模型目录中的代码。它仅加载用户已经安装的 `numpy`、`onnxruntime`、`transformers` 和本机 ONNX/tokenizer 文件，`trust_remote_code=False`、`local_files_only=True`、`HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1`、禁用遥测和代理；无需 API Key 或联网。
 - 旧的 `.vec` 静态词向量 Worker 完整保留，可以回退。两种后端复用现有 SQLite 向量索引、文档 revision 失效处理、精确优先混合检索、人工标注的 P@5/Recall@10/MRR@10 对照；绝不把测试用合成向量算成真实 E5/BGE 质量。
