@@ -101,21 +101,24 @@ describe("local AI project authorization registry",()=>{
     const path=join(dir,"projects.sqlite");
     try{
       const first=new AIProjectStore(path);
-      const created=first.createProject({name:"Persistent",purpose:"Local only"},now);
-      first.setSourceGrant({projectId:created.id,sourceType:"task",sourceId:taskId,
-        canReadLocal:true,canSendRemote:true,expiresAt:null},now);
-      first.setActionGrant({projectId:created.id,action:"planning.propose",
-        enabled:true,expiresAt:null},now);
-      first.close();
+      let created;
+      try{
+        created=first.createProject({name:"Persistent",purpose:"Local only"},now);
+        first.setSourceGrant({projectId:created.id,sourceType:"task",sourceId:taskId,
+          canReadLocal:true,canSendRemote:true,expiresAt:null},now);
+        first.setActionGrant({projectId:created.id,action:"planning.propose",
+          enabled:true,expiresAt:null},now);
+      }finally{first.close();}
       const reopened=new AIProjectStore(path);
-      expect(reopened.listProjects()[0]).toMatchObject({id:created.id,name:"Persistent"});
-      expect(reopened.listSourceGrants(created.id)[0]).toMatchObject({
-        sourceId:taskId,canReadLocal:true,canSendRemote:true,
-      });
-      expect(reopened.listActionGrants(created.id,now).find(x=>x.action==="planning.propose")?.enabled)
-        .toBe(true);
-      expect(reopened.auditEvents(created.id).length).toBeGreaterThanOrEqual(3);
-      reopened.close();
+      try{
+        expect(reopened.listProjects()[0]).toMatchObject({id:created.id,name:"Persistent"});
+        expect(reopened.listSourceGrants(created.id)[0]).toMatchObject({
+          sourceId:taskId,canReadLocal:true,canSendRemote:true,
+        });
+        expect(reopened.listActionGrants(created.id,now).find(x=>x.action==="planning.propose")?.enabled)
+          .toBe(true);
+        expect(reopened.auditEvents(created.id).length).toBeGreaterThanOrEqual(3);
+      }finally{reopened.close();}
     }finally{rmSync(dir,{recursive:true,force:true});}
   });
   it("enforces expiry bounds, exact schemas and the per-project grant ceiling",()=>{
