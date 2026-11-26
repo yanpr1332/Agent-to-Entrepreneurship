@@ -8,6 +8,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "ai:confirm",
       "ai:connect",
       "ai:disconnect",
+      "ai:plan-cancel",
       "ai:plan-confirm",
       "ai:plan-prepare",
       "ai:prepare",
