@@ -55,8 +55,18 @@ function main(){
     "[Study Anchor] You explicitly permitted third-party Python package downloads.\n":
     "[Study Anchor] Installing only from locally selected wheelhouse (no package downloads).\n");
   run(interpreter,pipArgs);
-  process.stdout.write("[Study Anchor] Optional runtime installed under the current user's home directory.\n");
-  run(interpreter,["-I",resolve("scripts","neural-runtime-doctor.py")]);
+  // pip success is not sufficient: reject a broken native wheel, an absent
+  // CPU provider or an unexpected diagnostic before calling setup completed.
+  const doctor=spawnSync(interpreter,["-I",resolve("scripts","neural-runtime-doctor.py")],{
+    windowsHide:true,encoding:"utf8",timeout:30_000,maxBuffer:4096,
+    env:{...process.env,HF_HUB_OFFLINE:"1",TRANSFORMERS_OFFLINE:"1",
+      HF_HUB_DISABLE_TELEMETRY:"1",PYTHONNOUSERSITE:"1"},
+  });
+  let diagnosis;
+  try{diagnosis=JSON.parse(doctor.stdout||"");}catch{/* fail closed */}
+  if(doctor.error||doctor.status!==0||diagnosis?.schema!==1||diagnosis.status!=="ready")
+    throw Error("Python dependencies installed, but ONNX CPU runtime doctor did not pass");
+  process.stdout.write("[Study Anchor] Verified optional CPU Python environment under the current user's home directory.\n");
   process.stdout.write("Next: npm run doctor:neural, then import a separately reviewed local E5/BGE ONNX model.\n");
 }
 const isMain=process.argv[1]&&resolve(process.argv[1])===resolve("scripts","setup-neural-runtime.mjs");
