@@ -236,14 +236,17 @@ export class AIProjectStore{
     sourceIds:readonly string[],destination:AIProjectDestination,now=new Date()):void{
     const id=parseAIProjectId(rawProjectId),stamp=utc(now);
     if(sourceType!=="task"||!Array.isArray(sourceIds)||sourceIds.length<1||
-      sourceIds.length>8||new Set(sourceIds).size!==sourceIds.length||
+      sourceIds.length>8||
       sourceIds.some(x=>typeof x!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x)))
       throw Error("Invalid AI project source scope");
+    const normalizedIds=sourceIds.map(x=>x.toLowerCase());
+    if(new Set(normalizedIds).size!==normalizedIds.length)
+      throw Error("Duplicate AI project source scope");
     if(destination!=="local"&&destination!=="configured-model")throw Error("Invalid AI project destination");
     const allowed=this.transaction(()=>{
       this.requireProject(id);
       let result=true;
-      for(const sourceId of sourceIds){
+      for(const sourceId of normalizedIds){
         const row=this.db.prepare("SELECT * FROM ai_project_source_grants "+
           "WHERE project_id=? AND source_type=? AND source_id=?")
           .get(id,sourceType,sourceId.toLowerCase()) as SourceRow|undefined;
