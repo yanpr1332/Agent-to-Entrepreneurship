@@ -59,6 +59,17 @@ export interface KnowledgeSearchHit {
   pageNumber: number | null;
   matchType?: "exact" | "fuzzy" | "semantic";
 }
+/** Read-only status from the exact Python executable Main will use for ONNX.
+ * Checks dependencies/CPU provider, NOT model accuracy or installed weights. */
+export interface KnowledgeNeuralRuntimeStatus {
+  ready:boolean;
+  source:"managed"|"custom"|"system";
+  reason:"ready"|"missing-python"|"invalid-config"|"unsupported-python"|
+    "missing-packages"|"cpu-provider-unavailable"|"runtime-unavailable"|
+    "timeout"|"invalid-response";
+  pythonVersion:string|null;
+  missing:("numpy"|"onnxruntime"|"transformers")[];
+}
 export interface KnowledgeEmbeddingStatus {
   model: {
     id:string;revision:string;dimension:number;
