@@ -96,6 +96,17 @@ describe("AI project scoped planning with authoritative validation",()=>{
     await expect(f.coordinator.confirm(approvalId)).rejects.toThrow("cloud-model transmission");
     expect(f.planning.listCommitted()).toHaveLength(0);
   });
+  it("rejects Canvas-sourced tasks even if a stale or forged project grant exists",()=>{
+    const f=setup();
+    f.setTasks([{...task(id1,"Canvas assignment"),source:{
+      provider:"canvas",instanceUrl:"https://canvas.example.edu",accountId:1,
+      courseId:2,assignmentId:3,sourceUrl:"https://canvas.example.edu/assignments/3",
+      lastSyncedAt:"2026-11-26T00:00:00Z",
+    }}]);
+    expect(()=>f.coordinator.prepare({projectId:f.project.id,taskIds:[id1],settings}))
+      .toThrow("without an external source");
+    expect(f.prepare).not.toHaveBeenCalled();
+  });
   it("rejects hidden tasks and archived projects without contacting the provider",()=>{
     const f=setup();
     f.setTasks([{...task(id1,"Hidden"),visible:false}]);
