@@ -239,7 +239,7 @@ export class AIProjectStore{
       sourceIds.length>8||new Set(sourceIds).size!==sourceIds.length||
       sourceIds.some(x=>typeof x!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x)))
       throw Error("Invalid AI project source scope");
-    if(destination!=="local"&&destination!=="cloud-model")throw Error("Invalid AI project destination");
+    if(destination!=="local"&&destination!=="configured-model")throw Error("Invalid AI project destination");
     const allowed=this.transaction(()=>{
       this.requireProject(id);
       let result=true;
@@ -256,8 +256,8 @@ export class AIProjectStore{
       }
       return result;
     });
-    if(!allowed)throw Error(destination==="cloud-model"
-      ?"Project permission required: explicitly allow local reading and cloud-model transmission for every selected task"
+    if(!allowed)throw Error(destination==="configured-model"
+      ?"Project permission required: explicitly allow local reading and configured model endpoint transmission for every selected task"
       :"Project permission required: explicitly allow local reading for every selected task");
   }
   authorizeAction(rawProjectId:unknown,action:AIProjectAction,now=new Date()):void{
