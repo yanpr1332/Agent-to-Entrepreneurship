@@ -1,4 +1,7 @@
 import {afterEach,describe,expect,it} from "vitest";
+import {mkdtempSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 import {AIProjectStore} from "./ai-project-store";
 import {AI_PROJECT_ACTIONS,parseAIProjectSourceGrant} from "../../shared/ai-project-model";
 
@@ -92,6 +95,28 @@ describe("local AI project authorization registry",()=>{
     expect(()=>db.authorizeAction(projectId,"planning.propose",now)).toThrow();
     expect(()=>db.renameProject({id:projectId,name:"Renamed",purpose:""},now)).toThrow("archived");
     expect(db.auditEvents(projectId).some(x=>x.kind==="project.archived")).toBe(true);
+  });
+  it("persists projects and grants across a local database reopen",()=>{
+    const dir=mkdtempSync(join(tmpdir(),"study-anchor-ai-project-"));
+    const path=join(dir,"projects.sqlite");
+    try{
+      const first=new AIProjectStore(path);
+      const created=first.createProject({name:"Persistent",purpose:"Local only"},now);
+      first.setSourceGrant({projectId:created.id,sourceType:"task",sourceId:taskId,
+        canReadLocal:true,canSendRemote:true,expiresAt:null},now);
+      first.setActionGrant({projectId:created.id,action:"planning.propose",
+        enabled:true,expiresAt:null},now);
+      first.close();
+      const reopened=new AIProjectStore(path);
+      expect(reopened.listProjects()[0]).toMatchObject({id:created.id,name:"Persistent"});
+      expect(reopened.listSourceGrants(created.id)[0]).toMatchObject({
+        sourceId:taskId,canReadLocal:true,canSendRemote:true,
+      });
+      expect(reopened.listActionGrants(created.id,now).find(x=>x.action==="planning.propose")?.enabled)
+        .toBe(true);
+      expect(reopened.auditEvents(created.id).length).toBeGreaterThanOrEqual(3);
+      reopened.close();
+    }finally{rmSync(dir,{recursive:true,force:true});}
   });
   it("enforces expiry bounds, exact schemas and the per-project grant ceiling",()=>{
     const db=store();create(db);
