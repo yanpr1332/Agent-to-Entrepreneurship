@@ -440,3 +440,8 @@ node node_modules/vitest/vitest.mjs run --pool=threads
 
 - **修复 Electron uninstall 类开发启动故障的诊断**：在 `npm run dev` / `npm run dev:compat` 前自动执行只读预检。可用 `npm run doctor:electron` 查看缺失二进制原因；若缺失，用户手动执行 `npm run setup:electron` 下载当前锁定的 Electron 版本，重新预检后再启动。此操作不修改任何用户 SQLite 或关闭系统安全保护。参见 [60 V0.2 启动与云端恢复](docs/w5/60_V02_01_ELECTRON_CLOUD_STABILITY.md)。
 - **改进 Supabase 多人账号切换与 Realtime 断网恢复**：登出/切换项目使旧登录、JWT 刷新和 REST 响应失效；首次网络失败时保留轮询并重试实时订阅、被拒绝的 JWT 停止重连。小组页面新增手动刷新、最后一次云端核对与失败提示。真人五人 RLS 与双设备联网仍需独立测试，CI/模拟回归不等于真实验收。
+
+
+### V0.2-02 个人文件逐份手动跨设备同步（独立 Beta 通道）
+
+云端小组页面新增独立的「个人文件 · 逐份授权同步」：一次只使用原生文件选择器选一份 PDF/MD/TXT/HTML/TeX/CSV/JSON/ICS（≤1 MiB，单账号最多 20 份），本机 SQLite/私有目录先暂存，点击确认才真正上传当前登录账号的 Supabase 项目；另一台设备登录**同一个 Auth 账号**可刷新后手动校验下载。SHA256、原子 CAS 版本保护及单独云端删除防止静默覆盖；不能视为团队共享或自动同步。**目前没有端到端加密，项目管理员可能读取内容，只建议用非敏感合成文件在自己的非生产项目测试。** 全新第八份 SQL 需独立审核、手动执行；请按 [61 使用与验收](docs/w5/61_V02_02_CONSENTED_FILE_SYNC.md)，旧七份迁移/五账号验收不自动涵盖新文件权限。

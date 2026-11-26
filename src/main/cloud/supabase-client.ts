@@ -7,6 +7,11 @@ import {
 } from "../../shared/cloud-model";
 import {workspaceCursor} from "../../shared/workspace-history-contract";
 import {
+  parsePersonalFileList,parsePersonalFilePayload,parsePersonalFileResult,
+  requireFileHash,requireFileSize,requireFileVersion,requirePersonalFileName,
+  type RemotePersonalFile,type PersonalFilePayload,type PersonalFileApplyResult,
+} from "../../shared/personal-file-sync";
+import {
   parsePersonalSyncOperation, parsePersonalSyncPullPage, parseSyncOperationResult,
   parsePersonalSyncDeviceInspection, parsePersonalSyncReceiptLookup,
   type PersonalSyncPullPage, type PersonalSyncOperation, type SyncOperationResult,
@@ -61,7 +66,8 @@ export class SharedCloudClient {
   }
 
   private async call(path:string,method:"GET"|"POST"|"PATCH",
-    body?:unknown,headers:Record<string,string>={},useUser=true):Promise<unknown>{
+    body?:unknown,headers:Record<string,string>={},useUser=true,
+    maxResponseBytes=MAX_JSON_BYTES):Promise<unknown>{
     if(!this.project)throw Error("Configure a Supabase test project first");
     const base=this.project;
     const epoch=this.authEpoch;
@@ -101,7 +107,7 @@ export class SharedCloudClient {
     const text=await response.text();
     if(this.authEpoch!==epoch||this.project!==base)
       throw Error("Cloud account or project changed during request");
-    if(text.length>MAX_JSON_BYTES)throw Error("Cloud response exceeds safety limit");
+    if(text.length>maxResponseBytes)throw Error("Cloud response exceeds safety limit");
     if(!text)return null;
     try{return JSON.parse(text);}catch{throw Error("Cloud returned malformed JSON");}
   }
@@ -265,6 +271,48 @@ export class SharedCloudClient {
   }
   private async rpc(name:string,body:object):Promise<unknown>{
     return this.call(`rest/v1/rpc/${name}`,"POST",body);
+  }
+
+  /** Bounded, opt-in file sync RPCs. Only the logged-in user's JWT is used.
+   * File bytes remain Main-only; Renderer receives metadata and local receipt. */
+  async listPersonalFiles():Promise<RemotePersonalFile[]>{
+    return parsePersonalFileList(await this.rpc("ate_file_list",{}));
+  }
+
+  async readPersonalFile(rawFileId:unknown):Promise<PersonalFilePayload>{
+    const fileId=requireUuid(rawFileId);
+    const result=await this.call("rest/v1/rpc/ate_file_get","POST",
+      {p_file_id:fileId},{},true,2_000_000);
+    const payload=parsePersonalFilePayload(result);
+    if(payload.fileId!==fileId)throw Error("Cloud returned a different personal file ID");
+    return payload;
+  }
+
+  async applyPersonalFile(input:{
+    fileId:string;baseVersion:number;filename:string;
+    sha256:string;byteLength:number;base64:string;
+  }):Promise<PersonalFileApplyResult>{
+    const fileId=requireUuid(input.fileId);
+    const baseVersion=requireFileVersion(input.baseVersion,true);
+    const filename=requirePersonalFileName(input.filename);
+    const sha256=requireFileHash(input.sha256);
+    const byteLength=requireFileSize(input.byteLength);
+    if(typeof input.base64!=="string"||input.base64.length>1_400_000)
+      throw Error("Invalid file upload bytes");
+    const result=await this.rpc("ate_file_apply",{
+      p_file_id:fileId,p_base_version:baseVersion,
+      p_filename:filename,p_sha256:sha256,p_byte_length:byteLength,
+      p_base64:input.base64,p_delete:false,
+    });
+    return parsePersonalFileResult(result);
+  }
+
+  async deletePersonalFile(rawId:unknown,rawVersion:unknown):Promise<PersonalFileApplyResult>{
+    const fileId=requireUuid(rawId),baseVersion=requireFileVersion(rawVersion);
+    return parsePersonalFileResult(await this.rpc("ate_file_apply",{
+      p_file_id:fileId,p_base_version:baseVersion,
+      p_filename:null,p_sha256:null,p_byte_length:null,p_base64:null,p_delete:true,
+    }));
   }
 
   async listWorkspaces():Promise<SharedWorkspace[]>{

@@ -16,7 +16,7 @@ function withFixture(run) {
 test("all committed migrations pass read-only preflight", () => {
   const result = inspectMigrations(root);
   assert.deepEqual(result.issues, []);
-  assert.equal(result.migrations.length, 7);
+  assert.equal(result.migrations.length, 8);
 });
 test("fail closed on missing SQL files", () => withFixture(dir => {
   unlinkSync(join(dir, MIGRATIONS[3]));

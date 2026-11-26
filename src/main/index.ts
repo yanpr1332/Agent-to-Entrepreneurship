@@ -24,6 +24,7 @@ import {WorkspaceHistoryStore} from "./cloud/workspace-history-store";
 import {createTeamHistoryCipher} from "./cloud/workspace-history-crypto";
 import {WorkspaceHistoryService} from "./cloud/workspace-history-service";
 import { PersonalSyncService } from "./personal-sync";
+import {PersonalFileSyncService} from "./personal-file-sync";
 import {
   parsePersonalSyncResolutionRequest,parsePersonalSyncLegacyAdoptionRequest,
 } from "../shared/personal-sync-contract";
@@ -192,6 +193,11 @@ const workspaceRealtime=new WorkspaceRealtimeBridge(sharedCloud,update=>{
   }
 });
 let personalSync:PersonalSyncService|null=null;
+let personalFiles:PersonalFileSyncService|null=null;
+function personalFileService():PersonalFileSyncService{
+  if(!personalFiles)throw Error("Personal file synchronization is unavailable");
+  return personalFiles;
+}
 function personalSyncService():PersonalSyncService{
   if(!personalSync)throw new Error("Personal synchronization is not initialized");
   return personalSync;
@@ -1054,6 +1060,77 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return sharedCloud.markTask(workspaceId, taskId, completed);
   });
+  // File staging is native-picker-only: IPC NEVER accepts a filesystem path.
+  handle(IPC_CHANNELS.cloudFileOverview, (event) => {
+    requireTrustedSender(event);
+    return personalFileService().overview();
+  });
+  handle(IPC_CHANNELS.cloudFileStage, async(event,replaceInput:unknown)=>{
+    requireTrustedSender(event);
+    let replacement:{fileId:string;version:number}|undefined;
+    if(replaceInput!==null){
+      if(!replaceInput||typeof replaceInput!=="object"||Array.isArray(replaceInput))
+        throw Error("Invalid file replacement request");
+      const input=replaceInput as Record<string,unknown>;
+      if(Object.keys(input).sort().join(",")!=="fileId,version")
+        throw Error("Invalid file replacement request");
+      replacement={fileId:String(input.fileId),version:Number(input.version)};
+    }
+    // Dialog is controlled by Main and constrained to one file. The selected
+    // absolute path and its contents are never returned to Renderer.
+    const result=await dialog.showOpenDialog({
+      title:"选择一个准备手动同步的个人文件（最大 1 MiB）",
+      properties:["openFile"],
+      filters:[{name:"个人学习文件",extensions:[
+        "md","txt","pdf","html","htm","tex","latex","csv","json","ics",
+      ]}],
+    });
+    if(result.canceled||result.filePaths.length!==1)return null;
+    return personalFileService().stagePickedFile(result.filePaths[0],replacement);
+  });
+  handle(IPC_CHANNELS.cloudFileUpload,async(event,id:unknown)=>{
+    requireTrustedSender(event);
+    const fileId=typeof id==="string"?id:"";
+    const item=personalFileService().pending().find(row=>row.fileId===fileId);
+    if(!item)throw Error("No staged personal file for the current account");
+    // A forged Renderer IPC cannot bypass this native OS confirmation.
+    const answer=await dialog.showMessageBox({
+      type:"warning",buttons:["同意上传到当前测试云项目","取消，不上传"],
+      defaultId:1,cancelId:1,noLink:true,
+      title:"确认上传个人文件",
+      message:"是否上传「"+item.filename+"」？",
+      detail:"文件大小："+item.byteLength+" 字节。将发送完整原文到当前 Supabase 项目。"+
+        "此 Beta 不提供端到端加密，项目管理员可能访问内容。"+
+        "只有明确确认才会进行网络写入。",
+    });
+    if(answer.response!==0)return {status:"cancelled" as const,version:null};
+    return personalFileService().upload(fileId);
+  });
+  handle(IPC_CHANNELS.cloudFileStopLocal,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return personalFileService().stopLocal(id);
+  });
+  handle(IPC_CHANNELS.cloudFileDownload,(event,id:unknown,version:unknown)=>{
+    requireTrustedSender(event);
+    return personalFileService().download(id,version);
+  });
+  handle(IPC_CHANNELS.cloudFileDelete,async(event,id:unknown,version:unknown)=>{
+    requireTrustedSender(event);
+    const fileId=typeof id==="string"?id:"";
+    const item=(await personalFileService().overview()).remote
+      .find(row=>row.fileId===fileId&&row.version===version);
+    if(!item)throw Error("Remote file version changed; refresh before deleting");
+    const answer=await dialog.showMessageBox({
+      type:"warning",buttons:["确认删除该云端文件内容","取消，保留文件"],
+      defaultId:1,cancelId:1,noLink:true,
+      title:"确认删除当前云端文件内容",
+      message:"从 Supabase 删除「"+item.filename+"」v"+item.version+" 的原文？",
+      detail:"这会按版本核对并清空当前云端记录的文件内容。"+
+        "其他电脑已经下载的副本和云服务历史备份不会自动清除。",
+    });
+    if(answer.response!==0)return {status:"cancelled" as const,version:null};
+    return personalFileService().deleteRemote(fileId,version);
+  });
   handle(IPC_CHANNELS.cloudPersonalSyncNow, async (event) => {
     requireTrustedSender(event);
     return personalSyncService().syncNow();
@@ -1223,6 +1300,14 @@ app.whenReady().then(async () => {
       ()=>canvasSync?.scope()??null,
     );
     personalSync = new PersonalSyncService(sharedCloud,localStore(),fixedCalendar());
+    // Optional file staging is independent of the five core SQLite stores.
+    // No staged content is uploaded or read at application launch.
+    try{
+      personalFiles=new PersonalFileSyncService(sharedCloud,app.getPath("userData"));
+    }catch{
+      personalFiles=null;
+      report("STORAGE_OPEN_FAILED","storage");
+    }
     // The optional cloud history cache must never make offline tasks,
     // calendar, mail or knowledge unavailable if its file is damaged.
     try{
@@ -1342,6 +1427,7 @@ app.on("before-quit", (event) => {
   aiLedger = null;
   pendingICS=null;
   personalSync=null;
+  personalFiles?.close();personalFiles=null;
   planningStore?.close();
   planningStore = null;
   fixedCalendarStore?.close();
