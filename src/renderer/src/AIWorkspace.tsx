@@ -6,7 +6,7 @@ import {
 } from "../../shared/ai-model";
 import type { LocalTask } from "../../shared/local-model";
 import {eligibleAIPlanTasks,type AIPlanSuggestion} from "../../shared/ai-planning";
-import type {AIProject,AIProjectSourceGrant,AIProjectActionGrant,AIProjectAction,AIProjectAuditEvent} from "../../shared/ai-project-model";
+import type {AIProject,AIProjectSourceGrant,AIProjectActionGrant,AIProjectAuditEvent} from "../../shared/ai-project-model";
 
 const empty:AIStatus={
   connected:false,running:false,provider:null,model:null,keySource:null,configurationWarning:null,usedToday:0,
@@ -163,9 +163,13 @@ export default function AIWorkspace(){
     setBusy(true);setError("");setNotice("");
     try{
       const current=projectGrants.find(item=>item.sourceType==="task"&&item.sourceId===taskId);
-      const canReadLocal=permission==="local"?enabled:!!current?.canReadLocal;
+      const currentStillActive=!!current&&current.revokedAt===null&&
+        (!current.expiresAt||Date.parse(current.expiresAt)>Date.now());
+      const canReadLocal=permission==="local"?enabled:currentStillActive&&!!current?.canReadLocal;
+      // Re-authorizing local access never silently restores an expired/revoked
+      // cloud-transfer consent. That permission needs its own fresh click.
       const canSendRemote=permission==="remote"?enabled&&canReadLocal:
-        (enabled?!!current?.canSendRemote:false);
+        (enabled&&currentStillActive?!!current?.canSendRemote:false);
       if(!canReadLocal&&!canSendRemote){
         await window.desktop.ai.projects.revokeSourceGrant({
           projectId:activeProject.id,sourceType:"task",sourceId:taskId,
