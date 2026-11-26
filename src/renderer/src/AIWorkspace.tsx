@@ -503,6 +503,8 @@ export default function AIWorkspace(){
               <span>允许 AI 在此项目生成学习计划草稿（只生成待审查建议，不写入正式日历）</span>
             </label>
           </div>
+          {planningAction?.enabled&&planningAction.expiresAt&&
+            <p className="privacy-note">规划草稿动作授权到期：{new Date(planningAction.expiresAt).toLocaleString("zh-CN")}</p>}
           <h3>项目资料访问权限</h3>
           <p className="privacy-note">
             本地读取与云端模型发送必须分别授权。发送前仍会完整预览实际提示词并要求你再次确认；
@@ -514,7 +516,7 @@ export default function AIWorkspace(){
               const local=!!grant?.canReadLocal&&grant.revokedAt===null&&
                 (!grant.expiresAt||Date.parse(grant.expiresAt)>Date.now());
               const remote=local&&!!grant?.canSendRemote;
-              return <div key={task.id} className="planner-select">
+              return <div key={task.id} className="planner-select ai-project-resource">
                 <strong>{task.title}</strong>
                 <span>截止 {task.dueDate??"未设置"} · {task.priority}</span>
                 <label>
