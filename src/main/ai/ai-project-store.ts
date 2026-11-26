@@ -195,8 +195,11 @@ export class AIProjectStore{
         "can_read_local=0,can_send_remote=0,revoked_at=?,updated_at=? "+
         "WHERE project_id=? AND source_type=? AND source_id=? AND revoked_at IS NULL")
         .run(stamp,stamp,value.projectId,value.sourceType,value.sourceId);
-      if(Number(result.changes)>0)this.audit(value.projectId,"source.grant.revoked",stamp,
-        {sourceType:value.sourceType,sourceId:value.sourceId});
+      if(Number(result.changes)>0){
+        this.db.prepare("UPDATE ai_projects SET updated_at=? WHERE id=?").run(stamp,value.projectId);
+        this.audit(value.projectId,"source.grant.revoked",stamp,
+          {sourceType:value.sourceType,sourceId:value.sourceId});
+      }
       return {revoked:Number(result.changes)>0};
     });
   }
