@@ -34,6 +34,7 @@ import type {
 } from "../shared/personal-sync-contract";
 
 import type {
+  KnowledgeNeuralRuntimeStatus,
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
   KnowledgeBatchImportResult, KnowledgeSourceAuditEntry,
   KnowledgeSourceRefreshRequest, KnowledgeSourceRefreshResult,
@@ -289,6 +290,8 @@ const desktopApi = Object.freeze({
         Promise<KnowledgeSourceRefreshResult>,
     delete: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeDelete,id) as Promise<boolean>,
     search: (query: string) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeSearch,query) as Promise<KnowledgeSearchHit[]>,
+    checkNeuralRuntime:()=>
+      ipcRenderer.invoke(IPC_CHANNELS.knowledgeNeuralRuntimeCheck) as Promise<KnowledgeNeuralRuntimeStatus>,
     embeddingStatus: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeEmbeddingStatus) as Promise<KnowledgeEmbeddingStatus>,
     importOfflineModel: (acknowledged:boolean) =>
       ipcRenderer.invoke(IPC_CHANNELS.knowledgeImportOfflineModel,acknowledged) as
