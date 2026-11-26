@@ -164,6 +164,7 @@ declare global {
         cancel: () => Promise<AIStatus>;
         planPrepare: (selection: AIPlanPrepareInput) => Promise<AIPreview>;
         planConfirm: (approvalId: string) => Promise<AIPlanAccepted>;
+        planCancel:()=>Promise<{cancelled:true}>;
         projects:{
           list:()=>Promise<AIProject[]>;
           create:(input:AIProjectCreateInput)=>Promise<AIProject>;
