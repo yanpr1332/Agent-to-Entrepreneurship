@@ -3,7 +3,7 @@ import type {Readable,Writable} from "node:stream";
 import {createInterface} from "node:readline";
 import {join} from "node:path";
 import {app} from "electron";
-import {resolveNeuralPython} from "./knowledge-neural-runtime";
+import {resolveNeuralPython,neuralSubprocessEnv} from "./knowledge-neural-runtime";
 import {parseLocalEmbeddingModel,type LocalEmbeddingModel,
   type LocalEmbeddingProvider} from "./knowledge-embeddings";
 export type NeuralKind="e5"|"bge";
@@ -38,10 +38,7 @@ export class OfflineNeuralPythonProvider implements LocalEmbeddingProvider {
       String(this.model.dimension)],{
       windowsHide:true,cwd:directory,
       stdio:["pipe","pipe","ignore"],
-      env:{...process.env,HF_HUB_OFFLINE:"1",TRANSFORMERS_OFFLINE:"1",
-        HF_HUB_DISABLE_TELEMETRY:"1",TOKENIZERS_PARALLELISM:"false",
-        PYTHONNOUSERSITE:"1",NO_PROXY:"*",HTTP_PROXY:"",HTTPS_PROXY:"",
-        ALL_PROXY:""},
+      env:neuralSubprocessEnv(),
     });
     const lines=createInterface({input:this.process.stdout,crlfDelay:Infinity});
     lines.on("line",(line)=>{
