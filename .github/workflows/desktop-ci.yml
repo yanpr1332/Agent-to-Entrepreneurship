@@ -47,7 +47,7 @@ jobs:
           python-version: "3.11"
 
       - name: Validate offline Python neural worker syntax
-        run: python -m py_compile scripts/neural-inference-worker.py
+        run: python -m py_compile scripts/neural-inference-worker.py scripts/neural-runtime-doctor.py
 
       - name: Run unit tests
         run: npm test
