@@ -62,7 +62,7 @@ describe("AI project scoped planning with authoritative validation",()=>{
     f.projects.setSourceGrant({projectId:f.project.id,sourceType:"task",sourceId:id1,
       canReadLocal:true,canSendRemote:false,expiresAt:null},baseTime);
     expect(()=>f.coordinator.prepare({projectId:f.project.id,taskIds:[id1],settings}))
-      .toThrow("cloud-model transmission");
+      .toThrow("configured model endpoint transmission");
     expect(f.prepare).not.toHaveBeenCalled();
   });
   it("requires a separate explicit planning action grant",()=>{
@@ -82,7 +82,7 @@ describe("AI project scoped planning with authoritative validation",()=>{
     f.setTasks([task(id1,"Math revision")]);
     f.coordinator.prepare({projectId:f.project.id,taskIds:[id1],settings});
     f.projects.revokeSourceGrant({projectId:f.project.id,sourceType:"task",sourceId:id1},baseTime);
-    await expect(f.coordinator.confirm(approvalId)).rejects.toThrow("cloud-model transmission");
+    await expect(f.coordinator.confirm(approvalId)).rejects.toThrow("configured model endpoint transmission");
     expect(f.confirm).not.toHaveBeenCalled();
   });
   it("rechecks revocation after asynchronous credential resolution and before network send",async()=>{
@@ -93,7 +93,7 @@ describe("AI project scoped planning with authoritative validation",()=>{
       authorize?.();
       return {text:"{}",model:"test",usage:{inputTokens:0,outputTokens:0},createdAt:baseTime.toISOString()};
     });
-    await expect(f.coordinator.confirm(approvalId)).rejects.toThrow("cloud-model transmission");
+    await expect(f.coordinator.confirm(approvalId)).rejects.toThrow("configured model endpoint transmission");
     expect(f.planning.listCommitted()).toHaveLength(0);
   });
   it("rejects Canvas-sourced tasks even if a stale or forged project grant exists",()=>{
