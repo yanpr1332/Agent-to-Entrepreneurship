@@ -56,6 +56,11 @@ import type {
 } from "../../shared/ai-model";
 
 import type { AIPlanPrepareInput, AIPlanAccepted } from "../../shared/ai-plan-model";
+import type {
+  AIProject,AIProjectCreateInput,AIProjectRenameInput,
+  AIProjectSourceGrant,AIProjectSourceGrantInput,AIProjectSourceRevokeInput,
+  AIProjectActionGrant,AIProjectActionGrantInput,AIProjectAuditEvent,
+} from "../../shared/ai-project-model";
 
 declare global {
   interface Window {
@@ -159,6 +164,18 @@ declare global {
         cancel: () => Promise<AIStatus>;
         planPrepare: (selection: AIPlanPrepareInput) => Promise<AIPreview>;
         planConfirm: (approvalId: string) => Promise<AIPlanAccepted>;
+        projects:{
+          list:()=>Promise<AIProject[]>;
+          create:(input:AIProjectCreateInput)=>Promise<AIProject>;
+          rename:(input:AIProjectRenameInput)=>Promise<AIProject>;
+          archive:(id:string)=>Promise<AIProject>;
+          sourceGrants:(id:string)=>Promise<AIProjectSourceGrant[]>;
+          setSourceGrant:(input:AIProjectSourceGrantInput)=>Promise<AIProjectSourceGrant>;
+          revokeSourceGrant:(input:AIProjectSourceRevokeInput)=>Promise<{revoked:boolean}>;
+          actionGrants:(id:string)=>Promise<AIProjectActionGrant[]>;
+          setActionGrant:(input:AIProjectActionGrantInput)=>Promise<AIProjectActionGrant>;
+          audit:(id:string)=>Promise<AIProjectAuditEvent[]>;
+        };
       };
       calendar: {
         list:()=>Promise<CalendarDisplayEvent[]>;
