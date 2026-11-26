@@ -68,6 +68,7 @@ export const IPC_CHANNELS = {
   aiCancel: "ai:cancel",
   aiPlanPrepare: "ai:plan-prepare",
   aiPlanConfirm: "ai:plan-confirm",
+  aiPlanCancel: "ai:plan-cancel",
   aiProjectsList: "ai:projects-list",
   aiProjectCreate: "ai:project-create",
   aiProjectRename: "ai:project-rename",
