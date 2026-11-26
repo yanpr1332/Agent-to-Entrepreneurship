@@ -12,7 +12,7 @@
 3. **动作级许可**：默认所有动作拒绝。当前仅开放 **planning.propose**（生成待人工审核的本地学习计划建议）；**task.write**、**calendar.write**、**mail.send**、**file.write**、**external.tool** 尚无执行器，即使 Renderer 构造 IPC 请求也不能授予。
 4. **审批令牌按业务域隔离**：AIService 的一次性审批预览绑定 chat、mail 或 project-plan scope；普通聊天的 aiConfirm 不能确认邮件或项目审批令牌，反向也不行。项目规划和邮件协调器分别只能消费自己的审批 scope。
 5. **Main 执行层授权**：AI 规划 IPC 必须带项目 ID。Main 在读取任务前检查项目、每个来源的本地读取权、云端发送权及 planning.propose 动作许可；在 AI Key 异步解析后、请求配额预留和付费网络调用前再次检查；模型响应后再次检查来源/动作权限和任务版本。
-6. **可审计、少记录**：每次授权、撤销、项目归档和访问允许/拒绝写入独立本机 SQLite。审计仅保存 project/source/action/destination/result/time 元数据，不保存任务标题、正文、提示词、模型回复、API Key 或凭据。每项目最多保留最近 500 条记录。
+6. **可审计、少记录**：每次授权、撤销、项目归档和访问允许/拒绝写入独立本机 SQLite。审计仅保存 project/source/action/destination/result/time 元数据，不保存任务标题、正文、提示词、模型回复、API Key 或凭据。每项目最多保留最近 500 条记录。来源/动作的 allowed/denied 是权限检查结果，不代表第三方请求已经发出；实际是否发送以 AIService 请求结果和服务商用量为准。
 7. **真实模型结果不越权**：模型只能返回任务 ID、日期、开始分钟。Main 再用现有规划规则核对任务 ID、时间窗、截止日期、重叠和固定课程，产生本机 PlanProposal。不自动应用日历、不改任务、不发送邮件、不写文件。
 
 ## 实际发送给云端模型的内容
