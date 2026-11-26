@@ -162,7 +162,7 @@ export class PlanningStore {
     rawSettings:unknown, selectedTasks:LocalTask[], slots:AIPlanSlot[],now=new Date(),
   ):PlanProposal{
     const settings=parsePlanningSettings(rawSettings);
-    if(!Array.isArray(slots) || slots.length<1 || slots.length>5)
+    if(!Array.isArray(slots) || slots.length<1 || slots.length>8)
       throw Error("AI returned an invalid number of schedule blocks");
     const today=[now.getFullYear(),String(now.getMonth()+1).padStart(2,"0"),
       String(now.getDate()).padStart(2,"0")].join("-");
