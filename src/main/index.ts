@@ -38,6 +38,7 @@ import { classifyMailSubject, parseMailCandidateChoice } from "../shared/mail-ca
 import type { MailCandidate } from "../shared/mail-candidates";
 import { KnowledgeStore } from "./knowledge-store";
 import {KnowledgeOfflineModels} from "./knowledge-offline-models";
+import {inspectNeuralRuntime} from "./knowledge-neural-runtime";
 import {FocusGuardController} from "./focus-guard";
 import {getForegroundApplication} from "./focus-foreground";
 import { PlanningStore } from "./planning-store";
@@ -530,6 +531,13 @@ function registerIpcHandlers(): void {
     });
     if(selection.canceled||!selection.filePaths.length)return null;
     return localModels().importFile(selection.filePaths[0]);
+  });
+  handle(IPC_CHANNELS.knowledgeNeuralRuntimeCheck,async(event)=>{
+    requireTrustedSender(event);
+    const script=app.isPackaged?
+      join(process.resourcesPath,"neural-runtime-doctor.py"):
+      join(process.cwd(),"scripts","neural-runtime-doctor.py");
+    return inspectNeuralRuntime(script);
   });
   handle(IPC_CHANNELS.knowledgeImportNeuralModel,
     async(event,consent:unknown,kind:unknown)=>{
