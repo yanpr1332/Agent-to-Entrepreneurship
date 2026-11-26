@@ -449,8 +449,8 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     const grant=parseAIProjectSourceGrant(input);
     const source=localStore().listTasks().find(task=>
-      task.id===grant.sourceId&&task.visible&&!task.completed);
-    if(!source)throw Error("Only visible, incomplete personal tasks can be granted to an AI project");
+      task.id===grant.sourceId&&task.visible&&!task.completed&&task.source===null);
+    if(!source)throw Error("Only visible, incomplete personal tasks without an external source can be granted to an AI project");
     return aiProjects().setSourceGrant(grant);
   });
   handle(IPC_CHANNELS.aiProjectRevokeSourceGrant,(event,input:unknown)=>{
