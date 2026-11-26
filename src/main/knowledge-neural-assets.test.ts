@@ -94,6 +94,22 @@ describe("KB-005D local E5/BGE asset supply chain and index integration",()=>{
     expect(()=>deriveNeuralModel("bge",{...staged.record.assets,
       evil:"a".repeat(64)})).toThrow("Incomplete");
   });
+  it("imports official-style onnx/model.onnx without copying arbitrary sibling scripts",()=>{
+    const root=makeRoot(),models=join(root,"knowledge-models");
+    mkdirSync(models);
+    const dir=source(root,"e5");
+    rmSync(join(dir,"model.onnx"));
+    mkdirSync(join(dir,"onnx"));
+    writeFileSync(join(dir,"onnx","model.onnx"),
+      "offline fixture graph from fixed official-style nested layout");
+    writeFileSync(join(dir,"onnx","bad-remote-code.py"),"raise RuntimeError('never execute')");
+    const staged=stageNeuralAssets(dir,models,"e5");
+    expect(staged.record.model.dimension).toBe(384);
+    expect(existsSync(join(staged.path,"model.onnx"))).toBe(true);
+    expect(existsSync(join(staged.path,"bad-remote-code.py"))).toBe(false);
+    expect(verifyNeuralRecord(staged.path,staged.record)).toEqual(staged.record);
+  });
+
   it("rejects symlinked, wrong-dimension and missing graph model inputs",()=>{
     const root=makeRoot();const models=join(root,"knowledge-models");
     mkdirSync(models);
