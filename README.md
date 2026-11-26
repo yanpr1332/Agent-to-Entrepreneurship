@@ -445,3 +445,8 @@ node node_modules/vitest/vitest.mjs run --pool=threads
 ### V0.2-02 个人文件逐份手动跨设备同步（独立 Beta 通道）
 
 云端小组页面新增独立的「个人文件 · 逐份授权同步」：一次只使用原生文件选择器选一份 PDF/MD/TXT/HTML/TeX/CSV/JSON/ICS（≤1 MiB，单账号最多 20 份），本机 SQLite/私有目录先暂存，点击确认才真正上传当前登录账号的 Supabase 项目；另一台设备登录**同一个 Auth 账号**可刷新后手动校验下载。SHA256、原子 CAS 版本保护及单独云端删除防止静默覆盖；不能视为团队共享或自动同步。**目前没有端到端加密，项目管理员可能读取内容，只建议用非敏感合成文件在自己的非生产项目测试。** 全新第八份 SQL 需独立审核、手动执行；请按 [61 使用与验收](docs/w5/61_V02_02_CONSENTED_FILE_SYNC.md)，旧七份迁移/五账号验收不自动涵盖新文件权限。
+
+
+### V0.2-03 可检查的本地神经 ONNX 环境
+
+知识库新增 **「检查本机 Python / ONNX CPU 环境」**。CLI 同样可运行 `npm run doctor:neural` 只读诊断 numpy/onnxruntime/transformers、Python 版本和 CPU Provider，不加载私人模型，不联网，也不会把本机 Python 路径暴露给 Renderer。用户可**自行决定**在线安装固定直接依赖：`npm run setup:neural:runtime -- --online`，或者从本机预先审核过的 wheels 离线安装：`npm run setup:neural:runtime -- --wheelhouse ABSOLUTE_DIRECTORY`。安装到当前用户专用虚拟环境，绝不由应用启动自动下载。真正的 E5/BGE ONNX 模型与权重仍须用户按许可自行准备，第三方 Python wheels/权重不内置于 Electron。详见 [62 安装与验收手册](docs/w5/62_V02_03_NEURAL_RUNTIME.md)。
