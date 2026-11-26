@@ -5,7 +5,17 @@ import {mkdtempSync,mkdirSync,rmSync,symlinkSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join,resolve} from "node:path";
 import {parseSetupOptions} from "./setup-neural-runtime.mjs";
-import {pythonSelection} from "./neural-runtime-doctor.mjs";
+import {pythonSelection,doctorChildEnv} from "./neural-runtime-doctor.mjs";
+
+test("neural doctor and wheel installer strip private environment data",()=>{
+  const child=doctorChildEnv({PATH:"/usr/bin",OPENAI_API_KEY:"secret",
+    SMTP_PASSWORD:"secret2",PIP_INDEX_URL:"https://private.invalid?token=x",
+    PYTHONPATH:"/untrusted"});
+  assert.equal(child.PATH,"/usr/bin");
+  assert.equal(child.HF_HUB_OFFLINE,"1");
+  for(const key of ["OPENAI_API_KEY","SMTP_PASSWORD","PIP_INDEX_URL","PYTHONPATH"])
+    assert.equal(Object.hasOwn(child,key),false);
+});
 
 test("installer is explicitly opt-in, never guesses network vs offline",()=>{
   for(const args of [[],["--help"],["--offline"],["--online","more"],
