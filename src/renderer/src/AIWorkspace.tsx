@@ -547,9 +547,9 @@ export default function AIWorkspace(){
           <p className="privacy-note">项目已授权 {projectGrants.filter(item=>item.canReadLocal&&item.revokedAt===null&&
             (!item.expiresAt||Date.parse(item.expiresAt)>Date.now())).length} 项任务；
             已选择 {chosen.length}/8 项用于本次规划。任务描述、Canvas 链接和其他任务不会发送。</p>
-          <h3>动作权限（默认拒绝）</h3>
+          <h3>尚未开放的高影响动作（默认拒绝）</h3>
           <div className="planner-candidates">
-            {projectActions.map(action=><label key={action.action} className="planner-select">
+            {projectActions.filter(action=>action.action!=="planning.propose").map(action=><label key={action.action} className="planner-select">
               <input type="checkbox" checked={action.enabled}
                 disabled={!action.available||busy||sending}
                 onChange={event=>void setPlanningPermission(event.target.checked)}/>
