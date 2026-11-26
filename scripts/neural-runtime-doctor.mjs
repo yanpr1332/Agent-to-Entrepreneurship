@@ -18,6 +18,19 @@ export function pythonSelection(env=process.env,home=homedir(),platform=process.
   if(existsSync(managed))return {command:managed,source:"managed"};
   return {command:platform==="win32"?"python":"python3",source:"system"};
 }
+/** Minimize data given to the operator-chosen third-party Python interpreter. */
+export function doctorChildEnv(env=process.env){
+  const picked={};
+  for(const key of ["PATH","Path","PATHEXT","SystemRoot","WINDIR",
+    "HOME","USERPROFILE","HOMEDRIVE","HOMEPATH","APPDATA","LOCALAPPDATA",
+    "TEMP","TMP","TMPDIR","LANG","LC_ALL","TZ"]){
+    if(typeof env[key]==="string")picked[key]=env[key];
+  }
+  return {...picked,HF_HUB_OFFLINE:"1",TRANSFORMERS_OFFLINE:"1",
+    HF_HUB_DISABLE_TELEMETRY:"1",PYTHONNOUSERSITE:"1",
+    TOKENIZERS_PARALLELISM:"false",NO_PROXY:"*",HTTP_PROXY:"",
+    HTTPS_PROXY:"",ALL_PROXY:"",OMP_NUM_THREADS:"4"};
+}
 export function runDoctor(env=process.env){
   const selection=pythonSelection(env);
   if(!selection.command){
@@ -26,8 +39,7 @@ export function runDoctor(env=process.env){
   }
   const result=spawnSync(selection.command,["-I",resolve("scripts/neural-runtime-doctor.py")],{
     windowsHide:true,encoding:"utf8",timeout:30_000,maxBuffer:4096,
-    env:{...env,HF_HUB_OFFLINE:"1",TRANSFORMERS_OFFLINE:"1",
-      HF_HUB_DISABLE_TELEMETRY:"1",PYTHONNOUSERSITE:"1"},
+    env:doctorChildEnv(env),
   });
   if(result.error||result.status!==0){
     process.stderr.write("Neural runtime unavailable ("+selection.source+"). Use npm run setup:neural:runtime -- --online or supply offline wheels.\n");
