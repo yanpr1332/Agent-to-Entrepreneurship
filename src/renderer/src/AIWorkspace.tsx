@@ -13,6 +13,12 @@ const empty:AIStatus={
   remainingToday:12,dailyRequestLimit:12,maxOutputTokens:512,lastRequestAt:null,
 };
 type Entry={id:number;question:string;answer:AIAnswer};
+const projectAuditNames:Record<AIProjectAuditEvent["kind"],string>={
+  "project.created":"创建项目","project.renamed":"修改项目资料","project.archived":"归档项目",
+  "source.grant.updated":"更新资料授权","source.grant.revoked":"撤销资料授权",
+  "action.grant.updated":"更新动作授权","source.access":"来源授权检查",
+  "action.access":"动作授权检查",
+};
 
 function describeError(error:unknown):string{
   return error instanceof Error?error.message:"AI 服务未完成本次操作";
@@ -563,7 +569,9 @@ export default function AIWorkspace(){
           <h3>最近权限审计</h3>
           {projectAudit.length===0?<p className="privacy-note">尚无授权或访问记录。</p>:
             <ul>{projectAudit.slice(0,8).map(event=><li key={event.id}>
-              {event.kind} · {event.result==="allowed"?"允许":event.result==="denied"?"拒绝":"已记录"} ·
+              {projectAuditNames[event.kind]} ·
+              {event.result==="allowed"?"授权检查通过":event.result==="denied"?"授权检查拒绝":"已记录"} ·
+              {event.destination==="cloud-model"?"云端模型":event.destination==="local"?"本机":"本地操作"} ·
               {new Date(event.occurredAt).toLocaleString("zh-CN")}
             </li>)}</ul>}
         </>}
