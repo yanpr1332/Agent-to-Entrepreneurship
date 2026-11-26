@@ -150,7 +150,7 @@ export default function AIWorkspace(){
 
   async function archiveProject():Promise<void>{
     if(!activeProject||busy||sending)return;
-    if(!window.confirm("归档此 AI 项目？所有资料读取、云端发送和动作授权将立即撤销。审计记录会保留；不会删除原始任务。"))return;
+    if(!window.confirm("归档此 AI 项目？所有资料读取、模型服务端点发送和动作授权将立即撤销。审计记录会保留；不会删除原始任务。"))return;
     setBusy(true);setError("");setNotice("");
     try{
       await cancelActivePreview();
@@ -271,7 +271,7 @@ export default function AIWorkspace(){
       const grants=new Map(projectGrants.map(item=>[item.sourceId,item]));
       if(eligible.some(task=>!grants.get(task.id)?.canReadLocal||
         !grants.get(task.id)?.canSendRemote))
-        throw Error("本次所选任务必须分别授予项目本地读取和云端模型发送权限");
+        throw Error("本次所选任务必须分别授予项目本地读取和模型服务端点发送权限");
       if(!projectActions.find(item=>item.action==="planning.propose"&&item.enabled))
         throw Error("请先单独允许此项目生成学习时间草稿");
       const next=await window.desktop.ai.planPrepare({
@@ -350,7 +350,7 @@ export default function AIWorkspace(){
       每日最多 {status.dailyRequestLimit} 次请求、每次最多 {status.maxOutputTokens} 个输出 token；
       这是软件端限额，<strong>不是费用金额上限</strong>，其他设备和平台用量不受此限额控制。
       API 请求指定不保存响应供模型会话使用，但服务商仍会依其 API 数据处理政策处理请求。
-      普通提问不会自动读取个人数据；项目规划必须先在本机项目空间逐项授权个人任务读取，再单独允许向云模型发送。主进程会在付费请求前复核授权并完整展示实际提示词，只发送所选个人任务的标题、截止日、优先级和标识，不发送描述、Canvas 链接、邮箱或知识库。模型不能调用工具或写入日历。
+      普通提问不会自动读取个人数据；项目规划必须先在本机项目空间逐项授权个人任务读取，再单独允许向模型服务端点发送。主进程会在付费请求前复核授权并完整展示实际提示词，只发送所选个人任务的标题、截止日、优先级和标识，不发送描述、Canvas 链接、邮箱或知识库。模型不能调用工具或写入日历。
       请勿在聊天或 GitHub 中分享 API Key。
     </div>
     {error&&<div className="error-banner" role="alert"><span>{error}</span>
@@ -518,7 +518,7 @@ export default function AIWorkspace(){
             <p className="privacy-note">规划草稿动作授权到期：{new Date(planningAction.expiresAt).toLocaleString("zh-CN")}</p>}
           <h3>项目资料访问权限</h3>
           <p className="privacy-note">
-            本地读取与云端模型发送必须分别授权。发送前仍会完整预览实际提示词并要求你再次确认；
+            本地读取与模型服务端点发送必须分别授权。发送前仍会完整预览实际提示词并要求你再次确认；
             撤销或过期的授权会在主进程阻止新请求。
           </p>
           <div className="planner-candidates ai-draft-candidates" aria-label="项目个人任务授权">
@@ -605,7 +605,7 @@ export default function AIWorkspace(){
           disabled={busy||sending||!!preview} onChange={event=>setPlanStart(event.target.value)}/>
       </label>
       <p className="privacy-note">当前项目：{activeProject?.name??"未选择"} · 已选 {chosen.length}/8 项。
-        只有分别授予本地读取和云端发送权限的任务才可加入本次请求。</p>
+        只有分别授予本地读取和模型服务端点发送权限的任务才可加入本次请求。</p>
       <button className="primary-button" disabled={busy||sending||!!preview||!status.connected||
         status.remainingToday===0||!activeProject||!planningAction?.enabled||chosen.length===0}
         onClick={()=>void preparePlan()}>预览项目授权范围内的 AI 规划请求</button>
