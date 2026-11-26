@@ -8,6 +8,7 @@ import {spawnSync} from "node:child_process";
 import {existsSync,mkdirSync,lstatSync} from "node:fs";
 import {homedir} from "node:os";
 import {isAbsolute,join,resolve} from "node:path";
+import {doctorChildEnv} from "./neural-runtime-doctor.mjs";
 
 const base=join(homedir(),".study-anchor","neural-runtime");
 const interpreter=join(base,process.platform==="win32"?"Scripts":"bin",
@@ -25,7 +26,7 @@ export function parseSetupOptions(argv){
 }
 function run(program,args,option={}){
   const response=spawnSync(program,args,{stdio:"inherit",windowsHide:true,
-    shell:false,env:{...process.env,PIP_DISABLE_PIP_VERSION_CHECK:"1"},...option});
+    shell:false,env:{...doctorChildEnv(),PIP_DISABLE_PIP_VERSION_CHECK:"1"},...option});
   if(response.error||response.status!==0)
     throw Error("Neural setup command failed (stage: "+args.slice(0,3).join(" ")+")");
 }
@@ -36,7 +37,7 @@ function main(){
   if(isAbsolute(python)&&!existsSync(python))throw Error("Configured Python path does not exist");
   const check=spawnSync(python,["-I","-c",
     "import sys;sys.exit(0 if (3,11)<=sys.version_info[:2]<(3,14) else 2)"],
-    {stdio:"ignore",shell:false,windowsHide:true});
+    {stdio:"ignore",shell:false,windowsHide:true,env:doctorChildEnv()});
   if(check.status!==0)throw Error("Python 3.11–3.13 is required to create a neural environment");
   if(existsSync(base)){
     const st=lstatSync(base);
@@ -59,8 +60,7 @@ function main(){
   // CPU provider or an unexpected diagnostic before calling setup completed.
   const doctor=spawnSync(interpreter,["-I",resolve("scripts","neural-runtime-doctor.py")],{
     windowsHide:true,encoding:"utf8",timeout:30_000,maxBuffer:4096,
-    env:{...process.env,HF_HUB_OFFLINE:"1",TRANSFORMERS_OFFLINE:"1",
-      HF_HUB_DISABLE_TELEMETRY:"1",PYTHONNOUSERSITE:"1"},
+    env:doctorChildEnv(),
   });
   let diagnosis;
   try{diagnosis=JSON.parse(doctor.stdout||"");}catch{/* fail closed */}
