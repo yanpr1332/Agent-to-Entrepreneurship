@@ -103,6 +103,10 @@ export class AIProjectStore{
       "VALUES(?,?,?,?,?,?,?,?,?)").run(randomUUID(),projectId,kind,
       fields.sourceType??null,fields.sourceId??null,fields.action??null,
       fields.destination??null,fields.result??"recorded",now);
+    // Keep a bounded metadata-only history per project; never log source text.
+    this.db.prepare("DELETE FROM ai_project_audit WHERE project_id=? AND id NOT IN "+
+      "(SELECT id FROM ai_project_audit WHERE project_id=? "+
+      "ORDER BY occurred_at DESC,id DESC LIMIT 500)").run(projectId,projectId);
   }
   createProject(input:unknown,now=new Date()):AIProject{
     const value=parseAIProjectCreate(input),stamp=utc(now);
