@@ -5,7 +5,8 @@ import {
   type AIAnswer, type AIPreview, type AIStatus,
 } from "../../shared/ai-model";
 import type { LocalTask } from "../../shared/local-model";
-import { eligibleAIPlanTasks, buildAIPlanPrompt, parseAIPlanDraft, type AIPlanSuggestion } from "../../shared/ai-planning";
+import {eligibleAIPlanTasks,type AIPlanSuggestion} from "../../shared/ai-planning";
+import type {AIProject,AIProjectSourceGrant,AIProjectActionGrant,AIProjectAction,AIProjectAuditEvent} from "../../shared/ai-project-model";
 
 const empty:AIStatus={
   connected:false,running:false,provider:null,model:null,keySource:null,configurationWarning:null,usedToday:0,
@@ -32,12 +33,22 @@ export default function AIWorkspace(){
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const [tasks,setTasks]=useState<LocalTask[]>([]);
+  const [projects,setProjects]=useState<AIProject[]>([]);
+  const [activeProjectId,setActiveProjectId]=useState("");
+  const [projectGrants,setProjectGrants]=useState<AIProjectSourceGrant[]>([]);
+  const [projectActions,setProjectActions]=useState<AIProjectActionGrant[]>([]);
+  const [projectAudit,setProjectAudit]=useState<AIProjectAuditEvent[]>([]);
+  const [newProjectName,setNewProjectName]=useState("");
+  const [newProjectPurpose,setNewProjectPurpose]=useState("");
+  const [editProjectName,setEditProjectName]=useState("");
+  const [editProjectPurpose,setEditProjectPurpose]=useState("");
+  const [grantDuration,setGrantDuration]=useState<"1d"|"7d"|"30d"|"never">("7d");
   const [chosen,setChosen]=useState<string[]>([]);
   const [planStart,setPlanStart]=useState(()=>new Date().toLocaleDateString("en-CA"));
   const [previewMode,setPreviewMode]=useState<"chat"|"plan">("chat");
   const [planDraft,setPlanDraft]=useState<AIPlanSuggestion[]|null>(null);
   const [planNames,setPlanNames]=useState<Record<string,string>>({});
-  const [planSnapshot,setPlanSnapshot]=useState<LocalTask[]>([]);
+
 
   useEffect(()=>{
     let active=true;
@@ -47,6 +58,12 @@ export default function AIWorkspace(){
     }).catch(e=>{if(active)setError(describeError(e));});
     void window.desktop.tasks.list().then(value=>{if(active)setTasks(value);})
       .catch(e=>{if(active)setError(describeError(e));});
+    void window.desktop.ai.projects.list().then(value=>{
+      if(!active)return;
+      setProjects(value);
+      const first=value.find(item=>!item.archivedAt);
+      if(first)setActiveProjectId(first.id);
+    }).catch(e=>{if(active)setError(describeError(e));});
     return()=>{active=false;};
   },[]);
 
@@ -95,12 +112,21 @@ export default function AIWorkspace(){
     if(busy||sending||preview)return;
     setBusy(true);setError("");setNotice("");setPlanDraft(null);
     try{
+      if(!activeProjectId)throw Error("请先创建或选择一个 AI 项目空间");
       const latest=await window.desktop.tasks.list();
       setTasks(latest);
       const eligible=eligibleAIPlanTasks(latest,chosen);
-      const prompt=buildAIPlanPrompt(latest,chosen,planStart);
-      const next=await window.desktop.ai.prepare(prompt);
-      setPlanSnapshot(eligible);
+      const grants=new Map(projectGrants.map(item=>[item.sourceId,item]));
+      if(eligible.some(task=>!grants.get(task.id)?.canReadLocal||
+        !grants.get(task.id)?.canSendRemote))
+        throw Error("本次所选任务必须分别授予项目本地读取和云端模型发送权限");
+      if(!projectActions.find(item=>item.action==="planning.propose"&&item.enabled))
+        throw Error("请先单独允许此项目生成学习时间草稿");
+      const next=await window.desktop.ai.planPrepare({
+        projectId:activeProjectId,taskIds:chosen,
+        settings:{startDate:planStart,days:7,dailyStart:"18:00",
+          dailyEnd:"21:00",minutesPerTask:45},
+      });
       setPlanNames(Object.fromEntries(eligible.map(t=>[t.id,t.title])));
       setPreview(next);setPreviewMode("plan");
     }catch(e){setError(describeError(e));}
@@ -110,8 +136,11 @@ export default function AIWorkspace(){
   async function discard():Promise<void>{
     if(sending)return;
     setBusy(true);
-    try{setStatus(await window.desktop.ai.cancel());setPreview(null);}
-    catch(e){setError(describeError(e));}
+    try{
+      if(previewMode==="plan")await window.desktop.ai.planCancel();
+      else setStatus(await window.desktop.ai.cancel());
+      setPreview(null);
+    }catch(e){setError(describeError(e));}
     finally{setBusy(false);}
   }
 
@@ -120,17 +149,18 @@ export default function AIWorkspace(){
     const accepted=preview;
     setSending(true);setError("");setNotice("");
     try{
-      const answer=await window.desktop.ai.confirm(accepted.approvalId);
       if(previewMode==="plan"){
-        try{
-          const result=parseAIPlanDraft(answer.text,planSnapshot,planStart);
-          setPlanDraft(result);
-          setNotice("AI 结构化建议已通过格式和范围验证；仅供参考，尚未写入正式任务或日历。");
-        }catch(e){
-          setPlanDraft(null);
-          setError(describeError(e));
-        }
+        const acceptedPlan=await window.desktop.ai.planConfirm(accepted.approvalId);
+        const result:AIPlanSuggestion[]=acceptedPlan.proposal.blocks.map(block=>{
+          const hour=String(Math.floor(block.startMinute/60)).padStart(2,"0");
+          const minute=String(block.startMinute%60).padStart(2,"0");
+          return {taskId:block.taskId,day:block.day,start:hour+":"+minute,
+            minutes:block.durationMinutes,reason:block.rationale};
+        });
+        setPlanDraft(result);
+        setNotice("项目授权已在发送前复核；AI 草稿已通过主进程时间窗、截止日期和冲突校验，尚未应用到正式日历。");
       }else{
+        const answer=await window.desktop.ai.confirm(accepted.approvalId);
         setAnswers(items=>[...items,{id:Date.now(),question:accepted.prompt,answer}].slice(-12));
         setQuestion("");
         setNotice("已收到本次单轮回答。回答未自动写入日历、任务、知识库或邮件。");
