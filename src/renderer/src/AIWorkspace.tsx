@@ -281,6 +281,7 @@ export default function AIWorkspace(){
       });
       setPlanNames(Object.fromEntries(eligible.map(t=>[t.id,t.title])));
       setPreview(next);setPreviewMode("plan");
+      void reloadProjectDetails(activeProjectId).catch(e=>setError(describeError(e)));
     }catch(e){setError(describeError(e));}
     finally{setBusy(false);}
   }
@@ -320,6 +321,8 @@ export default function AIWorkspace(){
     }catch(e){setError(describeError(e));}
     finally{
       setPreview(null);setSending(false);
+      if(previewMode==="plan"&&activeProjectId)
+        void reloadProjectDetails(activeProjectId).catch(e=>setError(describeError(e)));
       void window.desktop.ai.status().then(setStatus).catch(()=>{});
     }
   }
