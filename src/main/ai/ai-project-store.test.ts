@@ -101,7 +101,7 @@ describe("local AI project authorization registry",()=>{
     const path=join(dir,"projects.sqlite");
     try{
       const first=new AIProjectStore(path);
-      let created;
+      let created:ReturnType<AIProjectStore["createProject"]>;
       try{
         created=first.createProject({name:"Persistent",purpose:"Local only"},now);
         first.setSourceGrant({projectId:created.id,sourceType:"task",sourceId:taskId,
