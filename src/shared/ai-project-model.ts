@@ -1,7 +1,7 @@
 export type AIProjectSourceType="task";
 export type AIProjectAction=
   "planning.propose"|"task.write"|"calendar.write"|"mail.send"|"file.write"|"external.tool";
-export type AIProjectDestination="local"|"cloud-model";
+export type AIProjectDestination="local"|"configured-model";
 export type AIProjectAuditKind=
   "project.created"|"project.renamed"|"project.archived"|
   "source.grant.updated"|"source.grant.revoked"|
