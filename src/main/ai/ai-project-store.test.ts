@@ -123,7 +123,7 @@ describe("local AI project authorization registry",()=>{
     expect(()=>grant(db,{expiresAt:"2026-11-25T23:59:59.000Z"})).toThrow();
     expect(()=>grant(db,{expiresAt:"2028-01-01T00:00:00.000Z"})).toThrow();
     expect(()=>db.renameProject({id:projectId,name:"Renamed",purpose:"",extra:true},now)).toThrow();
-    for(let i=0;i<99;i++){
+    for(let i=0;i<100;i++){
       const id=String(i+1).padStart(8,"0")+"-ac41-46a1-8a4c-e9308b32b301";
       db.setSourceGrant({projectId,sourceType:"task",sourceId:id,
         canReadLocal:true,canSendRemote:false,expiresAt:null},now);
