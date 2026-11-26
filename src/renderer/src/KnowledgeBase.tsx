@@ -9,7 +9,7 @@ import KnowledgeSourceLifecycle from "./KnowledgeSourceLifecycle";
 import RecoveryCenter from "./RecoveryCenter";
 import type {
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
-  KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeEvaluationReport,
+  KnowledgeReviewCard, ReviewProgress, ReviewRating, KnowledgePassage, KnowledgeEmbeddingStatus, KnowledgeNeuralRuntimeStatus, KnowledgeEvaluationReport,
 } from "../../shared/knowledge-model";
 
 function detail(error:unknown):string{
@@ -26,6 +26,7 @@ export default function KnowledgeBase(){
   const [results,setResults]=useState<KnowledgeSearchHit[]>([]);
   const [embeddingStatus,setEmbeddingStatus]=useState<KnowledgeEmbeddingStatus|null>(null);
   const [neuralKind,setNeuralKind]=useState<"e5"|"bge">("e5");
+  const [neuralRuntime,setNeuralRuntime]=useState<KnowledgeNeuralRuntimeStatus|null>(null);
   const [evaluation,setEvaluation]=useState<KnowledgeEvaluationReport|null>(null);
   const [cards,setCards]=useState<KnowledgeReviewCard[]>([]);
   const [progress,setProgress]=useState<ReviewProgress>(emptyProgress);
@@ -181,6 +182,15 @@ export default function KnowledgeBase(){
       setNotice("离线词向量模型已校验并导入。点击「构建本机语义索引」才会处理已导入的资料。");
     });
   }
+  async function checkNeuralRuntime():Promise<void>{
+    await perform(async()=>{
+      const result=await window.desktop.knowledge.checkNeuralRuntime();
+      setNeuralRuntime(result);
+      setNotice(result.ready?"本地 Python + ONNX CPU 依赖检查通过；仍需实际模型导入与人工检索评测。":
+        "本地运行环境尚未就绪：请查看下方具体原因和安装说明。");
+    });
+  }
+
   async function importNeuralModel():Promise<void>{
     if(!window.confirm(
       "你需要自行获得并核对 E5/BGE 第三方模型的许可、来源和完整 ONNX 文件。"+
@@ -323,6 +333,8 @@ export default function KnowledgeBase(){
               <option value="bge">bge-small-zh-v1.5（中文优先，512维）</option>
             </select>
           </label>
+          <button type="button" className="secondary-button" disabled={busy}
+            onClick={()=>void checkNeuralRuntime()}>检查本机 Python / ONNX CPU 环境</button>
           <button type="button" className="secondary-button"
             disabled={busy||embeddingStatus?.running}
             onClick={()=>void importNeuralModel()}>选择本地 ONNX 文件夹并启用神经推理</button>
@@ -342,6 +354,22 @@ export default function KnowledgeBase(){
               onClick={()=>void removeOfflineModel()}>卸载本机模型与向量</button>
           </>}
         </div>
+        {neuralRuntime&&<p className="privacy-note" role="status">
+          神经运行环境：{neuralRuntime.ready?"依赖就绪":"尚不可用"} ·
+          Python {neuralRuntime.pythonVersion??"未检测到"} ·
+          {neuralRuntime.source==="managed"?"Study Anchor 独立虚拟环境":
+            neuralRuntime.source==="custom"?"用户指定 Python":"系统 Python"}。
+          {neuralRuntime.reason==="missing-packages"
+            ?"缺少或无法导入："+neuralRuntime.missing.join("、")+"。":""}
+          {neuralRuntime.reason==="missing-python"?"找不到 Python 可执行文件。":""}
+          {neuralRuntime.reason==="invalid-config"?"STUDY_ANCHOR_PYTHON_PATH 必须是存在的绝对路径。":""}
+          {neuralRuntime.reason==="unsupported-python"?"请使用 Python 3.11–3.13。":""}
+          {neuralRuntime.reason==="cpu-provider-unavailable"?"ONNX Runtime 不支持 CPUExecutionProvider。":""}
+          {neuralRuntime.reason==="runtime-unavailable"?"ONNX Runtime CPU 初始化失败。":""}
+          {neuralRuntime.reason==="timeout"?"运行环境检查超时。":""}
+          {neuralRuntime.reason==="invalid-response"?"运行环境检查返回格式异常，未启用模型。":""}
+          {!neuralRuntime.ready?" 在项目终端可主动运行 npm run setup:neural:runtime -- --online（安装第三方 Python 包，需联网），或指定经过审核的离线 wheelhouse。安装后重新检查。":""}
+        </p>}
         <p className="privacy-note">
           可选择本地 .vec 静态词向量，或通过自备 ONNX 文件夹启用真实 E5/BGE CPU 神经推理。
           E5 查询与文档分别添加 query:/passage: 前缀并使用 masked mean pooling；BGE 使用 CLS pooling，

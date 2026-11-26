@@ -32,6 +32,7 @@ import type {
 } from "../../shared/personal-sync-contract";
 
 import type {
+  KnowledgeNeuralRuntimeStatus,
   KnowledgeDocument, KnowledgeSnapshot, KnowledgeSearchHit,
   KnowledgeBatchImportResult, KnowledgeSourceAuditEntry,
   KnowledgeSourceRefreshRequest, KnowledgeSourceRefreshResult,
@@ -200,6 +201,7 @@ declare global {
         delete: (id: string) => Promise<boolean>;
         search: (query: string) => Promise<KnowledgeSearchHit[]>;
         embeddingStatus: () => Promise<KnowledgeEmbeddingStatus>;
+        checkNeuralRuntime:()=>Promise<KnowledgeNeuralRuntimeStatus>;
         importOfflineModel: (acknowledged:boolean) => Promise<KnowledgeEmbeddingStatus|null>;
         importNeuralModel: (accepted:boolean,kind:"e5"|"bge") => Promise<KnowledgeEmbeddingStatus|null>;
         startOfflineIndex: () => Promise<KnowledgeEmbeddingStatus>;

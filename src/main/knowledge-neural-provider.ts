@@ -3,6 +3,7 @@ import type {Readable,Writable} from "node:stream";
 import {createInterface} from "node:readline";
 import {join} from "node:path";
 import {app} from "electron";
+import {resolveNeuralPython,neuralSubprocessEnv} from "./knowledge-neural-runtime";
 import {parseLocalEmbeddingModel,type LocalEmbeddingModel,
   type LocalEmbeddingProvider} from "./knowledge-embeddings";
 export type NeuralKind="e5"|"bge";
@@ -27,8 +28,9 @@ export class OfflineNeuralPythonProvider implements LocalEmbeddingProvider {
   private constructor(private readonly directory:string,kind:NeuralKind,
     expected:LocalEmbeddingModel){
     this.model=parseLocalEmbeddingModel(expected);
-    const python=process.env.STUDY_ANCHOR_PYTHON_PATH?.trim()||
-      (process.platform==="win32"?"python":"python3");
+    const runtime=resolveNeuralPython();
+    if(runtime.invalid)throw Error("Invalid STUDY_ANCHOR_PYTHON_PATH: use an existing absolute Python executable");
+    const python=runtime.command;
     const script=app.isPackaged?
       join(process.resourcesPath,"neural-inference-worker.py"):
       join(process.cwd(),"scripts","neural-inference-worker.py");
@@ -36,8 +38,7 @@ export class OfflineNeuralPythonProvider implements LocalEmbeddingProvider {
       String(this.model.dimension)],{
       windowsHide:true,cwd:directory,
       stdio:["pipe","pipe","ignore"],
-      env:{...process.env,HF_HUB_OFFLINE:"1",TRANSFORMERS_OFFLINE:"1",
-        HF_HUB_DISABLE_TELEMETRY:"1",TOKENIZERS_PARALLELISM:"false",NO_PROXY:"*"},
+      env:neuralSubprocessEnv(),
     });
     const lines=createInterface({input:this.process.stdout,crlfDelay:Infinity});
     lines.on("line",(line)=>{

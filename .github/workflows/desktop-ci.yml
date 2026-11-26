@@ -47,7 +47,14 @@ jobs:
           python-version: "3.11"
 
       - name: Validate offline Python neural worker syntax
-        run: python -m py_compile scripts/neural-inference-worker.py
+        run: python -m py_compile scripts/neural-inference-worker.py scripts/neural-runtime-doctor.py
+
+      - name: Execute read-only Python CPU doctor (missing wheels are expected)
+        run: python -I scripts/neural-runtime-doctor.py
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+          HF_HUB_DISABLE_TELEMETRY: "1"
 
       - name: Run unit tests
         run: npm test

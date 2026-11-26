@@ -105,7 +105,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "knowledge:delete",
       "knowledge:embedding-status",
       "knowledge:embedding-import",
-      "knowledge:embedding-import-neural","knowledge:embedding-start",
+      "knowledge:embedding-import-neural","knowledge:neural-runtime-check","knowledge:embedding-start",
       "knowledge:embedding-cancel","knowledge:embedding-remove",
       "knowledge:embedding-evaluate",
       "knowledge:embedding-evidence-catalog",
@@ -195,7 +195,7 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
 
   it("keeps knowledge and backup operations narrowly allowlisted", () => {
     const channels=Object.values(IPC_CHANNELS);
-    expect(channels.filter(name=>name.startsWith("knowledge:"))).toHaveLength(33);
+    expect(channels.filter(name=>name.startsWith("knowledge:"))).toHaveLength(34);
     expect(channels.filter(name=>name.startsWith("backup:"))).toEqual([
       "backup:create","backup:inspect","backup:restore","backup:cancel",
     ]);

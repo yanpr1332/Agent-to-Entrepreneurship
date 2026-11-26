@@ -103,9 +103,16 @@ function validateConfig(dir:string,kind:NeuralKind):void{
 }
 function assetList(source:string):Array<{name:string;from:string}>{
   safeDir(source);
-  const graph=existsSync(join(source,"model.onnx"))?
-    join(source,"model.onnx"):join(source,"onnx","model_quantized.onnx");
-  if(graph!==join(source,"model.onnx"))safeDir(join(source,"onnx"));
+  // Official E5 ONNX exports can live at onnx/model.onnx; previously
+  // those were silently treated as missing and could not be installed.
+  // No glob, arbitrary filenames, model code or symlinked directories.
+  const candidates=[
+    join(source,"model.onnx"),
+    join(source,"onnx","model.onnx"),
+    join(source,"onnx","model_quantized.onnx"),
+  ];
+  const graph=candidates.find(path=>existsSync(path))??candidates[0];
+  if(graph!==candidates[0])safeDir(join(source,"onnx"));
   const selected=[{name:"model.onnx",from:graph}];
   for(const name of ["config.json","tokenizer.json","vocab.txt",
     "tokenizer_config.json","special_tokens_map.json"]){

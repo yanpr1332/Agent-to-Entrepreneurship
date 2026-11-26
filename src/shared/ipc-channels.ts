@@ -20,6 +20,7 @@ export const IPC_CHANNELS = {
   knowledgeEmbeddingStatus: "knowledge:embedding-status",
   knowledgeImportOfflineModel: "knowledge:embedding-import",
   knowledgeImportNeuralModel: "knowledge:embedding-import-neural",
+  knowledgeNeuralRuntimeCheck: "knowledge:neural-runtime-check",
   knowledgeStartOfflineIndex: "knowledge:embedding-start",
   knowledgeCancelOfflineIndex: "knowledge:embedding-cancel",
   knowledgeRemoveOfflineModel: "knowledge:embedding-remove",

@@ -45,13 +45,25 @@ try:
     tokenizer = AutoTokenizer.from_pretrained(
         model_dir, use_fast=True, local_files_only=True, trust_remote_code=False
     )
+    options = ort.SessionOptions()
+    # Predictable CPU footprint on student laptops; never choose a GPU or
+    # auto-enable unbounded per-core native thread pools.
+    options.intra_op_num_threads = min(4, max(1, os.cpu_count() or 1))
+    options.inter_op_num_threads = 1
     session = ort.InferenceSession(
         os.path.join(model_dir, "model.onnx"),
-        providers=["CPUExecutionProvider"]
+        sess_options=options, providers=["CPUExecutionProvider"]
     )
     names = {item.name for item in session.get_inputs()}
-    if not {"input_ids", "attention_mask"}.issubset(names):
-        raise ValueError("Required model inputs missing")
+    # Unknown ONNX inputs must NOT be filled with a zero tensor. Some graph
+    # exports require position_ids with increasing positions, and silently
+    # providing zeros would make genuinely wrong neural embeddings.
+    allowed_inputs = {"input_ids", "attention_mask", "token_type_ids"}
+    if not {"input_ids", "attention_mask"}.issubset(names) or not names.issubset(allowed_inputs):
+        raise ValueError("Unsupported model inputs")
+    for item in session.get_inputs():
+        if item.type != "tensor(int64)":
+            raise ValueError("Unsupported tokenizer input dtype")
     if session.get_providers() != ["CPUExecutionProvider"]:
         raise ValueError("CPU runtime was not selected")
     # Validate graph output shape with a local synthetic test string.
@@ -61,7 +73,7 @@ try:
               np.zeros_like(tokens["input_ids"])), dtype=np.int64)
               for key in names}
     output = session.run(None, inputs)[0]
-    if output.ndim != 3 or output.shape[-1] != dim:
+    if output.ndim != 3 or output.shape[0] != 1 or output.shape[-1] != dim:
         raise ValueError("Wrong last-hidden-state dimension")
 except Exception:
     send({"ready": False, "error": "The local ONNX graph/tokenizer failed CPU preflight"})
@@ -96,7 +108,9 @@ for line in sys.stdin:
                  np.zeros_like(tokens["input_ids"])), dtype=np.int64)
                  for key in names}
         hidden = session.run(None, feeds)[0]
-        if hidden.ndim != 3 or hidden.shape[2] != dim:
+        if (hidden.ndim != 3 or hidden.shape[0] != len(texts)
+                or hidden.shape[1] != tokens["attention_mask"].shape[1]
+                or hidden.shape[2] != dim):
             raise ValueError("Unexpected ONNX model output shape")
         if kind == "e5":
             mask = tokens["attention_mask"][..., None]
