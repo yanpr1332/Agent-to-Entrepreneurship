@@ -1,0 +1,7 @@
+# Optional Python CPU neural embedding runtime for Study Anchor.
+# Selected for reproducible *direct* dependencies, not a full wheel hash lock.
+# Only installed after the user explicitly runs the setup command.
+# Audit each distribution and its transitive packages before production use.
+numpy==2.2.6
+onnxruntime==1.22.1
+transformers==4.53.3
