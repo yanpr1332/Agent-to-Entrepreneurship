@@ -6,7 +6,7 @@ import type {LocalTask} from "../../shared/local-model";
 const id1="dc926d48-ac41-46a1-8a4c-e9308b32b301",id2="ec926d48-ac41-46a1-8a4c-e9308b32b302";
 const approvalId="a42e9abc-42e9-4a2e-8b7c-a42e9a42e9a4";
 const task=(id:string,title:string):LocalTask=>({
-  id,title,description:"SECRET PERSONAL NOTES",dueDate:"2026-11-12",
+  id,title,description:"SECRET PERSONAL NOTES",dueDate:"2026-12-12",
   priority:"high",completed:false,visible:true,hiddenAt:null,retentionExpiresAt:null,
   createdAt:"2026-11-10T00:00:00Z",updatedAt:"2026-11-10T00:00:00Z",source:null,
 });
