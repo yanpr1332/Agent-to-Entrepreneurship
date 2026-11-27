@@ -35,7 +35,7 @@ describe("local AI project authorization registry",()=>{
     expect(()=>db.createProject({name:"",purpose:""},now)).toThrow();
     expect(()=>db.createProject({name:"x",purpose:"",apiKey:"secret"},now)).toThrow();
   });
-  it("requires local-read and remote-inference grants separately for cloud context",()=>{
+  it("requires local-read and configured model endpoint grants separately",()=>{
     const db=store();create(db);
     grant(db,{canReadLocal:true,canSendRemote:false});
     expect(()=>db.authorizeSources(projectId,"task",[taskId],"local",now)).not.toThrow();
@@ -46,6 +46,8 @@ describe("local AI project authorization registry",()=>{
     const results=db.auditEvents(projectId).filter(x=>x.kind==="source.access").map(x=>x.result);
     expect(results).toContain("allowed");
     expect(results).toContain("denied");
+    expect(db.auditEvents(projectId,1)).toHaveLength(1);
+    expect(()=>db.auditEvents(projectId,101)).toThrow("Invalid AI project audit limit");
   });
   it("denies implicit, expired and revoked grants, and permits explicit re-authorization",()=>{
     const db=store();create(db);
