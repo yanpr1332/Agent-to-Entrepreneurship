@@ -22,6 +22,7 @@ export class AIService {
   private configurationWarning:AIStatus["configurationWarning"]=null;
   private intent:PendingIntent|null=null;
   private inflight:AbortController|null=null;
+  private inflightScope:AIApprovalScope|null=null;
   private generation=0;
   constructor(
     private readonly vault:AIKeyVault,
@@ -98,11 +99,23 @@ export class AIService {
     };
   }
 
+  cancelScope(scope:AIApprovalScope):void{
+    if(this.intent?.scope===scope)this.intent=null;
+    if(this.inflight&&this.inflightScope===scope){
+      this.generation++;
+      this.inflight.abort();
+      this.inflight=null;
+      this.inflightScope=null;
+    }
+  }
+
+  /** Credential changes intentionally invalidate every approval domain. */
   cancel():void{
     this.generation++;
     this.intent=null;
     this.inflight?.abort();
     this.inflight=null;
+    this.inflightScope=null;
   }
 
   async connect(input:unknown):Promise<AIStatus>{
@@ -163,6 +176,7 @@ export class AIService {
       throw Error("AI preview expired or was replaced. Review the request again");
     const controller=new AbortController();
     this.inflight=controller;
+    this.inflightScope=expectedScope;
     const generation=this.generation;
     try{
       const current=await this.resolveActiveKey();
@@ -183,7 +197,7 @@ export class AIService {
       this.ledger.recordTokens(now,result.usage.inputTokens,result.usage.outputTokens);
       return result;
     }finally{
-      if(this.inflight===controller)this.inflight=null;
+      if(this.inflight===controller){this.inflight=null;this.inflightScope=null;}
     }
   }
 }
