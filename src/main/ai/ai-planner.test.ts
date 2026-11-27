@@ -96,6 +96,24 @@ describe("AI project scoped planning with authoritative validation",()=>{
     await expect(f.coordinator.confirm(approvalId)).rejects.toThrow("configured model endpoint transmission");
     expect(f.planning.listCommitted()).toHaveLength(0);
   });
+  it("does not persist a local draft when project permission is revoked during the provider request",async()=>{
+    const f=setup();
+    f.coordinator.prepare({projectId:f.project.id,taskIds:[id1],settings});
+    const propose=vi.spyOn(f.planning,"proposeFromAI");
+    f.confirm.mockImplementationOnce(async(_id,_now,authorize)=>{
+      authorize?.(); // The permission check immediately before network I/O passes.
+      f.projects.revokeSourceGrant({projectId:f.project.id,sourceType:"task",sourceId:id1},baseTime);
+      return {
+        text:JSON.stringify({slots:[{taskId:id1,day:"2026-11-27",startMinute:1080}]}),
+        model:"gpt-4.1-mini",usage:{inputTokens:180,outputTokens:45},
+        createdAt:baseTime.toISOString(),
+      };
+    });
+    await expect(f.coordinator.confirm(approvalId))
+      .rejects.toThrow("already been sent");
+    expect(propose).not.toHaveBeenCalled();
+    expect(f.planning.listCommitted()).toHaveLength(0);
+  });
   it("rejects Canvas-sourced tasks even if a stale or forged project grant exists",()=>{
     const f=setup();
     f.setTasks([{...task(id1,"Canvas assignment"),source:{
