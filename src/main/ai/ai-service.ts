@@ -149,13 +149,18 @@ export class AIService {
     const id=parseAIApprovalId(idInput);
     if(this.inflight)throw Error("An AI request is already in progress");
     const intent=this.intent;
-    // The generic chat IPC cannot confirm a mail or project-scoped preview,
-    // and neither coordinator can consume another domain's approval token.
-    if(!intent || intent.id!==id || intent.scope!==expectedScope ||
-       intent.expires<now.getTime() || intent.generation!==this.generation || !this.active){
-      throw Error("AI preview scope mismatch, expired or replaced. Review the request again");
+    // A wrong/old approval ID invalidates the currently displayed one-time
+    // preview. A matching ID from another domain is different: reject it
+    // without consuming the rightful mail/project coordinator's token.
+    if(!intent || intent.id!==id){
+      this.intent=null;
+      throw Error("AI preview expired or was replaced. Review the request again");
     }
-    this.intent=null; // One-time only after the expected domain has matched.
+    if(intent.scope!==expectedScope)
+      throw Error("AI preview scope mismatch. Use the matching approval flow");
+    this.intent=null; // Consume a correctly scoped one-time approval before I/O.
+    if(intent.expires<now.getTime() || intent.generation!==this.generation || !this.active)
+      throw Error("AI preview expired or was replaced. Review the request again");
     const controller=new AbortController();
     this.inflight=controller;
     const generation=this.generation;
