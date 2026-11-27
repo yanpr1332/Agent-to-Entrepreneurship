@@ -110,7 +110,7 @@ describe("AI project scoped planning with authoritative validation",()=>{
       };
     });
     await expect(f.coordinator.confirm(approvalId))
-      .rejects.toThrow("already been sent");
+      .rejects.toThrow("already sent");
     expect(propose).not.toHaveBeenCalled();
     expect(f.planning.listCommitted()).toHaveLength(0);
   });
