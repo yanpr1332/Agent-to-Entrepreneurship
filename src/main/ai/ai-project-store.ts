@@ -90,7 +90,7 @@ export class AIProjectStore{
     catch(error){this.db.exec("ROLLBACK");throw error;}
   }
   private requireProject(id:string,allowArchived=false):ProjectRow{
-    const row=this.db.prepare("SELECT * FROM ai_projects WHERE id=?").get(id) as ProjectRow|undefined;
+    const row=this.db.prepare("SELECT * FROM ai_projects WHERE id=?").get(id) as unknown as ProjectRow|undefined;
     if(!row||(!allowArchived&&row.archived_at!==null))
       throw Error("AI project is unavailable or archived");
     return row;
@@ -122,7 +122,7 @@ export class AIProjectStore{
   }
   listProjects():AIProject[]{
     return (this.db.prepare("SELECT * FROM ai_projects ORDER BY archived_at IS NOT NULL,updated_at DESC")
-      .all() as ProjectRow[]).map(project);
+      .all() as unknown as ProjectRow[]).map(project);
   }
   getProject(rawId:unknown):AIProject|null{
     const id=parseAIProjectId(rawId);
@@ -157,7 +157,7 @@ export class AIProjectStore{
   listSourceGrants(rawProjectId:unknown):AIProjectSourceGrant[]{
     const id=parseAIProjectId(rawProjectId);this.requireProject(id,true);
     return (this.db.prepare("SELECT * FROM ai_project_source_grants "+
-      "WHERE project_id=? ORDER BY source_type,source_id").all(id) as SourceRow[]).map(sourceGrant);
+      "WHERE project_id=? ORDER BY source_type,source_id").all(id) as unknown as SourceRow[]).map(sourceGrant);
   }
   setSourceGrant(input:unknown,now=new Date()):AIProjectSourceGrant{
     const value=parseAIProjectSourceGrant(input),stamp=utc(now);validateExpiry(value.expiresAt,now);
@@ -165,7 +165,7 @@ export class AIProjectStore{
       this.requireProject(value.projectId);
       const prior=this.db.prepare("SELECT * FROM ai_project_source_grants "+
         "WHERE project_id=? AND source_type=? AND source_id=?")
-        .get(value.projectId,value.sourceType,value.sourceId) as SourceRow|undefined;
+        .get(value.projectId,value.sourceType,value.sourceId) as unknown as SourceRow|undefined;
       if(!prior){
         const count=Number((this.db.prepare("SELECT COUNT(*) AS n "+
           "FROM ai_project_source_grants WHERE project_id=?").get(value.projectId) as {n:number}).n);
@@ -184,7 +184,7 @@ export class AIProjectStore{
         {sourceType:value.sourceType,sourceId:value.sourceId});
       return sourceGrant(this.db.prepare("SELECT * FROM ai_project_source_grants "+
         "WHERE project_id=? AND source_type=? AND source_id=?")
-        .get(value.projectId,value.sourceType,value.sourceId) as SourceRow);
+        .get(value.projectId,value.sourceType,value.sourceId) as unknown as SourceRow);
     });
   }
   revokeSourceGrant(input:unknown,now=new Date()):{revoked:boolean}{
@@ -206,7 +206,7 @@ export class AIProjectStore{
   listActionGrants(rawProjectId:unknown,now=new Date()):AIProjectActionGrant[]{
     const id=parseAIProjectId(rawProjectId),owner=this.requireProject(id,true);
     const rows=this.db.prepare("SELECT * FROM ai_project_action_grants WHERE project_id=?")
-      .all(id) as ActionRow[];
+      .all(id) as unknown as ActionRow[];
     const byAction=new Map(rows.map(row=>[row.action,row]));
     return AI_PROJECT_ACTIONS.map(action=>{
       const row=byAction.get(action);
