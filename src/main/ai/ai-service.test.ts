@@ -8,7 +8,11 @@ import { AIService } from "./ai-service";
 import type { EncryptionProvider } from "../connectors/canvas-credentials";
 import { AI_DAILY_REQUEST_CAP,AI_DEFAULT_MODEL } from "../../shared/ai-model";
 const dirs:string[]=[];
-afterEach(()=>{dirs.splice(0).forEach(d=>rmSync(d,{recursive:true,force:true}));});
+const ledgers:AIUsageLedger[]=[];
+afterEach(()=>{
+  for(const ledger of ledgers.splice(0)){try{ledger.close();}catch{/* already closed by the test */}}
+  dirs.splice(0).forEach(d=>rmSync(d,{recursive:true,force:true,maxRetries:5,retryDelay:50}));
+});
 const key="sk-"+"c".repeat(40);
 const otherKey="sk-"+"d".repeat(40);
 const cfg={apiKey:key,model:"gpt-4.1-mini"};
@@ -20,7 +24,7 @@ function fixture(environmentKey:()=>string|undefined=()=>undefined){
     decryptStringAsync:async data=>({result:Buffer.from(data).reverse().toString(),shouldReEncrypt:false}),
   };
   const vault=new AIKeyVault(join(dir,"key.enc"),crypt);
-  const ledger=new AIUsageLedger(join(dir,"usage.sqlite"));
+  const ledger=new AIUsageLedger(join(dir,"usage.sqlite"));ledgers.push(ledger);
   const ask=vi.fn(async(_config:typeof cfg,_prompt:string,_signal?:AbortSignal)=>({
     text:"A proof-based answer.",model:_config.model,createdAt:"2026-11-10T00:00:00Z",
     usage:{inputTokens:20,outputTokens:50},
@@ -56,6 +60,46 @@ describe("paid AI requires explicit one-time approval",()=>{
       .rejects.toThrow("scope mismatch");
     await service.confirm(mail.approvalId,new Date(),undefined,"mail");
     expect(ask).toHaveBeenCalledTimes(2);
+    expect(ledger.today().used).toBe(2);
+    ledger.close();
+  });
+  it("scoped cancellation only invalidates a pending approval from its own domain",async()=>{
+    const {service,ledger,ask}=fixture();
+    await service.connect(cfg);
+    const project=service.prepare("Project plan",new Date(),"project-plan");
+    service.cancelScope("chat");
+    await service.confirm(project.approvalId,new Date(),undefined,"project-plan");
+    const mail=service.prepare("Mail review",new Date(),"mail");
+    service.cancelScope("project-plan");
+    await service.confirm(mail.approvalId,new Date(),undefined,"mail");
+    const chat=service.prepare("Chat question");
+    service.cancelScope("chat");
+    await expect(service.confirm(chat.approvalId)).rejects.toThrow("expired");
+    expect(ask).toHaveBeenCalledTimes(2);
+    ledger.close();
+  });
+  it("only aborts an in-flight request when its own approval domain is canceled",async()=>{
+    const {service,ledger,ask}=fixture();
+    await service.connect(cfg);
+    type Answer=Awaited<ReturnType<typeof ask>>;
+    const answer:Answer={text:"A proof-based answer.",model:cfg.model,
+      createdAt:"2026-11-10T00:00:00Z",usage:{inputTokens:20,outputTokens:50}};
+    let resolveAllowed:(value:Answer)=>void=()=>{};
+    ask.mockImplementationOnce(()=>new Promise<Answer>(resolve=>{resolveAllowed=resolve;}));
+    const project=service.prepare("Project plan",new Date(),"project-plan");
+    const allowed=service.confirm(project.approvalId,new Date(),undefined,"project-plan");
+    await vi.waitFor(()=>expect(resolveAllowed).toBeTypeOf("function"));
+    service.cancelScope("chat");
+    resolveAllowed(answer);
+    await expect(allowed).resolves.toMatchObject({text:"A proof-based answer."});
+    let resolveCanceled:(value:Answer)=>void=()=>{};
+    ask.mockImplementationOnce(()=>new Promise<Answer>(resolve=>{resolveCanceled=resolve;}));
+    const mail=service.prepare("Mail review",new Date(),"mail");
+    const canceled=service.confirm(mail.approvalId,new Date(),undefined,"mail");
+    await vi.waitFor(()=>expect(resolveCanceled).toBeTypeOf("function"));
+    service.cancelScope("mail");
+    resolveCanceled(answer);
+    await expect(canceled).rejects.toThrow("canceled");
     expect(ledger.today().used).toBe(2);
     ledger.close();
   });
