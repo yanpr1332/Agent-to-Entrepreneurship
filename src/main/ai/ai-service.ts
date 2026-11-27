@@ -103,9 +103,9 @@ export class AIService {
     if(this.intent?.scope===scope)this.intent=null;
     if(this.inflight&&this.inflightScope===scope){
       this.generation++;
+      // Keep the slot occupied until confirm() settles; otherwise a provider
+      // that ignores AbortSignal could overlap a second paid request.
       this.inflight.abort();
-      this.inflight=null;
-      this.inflightScope=null;
     }
   }
 
@@ -113,9 +113,8 @@ export class AIService {
   cancel():void{
     this.generation++;
     this.intent=null;
+    // confirm() releases the in-flight slot in finally after the provider settles.
     this.inflight?.abort();
-    this.inflight=null;
-    this.inflightScope=null;
   }
 
   async connect(input:unknown):Promise<AIStatus>{
