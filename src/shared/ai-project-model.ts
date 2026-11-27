@@ -54,7 +54,7 @@ function uuid(value:unknown,label:string):string{
   return value.toLowerCase();
 }
 function text(value:unknown,label:string,max:number,required:boolean):string{
-  if(typeof value!=="string"||value.length>max||/[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1f\\x7f]/.test(value))
+  if(typeof value!=="string"||value.length>max||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value))
     throw Error("Invalid "+label);
   const normalized=value.trim();
   if(required&&!normalized)throw Error("Invalid "+label);
