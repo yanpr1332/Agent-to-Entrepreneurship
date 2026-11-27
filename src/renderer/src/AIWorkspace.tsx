@@ -329,8 +329,11 @@ export default function AIWorkspace(){
 
   async function cancelRequest():Promise<void>{
     try{
-      setStatus(await window.desktop.ai.cancel());
-      setPreview(null);setNotice("已尝试中止请求。服务商可能仍已处理或计费，请在平台核对用量；不会自动重试。");
+      if(previewMode==="plan"){
+        await window.desktop.ai.planCancel();
+        setStatus(await window.desktop.ai.status());
+      }else setStatus(await window.desktop.ai.cancel());
+      setPreview(null);setNotice("已尝试中止当前 AI 请求。服务商可能仍已处理或计费，请在平台核对用量；不会自动重试。");
     }catch(e){setError(describeError(e));}
   }
 
