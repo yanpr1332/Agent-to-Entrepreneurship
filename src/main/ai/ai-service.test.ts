@@ -84,22 +84,22 @@ describe("paid AI requires explicit one-time approval",()=>{
     type Answer=Awaited<ReturnType<typeof ask>>;
     const answer:Answer={text:"A proof-based answer.",model:cfg.model,
       createdAt:"2026-11-10T00:00:00Z",usage:{inputTokens:20,outputTokens:50}};
-    let resolveAllowed:(value:Answer)=>void=()=>{};
+    let resolveAllowed:((value:Answer)=>void)|null=null;
     ask.mockImplementationOnce(()=>new Promise<Answer>(resolve=>{resolveAllowed=resolve;}));
     const project=service.prepare("Project plan",new Date(),"project-plan");
     const allowed=service.confirm(project.approvalId,new Date(),undefined,"project-plan");
-    await vi.waitFor(()=>expect(resolveAllowed).toBeTypeOf("function"));
+    await vi.waitFor(()=>expect(resolveAllowed).not.toBeNull());
     service.cancelScope("chat");
-    resolveAllowed(answer);
+    resolveAllowed!(answer);
     await expect(allowed).resolves.toMatchObject({text:"A proof-based answer."});
-    let resolveCanceled:(value:Answer)=>void=()=>{};
+    let resolveCanceled:((value:Answer)=>void)|null=null;
     ask.mockImplementationOnce(()=>new Promise<Answer>(resolve=>{resolveCanceled=resolve;}));
     const mail=service.prepare("Mail review",new Date(),"mail");
     const canceled=service.confirm(mail.approvalId,new Date(),undefined,"mail");
-    await vi.waitFor(()=>expect(resolveCanceled).toBeTypeOf("function"));
+    await vi.waitFor(()=>expect(resolveCanceled).not.toBeNull());
     service.cancelScope("mail");
     expect(()=>service.prepare("Do not overlap")).toThrow("already in progress");
-    resolveCanceled(answer);
+    resolveCanceled!(answer);
     await expect(canceled).rejects.toThrow("canceled");
     expect(()=>service.prepare("After cancellation settles")).not.toThrow();
     expect(ledger.today().used).toBe(2);
