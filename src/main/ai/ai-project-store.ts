@@ -281,7 +281,7 @@ export class AIProjectStore{
     const id=parseAIProjectId(rawProjectId);this.requireProject(id,true);
     if(!Number.isSafeInteger(limit)||limit<1||limit>100)throw Error("Invalid AI project audit limit");
     const rows=this.db.prepare("SELECT * FROM ai_project_audit "+
-      "WHERE project_id=? ORDER BY occurred_at DESC,id DESC LIMIT ?").all(id) as
+      "WHERE project_id=? ORDER BY occurred_at DESC,id DESC LIMIT ?").all(id,limit) as
       {id:string;project_id:string;kind:AIProjectAuditKind;source_type:AIProjectSourceType|null;
        source_id:string|null;action:AIProjectAction|null;destination:AIProjectDestination|null;
        result:"recorded"|"allowed"|"denied";occurred_at:string}[];
