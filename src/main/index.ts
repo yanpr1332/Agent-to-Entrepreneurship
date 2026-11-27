@@ -475,6 +475,8 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.aiConnect,(event,input:unknown)=>{
     requireTrustedSender(event);
+    mailAIService?.cancel();
+    aiPlanning?.cancel();
     return assistant().connect(input);
   });
   handle(IPC_CHANNELS.aiDisconnect,event=>{
