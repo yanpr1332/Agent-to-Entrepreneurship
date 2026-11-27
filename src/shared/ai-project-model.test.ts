@@ -29,7 +29,7 @@ describe("strict AI project IPC contracts",()=>{
     expect(parseAIProjectSourceGrant(valid).expiresAt).toBe(valid.expiresAt);
     expect(()=>parseAIProjectSourceGrant({...valid,expiresAt:"2026-11-27"})).toThrow();
     expect(parseAIProjectSourceRevoke({projectId:project,sourceType:"task",sourceId:task}))
-      .toMatchObject({projectId,sourceId:task});
+      .toMatchObject({projectId:project,sourceId:task});
     expect(()=>parseAIProjectSourceRevoke({projectId:project,sourceType:"task",sourceId:task,all:true})).toThrow();
     expect(parseAIProjectActionGrant({projectId:project,action:"planning.propose",
       enabled:true,expiresAt:null})).toMatchObject({action:"planning.propose",enabled:true});
