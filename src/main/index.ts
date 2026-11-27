@@ -52,6 +52,8 @@ import { AIKeyVault } from "./ai/ai-vault";
 import { AIUsageLedger } from "./ai/ai-usage";
 import { AIService } from "./ai/ai-service";
 import { AIPlanningCoordinator } from "./ai/ai-planner";
+import {AIProjectStore} from "./ai/ai-project-store";
+import {parseAIProjectSourceGrant} from "../shared/ai-project-model";
 import { MailAIReviewCoordinator } from "./ai/mail-ai-coordinator";
 
 /**
@@ -129,6 +131,11 @@ let aiPlanning: AIPlanningCoordinator | null = null;
 function aiPlanner():AIPlanningCoordinator{
   if(!aiPlanning)throw new Error("AI planning is not initialized");
   return aiPlanning;
+}
+let aiProjectStore:AIProjectStore|null=null;
+function aiProjects():AIProjectStore{
+  if(!aiProjectStore)throw Error("AI project permission storage is unavailable");
+  return aiProjectStore;
 }
 let aiLedger: AIUsageLedger | null = null;
 function assistant():AIService {
@@ -412,17 +419,70 @@ function registerIpcHandlers(): void {
     requireTrustedSender(event);
     return aiPlanner().confirm(approvalId);
   });
+  handle(IPC_CHANNELS.aiPlanCancel,event=>{
+    requireTrustedSender(event);
+    aiPlanner().cancel();
+    assistant().cancelScope("project-plan");
+    return {cancelled:true as const};
+  });
+  handle(IPC_CHANNELS.aiProjectsList,event=>{
+    requireTrustedSender(event);
+    return aiProjects().listProjects();
+  });
+  handle(IPC_CHANNELS.aiProjectCreate,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return aiProjects().createProject(input);
+  });
+  handle(IPC_CHANNELS.aiProjectRename,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return aiProjects().renameProject(input);
+  });
+  handle(IPC_CHANNELS.aiProjectArchive,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return aiProjects().archiveProject(id);
+  });
+  handle(IPC_CHANNELS.aiProjectSourceGrants,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return aiProjects().listSourceGrants(id);
+  });
+  handle(IPC_CHANNELS.aiProjectSetSourceGrant,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    const grant=parseAIProjectSourceGrant(input);
+    const source=localStore().listTasks().find(task=>
+      task.id===grant.sourceId&&task.visible&&!task.completed&&task.source===null);
+    if(!source)throw Error("Only visible, incomplete personal tasks without an external source can be granted to an AI project");
+    return aiProjects().setSourceGrant(grant);
+  });
+  handle(IPC_CHANNELS.aiProjectRevokeSourceGrant,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return aiProjects().revokeSourceGrant(input);
+  });
+  handle(IPC_CHANNELS.aiProjectActionGrants,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return aiProjects().listActionGrants(id);
+  });
+  handle(IPC_CHANNELS.aiProjectSetActionGrant,(event,input:unknown)=>{
+    requireTrustedSender(event);
+    return aiProjects().setActionGrant(input);
+  });
+  handle(IPC_CHANNELS.aiProjectAudit,(event,id:unknown)=>{
+    requireTrustedSender(event);
+    return aiProjects().auditEvents(id);
+  });
   handle(IPC_CHANNELS.aiStatus,event=>{
     requireTrustedSender(event);
     return assistant().status();
   });
   handle(IPC_CHANNELS.aiConnect,(event,input:unknown)=>{
     requireTrustedSender(event);
+    mailAIService?.cancel();
+    aiPlanning?.cancel();
     return assistant().connect(input);
   });
   handle(IPC_CHANNELS.aiDisconnect,event=>{
     requireTrustedSender(event);
     mailAIService?.cancel();
+    aiPlanning?.cancel();
     return assistant().disconnect();
   });
   handle(IPC_CHANNELS.aiPrepare,(event,prompt:unknown)=>{
@@ -435,7 +495,7 @@ function registerIpcHandlers(): void {
   });
   handle(IPC_CHANNELS.aiCancel,event=>{
     requireTrustedSender(event);
-    assistant().cancel();
+    assistant().cancelScope("chat");
     return assistant().status();
   });
   handle(IPC_CHANNELS.knowledgeGraph, event=>{
@@ -823,7 +883,7 @@ function registerIpcHandlers(): void {
   handle(IPC_CHANNELS.mailAICancel,event=>{
     requireTrustedSender(event);
     mailAIService?.cancel();
-    assistant().cancel();
+    assistant().cancelScope("mail");
     return {canceled:true as const};
   });
   handle(IPC_CHANNELS.mailCandidates, async (event) => {
@@ -1344,9 +1404,16 @@ app.whenReady().then(async () => {
     );
     // An inaccessible old key does not block offline tasks or knowledge.
     await aiService.initialize().catch(()=>report("AI_INIT_DEGRADED","ai"));
-    aiPlanning = new AIPlanningCoordinator(
-      aiService,planningStore,()=>localStore().listTasks(),
-    );
+    try{
+      aiProjectStore=new AIProjectStore(join(app.getPath("userData"),"study-anchor-ai-projects.sqlite"));
+      aiPlanning = new AIPlanningCoordinator(
+        aiService,planningStore,()=>localStore().listTasks(),aiProjectStore,
+      );
+    }catch{
+      aiProjectStore=null;aiPlanning=null;
+      // A broken optional project registry must not block offline modules.
+      report("STORAGE_OPEN_FAILED","storage");
+    }
     canvasVault = new CanvasCredentialVault(join(app.getPath("userData"), "study-anchor-canvas.enc"), safeStorage);
     mailStore = new CampusMailStore(join(app.getPath("userData"), "study-anchor-mail.sqlite"));
     const mailVault = new CampusMailVault(join(app.getPath("userData"), "study-anchor-campus-mail.enc"), safeStorage);
@@ -1428,8 +1495,10 @@ app.on("before-quit", (event) => {
   canvasSync?.stop();
   canvasSync = null;
   // Sync promises may be finishing; the coordinator aborts before further writes.
-  aiPlanning = null;
+  aiPlanning?.cancel();
   aiService?.cancel();
+  aiPlanning = null;
+  aiProjectStore?.close();aiProjectStore=null;
   aiService = null;
   aiLedger?.close();
   aiLedger = null;

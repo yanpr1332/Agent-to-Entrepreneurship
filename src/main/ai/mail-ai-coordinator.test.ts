@@ -53,8 +53,10 @@ describe("Alpha 01 mail AI user consent and source-safe task creation",()=>{
     expect(preview.prompt).not.toContain(second.subject);
     expect(preview.prompt).not.toContain("secret mail body");
     expect(f.confirm).not.toHaveBeenCalled();
+    expect(f.prepare).toHaveBeenCalledWith(expect.any(String),expect.any(Date),"mail");
     expect(f.store.listTasks()).toHaveLength(0);
     const result=await f.coordinator.confirm(id);
+    expect(f.confirm).toHaveBeenCalledWith(id,expect.any(Date),undefined,"mail");
     expect(f.confirm).toHaveBeenCalledTimes(1);
     expect(result.items).toMatchObject([{
       uidValidity:5,uid:13,kind:"coursework",dueDate:"2026-12-05",

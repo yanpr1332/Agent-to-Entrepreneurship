@@ -103,7 +103,7 @@ export class MailAIReviewCoordinator {
       "只根据用户本次主动选择的邮件头及明确授权提供的纯文本正文（若有）:",
       JSON.stringify(disclosed),
     ].join("\n");
-    const preview=this.ai.prepare(prompt);
+    const preview=this.ai.prepare(prompt,new Date(this.clock()),"mail");
     this.pending={approvalId:preview.approvalId,records:selected,evidence};
     return preview;
   }
@@ -115,7 +115,7 @@ export class MailAIReviewCoordinator {
       throw Error("Mail AI approval expired or was replaced");
     // Fail before spending the user's API quota if their inbox changed.
     await this.assertCurrent(pending.records);
-    const answer:AIAnswer=await this.ai.confirm(id);
+    const answer:AIAnswer=await this.ai.confirm(id,new Date(this.clock()),undefined,"mail");
     const classified=parseMailAIAnswer(answer.text,pending.evidence);
     // Reject a stale mailbox after network latency, before offering a draft.
     await this.assertCurrent(pending.records);

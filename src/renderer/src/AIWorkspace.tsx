@@ -5,13 +5,20 @@ import {
   type AIAnswer, type AIPreview, type AIStatus,
 } from "../../shared/ai-model";
 import type { LocalTask } from "../../shared/local-model";
-import { eligibleAIPlanTasks, buildAIPlanPrompt, parseAIPlanDraft, type AIPlanSuggestion } from "../../shared/ai-planning";
+import {eligibleAIPlanTasks,type AIPlanSuggestion} from "../../shared/ai-planning";
+import type {AIProject,AIProjectSourceGrant,AIProjectActionGrant,AIProjectAuditEvent} from "../../shared/ai-project-model";
 
 const empty:AIStatus={
   connected:false,running:false,provider:null,model:null,keySource:null,configurationWarning:null,usedToday:0,
   remainingToday:12,dailyRequestLimit:12,maxOutputTokens:512,lastRequestAt:null,
 };
 type Entry={id:number;question:string;answer:AIAnswer};
+const projectAuditNames:Record<AIProjectAuditEvent["kind"],string>={
+  "project.created":"创建项目","project.renamed":"修改项目资料","project.archived":"归档项目",
+  "source.grant.updated":"更新资料授权","source.grant.revoked":"撤销资料授权",
+  "action.grant.updated":"更新动作授权","source.access":"来源授权检查",
+  "action.access":"动作授权检查",
+};
 
 function describeError(error:unknown):string{
   return error instanceof Error?error.message:"AI 服务未完成本次操作";
@@ -32,12 +39,41 @@ export default function AIWorkspace(){
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
   const [tasks,setTasks]=useState<LocalTask[]>([]);
+  const [projects,setProjects]=useState<AIProject[]>([]);
+  const [activeProjectId,setActiveProjectId]=useState("");
+  const [projectGrants,setProjectGrants]=useState<AIProjectSourceGrant[]>([]);
+  const [projectActions,setProjectActions]=useState<AIProjectActionGrant[]>([]);
+  const [projectAudit,setProjectAudit]=useState<AIProjectAuditEvent[]>([]);
+  const [newProjectName,setNewProjectName]=useState("");
+  const [newProjectPurpose,setNewProjectPurpose]=useState("");
+  const [editProjectName,setEditProjectName]=useState("");
+  const [editProjectPurpose,setEditProjectPurpose]=useState("");
+  const [grantDuration,setGrantDuration]=useState<"1d"|"7d"|"30d"|"never">("7d");
   const [chosen,setChosen]=useState<string[]>([]);
   const [planStart,setPlanStart]=useState(()=>new Date().toLocaleDateString("en-CA"));
   const [previewMode,setPreviewMode]=useState<"chat"|"plan">("chat");
   const [planDraft,setPlanDraft]=useState<AIPlanSuggestion[]|null>(null);
   const [planNames,setPlanNames]=useState<Record<string,string>>({});
-  const [planSnapshot,setPlanSnapshot]=useState<LocalTask[]>([]);
+
+
+  const activeProject=projects.find(item=>item.id===activeProjectId&&!item.archivedAt)??null;
+  const planningAction=projectActions.find(item=>item.action==="planning.propose");
+  function expiryFromDuration():string|null{
+    const duration=grantDuration==="1d"?86_400_000:
+      grantDuration==="7d"?7*86_400_000:
+      grantDuration==="30d"?30*86_400_000:0;
+    return duration?new Date(Date.now()+duration).toISOString():null;
+  }
+  async function reloadProjectDetails(id:string):Promise<void>{
+    const [grants,actions,audit]=await Promise.all([
+      window.desktop.ai.projects.sourceGrants(id),
+      window.desktop.ai.projects.actionGrants(id),
+      window.desktop.ai.projects.audit(id),
+    ]);
+    if(id===activeProjectId){
+      setProjectGrants(grants);setProjectActions(actions);setProjectAudit(audit);
+    }
+  }
 
   useEffect(()=>{
     let active=true;
@@ -47,8 +83,141 @@ export default function AIWorkspace(){
     }).catch(e=>{if(active)setError(describeError(e));});
     void window.desktop.tasks.list().then(value=>{if(active)setTasks(value);})
       .catch(e=>{if(active)setError(describeError(e));});
+    void window.desktop.ai.projects.list().then(value=>{
+      if(!active)return;
+      setProjects(value);
+      const first=value.find(item=>!item.archivedAt);
+      if(first)setActiveProjectId(first.id);
+    }).catch(e=>{if(active)setError(describeError(e));});
     return()=>{active=false;};
   },[]);
+
+  useEffect(()=>{
+    let active=true;
+    if(!activeProjectId){
+      setProjectGrants([]);setProjectActions([]);setProjectAudit([]);
+      return()=>{active=false;};
+    }
+    const project=projects.find(item=>item.id===activeProjectId);
+    if(project){setEditProjectName(project.name);setEditProjectPurpose(project.purpose);}
+    void Promise.all([
+      window.desktop.ai.projects.sourceGrants(activeProjectId),
+      window.desktop.ai.projects.actionGrants(activeProjectId),
+      window.desktop.ai.projects.audit(activeProjectId),
+    ]).then(([grants,actions,audit])=>{
+      if(active){setProjectGrants(grants);setProjectActions(actions);setProjectAudit(audit);}
+    }).catch(e=>{if(active)setError(describeError(e));});
+    return()=>{active=false;};
+  },[activeProjectId,projects]);
+
+  async function cancelActivePreview():Promise<void>{
+    if(!preview)return;
+    if(previewMode==="plan")await window.desktop.ai.planCancel();
+    else setStatus(await window.desktop.ai.cancel());
+    setPreview(null);
+  }
+
+  async function createProject(event:FormEvent<HTMLFormElement>):Promise<void>{
+    event.preventDefault();
+    if(busy||sending)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      await cancelActivePreview();
+      const created=await window.desktop.ai.projects.create({
+        name:newProjectName,purpose:newProjectPurpose,
+      });
+      const next=await window.desktop.ai.projects.list();
+      setProjects(next);setActiveProjectId(created.id);
+      setNewProjectName("");setNewProjectPurpose("");
+      setChosen([]);setPlanDraft(null);setPreview(null);
+      setNotice("已创建仅保存在本机的 AI 项目空间。项目没有自动读取任何资料。");
+    }catch(e){setError(describeError(e));}
+    finally{setBusy(false);}
+  }
+
+  async function saveProject():Promise<void>{
+    if(!activeProject||busy||sending)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const saved=await window.desktop.ai.projects.rename({
+        id:activeProject.id,name:editProjectName,purpose:editProjectPurpose,
+      });
+      setProjects(items=>items.map(item=>item.id===saved.id?saved:item));
+      setNotice("项目名称和用途已保存。");
+    }catch(e){setError(describeError(e));}
+    finally{setBusy(false);}
+  }
+
+  async function archiveProject():Promise<void>{
+    if(!activeProject||busy||sending)return;
+    if(!window.confirm("归档此 AI 项目？所有资料读取、模型服务端点发送和动作授权将立即撤销。审计记录会保留；不会删除原始任务。"))return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      await cancelActivePreview();
+      await window.desktop.ai.projects.archive(activeProject.id);
+      const next=await window.desktop.ai.projects.list();
+      setProjects(next);setActiveProjectId(next.find(item=>!item.archivedAt)?.id??"");
+      setChosen([]);setPlanDraft(null);setPreview(null);
+      setNotice("项目已归档，所有项目授权已撤销；原始任务和日历数据未删除。");
+    }catch(e){setError(describeError(e));}
+    finally{setBusy(false);}
+  }
+
+  async function switchProject(id:string):Promise<void>{
+    if(id===activeProjectId)return;
+    try{await cancelActivePreview();}catch(e){setError(describeError(e));return;}
+    setPlanDraft(null);setChosen([]);
+    setActiveProjectId(id);
+  }
+
+  async function setTaskPermission(taskId:string,permission:"local"|"remote",enabled:boolean):Promise<void>{
+    if(!activeProject||busy||sending)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const current=projectGrants.find(item=>item.sourceType==="task"&&item.sourceId===taskId);
+      const currentStillActive=!!current&&current.revokedAt===null&&
+        (!current.expiresAt||Date.parse(current.expiresAt)>Date.now());
+      const canReadLocal=permission==="local"?enabled:currentStillActive&&!!current?.canReadLocal;
+      // Re-authorizing local access never silently restores an expired/revoked
+      // cloud-transfer consent. That permission needs its own fresh click.
+      const canSendRemote=permission==="remote"?enabled&&canReadLocal:
+        (enabled&&currentStillActive?!!current?.canSendRemote:false);
+      if(!canReadLocal&&!canSendRemote){
+        await window.desktop.ai.projects.revokeSourceGrant({
+          projectId:activeProject.id,sourceType:"task",sourceId:taskId,
+        });
+        setChosen(items=>items.filter(id=>id!==taskId));
+      }else{
+        await window.desktop.ai.projects.setSourceGrant({
+          projectId:activeProject.id,sourceType:"task",sourceId:taskId,
+          canReadLocal,canSendRemote,
+          // Editing one permission must not silently extend another active grant.
+          expiresAt:currentStillActive?current!.expiresAt:expiryFromDuration(),
+        });
+        if(!canSendRemote)setChosen(items=>items.filter(id=>id!==taskId));
+      }
+      if(preview&&previewMode==="plan")await cancelActivePreview();
+      await reloadProjectDetails(activeProject.id);
+      setNotice("项目资料授权已更新。读取权限与模型端点发送权限彼此独立；已有规划预览已取消，需要重新审查。");
+    }catch(e){setError(describeError(e));}
+    finally{setBusy(false);}
+  }
+
+  async function setPlanningPermission(enabled:boolean):Promise<void>{
+    if(!activeProject||busy||sending)return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      await window.desktop.ai.projects.setActionGrant({
+        projectId:activeProject.id,action:"planning.propose",
+        enabled,expiresAt:enabled?expiryFromDuration():null,
+      });
+      if(preview&&previewMode==="plan")await cancelActivePreview();
+      await reloadProjectDetails(activeProject.id);
+      if(!enabled){setChosen([]);setPlanDraft(null);}
+      setNotice(enabled?"已允许此项目生成待审查的学习计划草稿。":"已撤销此项目生成学习计划草稿的权限。");
+    }catch(e){setError(describeError(e));}
+    finally{setBusy(false);}
+  }
 
   async function connect(event:FormEvent<HTMLFormElement>):Promise<void>{
     event.preventDefault();
@@ -95,14 +264,24 @@ export default function AIWorkspace(){
     if(busy||sending||preview)return;
     setBusy(true);setError("");setNotice("");setPlanDraft(null);
     try{
+      if(!activeProjectId)throw Error("请先创建或选择一个 AI 项目空间");
       const latest=await window.desktop.tasks.list();
       setTasks(latest);
       const eligible=eligibleAIPlanTasks(latest,chosen);
-      const prompt=buildAIPlanPrompt(latest,chosen,planStart);
-      const next=await window.desktop.ai.prepare(prompt);
-      setPlanSnapshot(eligible);
+      const grants=new Map(projectGrants.map(item=>[item.sourceId,item]));
+      if(eligible.some(task=>!grants.get(task.id)?.canReadLocal||
+        !grants.get(task.id)?.canSendRemote))
+        throw Error("本次所选任务必须分别授予项目本地读取和模型服务端点发送权限");
+      if(!projectActions.find(item=>item.action==="planning.propose"&&item.enabled))
+        throw Error("请先单独允许此项目生成学习时间草稿");
+      const next=await window.desktop.ai.planPrepare({
+        projectId:activeProjectId,taskIds:chosen,
+        settings:{startDate:planStart,days:7,dailyStart:"18:00",
+          dailyEnd:"21:00",minutesPerTask:45},
+      });
       setPlanNames(Object.fromEntries(eligible.map(t=>[t.id,t.title])));
       setPreview(next);setPreviewMode("plan");
+      void reloadProjectDetails(activeProjectId).catch(e=>setError(describeError(e)));
     }catch(e){setError(describeError(e));}
     finally{setBusy(false);}
   }
@@ -110,8 +289,11 @@ export default function AIWorkspace(){
   async function discard():Promise<void>{
     if(sending)return;
     setBusy(true);
-    try{setStatus(await window.desktop.ai.cancel());setPreview(null);}
-    catch(e){setError(describeError(e));}
+    try{
+      if(previewMode==="plan")await window.desktop.ai.planCancel();
+      else setStatus(await window.desktop.ai.cancel());
+      setPreview(null);
+    }catch(e){setError(describeError(e));}
     finally{setBusy(false);}
   }
 
@@ -120,17 +302,18 @@ export default function AIWorkspace(){
     const accepted=preview;
     setSending(true);setError("");setNotice("");
     try{
-      const answer=await window.desktop.ai.confirm(accepted.approvalId);
       if(previewMode==="plan"){
-        try{
-          const result=parseAIPlanDraft(answer.text,planSnapshot,planStart);
-          setPlanDraft(result);
-          setNotice("AI 结构化建议已通过格式和范围验证；仅供参考，尚未写入正式任务或日历。");
-        }catch(e){
-          setPlanDraft(null);
-          setError(describeError(e));
-        }
+        const acceptedPlan=await window.desktop.ai.planConfirm(accepted.approvalId);
+        const result:AIPlanSuggestion[]=acceptedPlan.proposal.blocks.map(block=>{
+          const hour=String(Math.floor(block.startMinute/60)).padStart(2,"0");
+          const minute=String(block.startMinute%60).padStart(2,"0");
+          return {taskId:block.taskId,day:block.day,start:hour+":"+minute,
+            minutes:block.durationMinutes,reason:block.rationale};
+        });
+        setPlanDraft(result);
+        setNotice("项目授权已在发送前复核；AI 草稿已通过主进程时间窗、截止日期和冲突校验，尚未应用到正式日历。");
       }else{
+        const answer=await window.desktop.ai.confirm(accepted.approvalId);
         setAnswers(items=>[...items,{id:Date.now(),question:accepted.prompt,answer}].slice(-12));
         setQuestion("");
         setNotice("已收到本次单轮回答。回答未自动写入日历、任务、知识库或邮件。");
@@ -138,14 +321,19 @@ export default function AIWorkspace(){
     }catch(e){setError(describeError(e));}
     finally{
       setPreview(null);setSending(false);
+      if(previewMode==="plan"&&activeProjectId)
+        void reloadProjectDetails(activeProjectId).catch(e=>setError(describeError(e)));
       void window.desktop.ai.status().then(setStatus).catch(()=>{});
     }
   }
 
   async function cancelRequest():Promise<void>{
     try{
-      setStatus(await window.desktop.ai.cancel());
-      setPreview(null);setNotice("已尝试中止请求。服务商可能仍已处理或计费，请在平台核对用量；不会自动重试。");
+      if(previewMode==="plan"){
+        await window.desktop.ai.planCancel();
+        setStatus(await window.desktop.ai.status());
+      }else setStatus(await window.desktop.ai.cancel());
+      setPreview(null);setNotice("已尝试中止当前 AI 请求。服务商可能仍已处理或计费，请在平台核对用量；不会自动重试。");
     }catch(e){setError(describeError(e));}
   }
 
@@ -165,7 +353,7 @@ export default function AIWorkspace(){
       每日最多 {status.dailyRequestLimit} 次请求、每次最多 {status.maxOutputTokens} 个输出 token；
       这是软件端限额，<strong>不是费用金额上限</strong>，其他设备和平台用量不受此限额控制。
       API 请求指定不保存响应供模型会话使用，但服务商仍会依其 API 数据处理政策处理请求。
-      普通提问不会自动读取个人数据；下方规划功能仅在你逐项勾选任务并确认原文后，才会发送所选任务的标题、截止日、优先级和标识，不发送描述、Canvas 链接、邮箱或知识库。模型不能调用工具或写入日历。
+      普通提问不会自动读取个人数据；项目规划必须先在本机项目空间逐项授权个人任务读取，再单独允许向模型服务端点发送。主进程会在付费请求前复核授权并完整展示实际提示词，只发送所选个人任务的标题、截止日、优先级和标识，不发送描述、Canvas 链接、邮箱或知识库。模型不能调用工具或写入日历。
       请勿在聊天或 GitHub 中分享 API Key。
     </div>
     {error&&<div className="error-banner" role="alert"><span>{error}</span>
@@ -283,6 +471,135 @@ export default function AIWorkspace(){
       </section>
     </div>
     <section className="panel ai-draft-panel">
+      <div className="eyebrow">LOCAL AI PROJECTS · EXPLICIT PERMISSIONS</div>
+      <h2>AI 项目空间与权限</h2>
+      <p className="privacy-note">
+        项目及授权记录仅保存在此设备，不会自动同步到团队空间。当前仅接入个人任务作为项目资料；
+        知识库、邮箱、Canvas 和本地文件尚未接入此项目授权层。项目权限不会自动赋予 AI 写入、发信或使用外部工具的能力。
+      </p>
+      {projects.some(item=>!item.archivedAt)&&<div className="ai-config-form">
+        <label>当前 AI 项目
+          <select value={activeProjectId} disabled={busy||sending}
+            onChange={event=>void switchProject(event.target.value)}>
+            {projects.filter(item=>!item.archivedAt).map(item=>
+              <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </label>
+        {activeProject&&<>
+          <label>项目名称
+            <input value={editProjectName} maxLength={80} disabled={busy||sending}
+              onChange={event=>setEditProjectName(event.target.value)}/>
+          </label>
+          <label>项目目的
+            <textarea rows={2} value={editProjectPurpose} maxLength={300} disabled={busy||sending}
+              onChange={event=>setEditProjectPurpose(event.target.value)}/>
+          </label>
+          <div className="button-row">
+            <button className="secondary-button" disabled={busy||sending}
+              onClick={()=>void saveProject()}>保存项目资料</button>
+            <button className="secondary-button" disabled={busy||sending}
+              onClick={()=>void archiveProject()}>归档并撤销全部授权</button>
+          </div>
+          <label>新授权默认有效期
+            <select value={grantDuration} disabled={busy||sending}
+              onChange={event=>setGrantDuration(event.target.value as "1d"|"7d"|"30d"|"never")}>
+              <option value="1d">1 天</option>
+              <option value="7d">7 天</option>
+              <option value="30d">30 天</option>
+              <option value="never">持续有效，直到手动撤销</option>
+            </select>
+          </label>
+          <div className="planner-select">
+            <label>
+              <input type="checkbox" checked={!!planningAction?.enabled}
+                disabled={busy||sending||!planningAction?.available}
+                onChange={event=>void setPlanningPermission(event.target.checked)}/>
+              <span>允许 AI 在此项目生成学习计划草稿（只生成待审查建议，不写入正式日历）</span>
+            </label>
+          </div>
+          {planningAction?.enabled&&planningAction.expiresAt&&
+            <p className="privacy-note">规划草稿动作授权到期：{new Date(planningAction.expiresAt).toLocaleString("zh-CN")}</p>}
+          <h3>项目资料访问权限</h3>
+          <p className="privacy-note">
+            本地读取与模型服务端点发送必须分别授权。发送前仍会完整预览实际提示词并要求你再次确认；
+            撤销或过期的授权会在主进程阻止新请求。
+          </p>
+          <div className="planner-candidates ai-draft-candidates" aria-label="项目个人任务授权">
+            {tasks.filter(task=>task.visible&&!task.completed&&task.source===null).slice(0,50).map(task=>{
+              const grant=projectGrants.find(item=>item.sourceType==="task"&&item.sourceId===task.id);
+              const local=!!grant?.canReadLocal&&grant.revokedAt===null&&
+                (!grant.expiresAt||Date.parse(grant.expiresAt)>Date.now());
+              const remote=local&&!!grant?.canSendRemote;
+              return <div key={task.id} className="planner-select ai-project-resource">
+                <strong>{task.title}</strong>
+                <span>截止 {task.dueDate??"未设置"} · {task.priority}</span>
+                <label>
+                  <input type="checkbox" checked={local} disabled={busy||sending}
+                    onChange={event=>void setTaskPermission(task.id,"local",event.target.checked)}/>
+                  允许项目在本机读取此任务摘要
+                </label>
+                <label>
+                  <input type="checkbox" checked={remote} disabled={busy||sending||!local}
+                    onChange={event=>void setTaskPermission(task.id,"remote",event.target.checked)}/>
+                  允许将此任务标题、截止日期和优先级发送给当前模型服务端点（通常为云端）
+                </label>
+                <label>
+                  <input type="checkbox" checked={chosen.includes(task.id)}
+                    disabled={busy||sending||!!preview||!local||!remote||!planningAction?.enabled}
+                    onChange={event=>setChosen(items=>event.target.checked
+                      ?items.length<8?[...items,task.id]:items
+                      :items.filter(id=>id!==task.id))}/>
+                  选入本次学习计划请求
+                </label>
+                {grant?.expiresAt&&<small>授权到期：{new Date(grant.expiresAt).toLocaleString("zh-CN")}</small>}
+              </div>;
+            })}
+            {!tasks.some(task=>task.visible&&!task.completed&&task.source===null)&&<p>当前没有可授权的个人任务。</p>}
+          </div>
+          <p className="privacy-note">项目已授权 {projectGrants.filter(item=>item.canReadLocal&&item.revokedAt===null&&
+            (!item.expiresAt||Date.parse(item.expiresAt)>Date.now())).length} 项任务；
+            已选择 {chosen.length}/8 项用于本次规划。任务描述、Canvas 链接和其他任务不会发送。</p>
+          <h3>尚未开放的高影响动作（默认拒绝）</h3>
+          <div className="planner-candidates">
+            {projectActions.filter(action=>action.action!=="planning.propose").map(action=><label key={action.action} className="planner-select">
+              <input type="checkbox" checked={action.enabled}
+                disabled={!action.available||busy||sending}
+                onChange={event=>void setPlanningPermission(event.target.checked)}/>
+              <span>{action.action} · {action.available?"当前支持：仅生成规划草稿":"尚未实现，保持禁止"}</span>
+            </label>)}
+          </div>
+          <p className="privacy-note">
+            修改任务、写入日历、发送邮件、写入文件和调用外部工具目前没有执行器，即使未来出现模型请求也会被拒绝。
+            规划草稿不会自动应用。
+          </p>
+          <h3>最近权限审计</h3>
+          {projectAudit.length===0?<p className="privacy-note">尚无授权或访问记录。</p>:
+            <ul>{projectAudit.slice(0,8).map(event=><li key={event.id}>
+              {projectAuditNames[event.kind]} ·
+              {event.result==="allowed"?"授权检查通过":event.result==="denied"?"授权检查拒绝":"已记录"} ·
+              {event.destination==="configured-model"?"模型服务端点":event.destination==="local"?"本机":"本地操作"} ·
+              {new Date(event.occurredAt).toLocaleString("zh-CN")}
+            </li>)}</ul>}
+        </>}
+      </div>}
+      <form className="ai-config-form" onSubmit={event=>void createProject(event)}>
+        <h3>新建个人 AI 项目</h3>
+        <label>项目名称
+          <input value={newProjectName} required maxLength={80} disabled={busy||sending}
+            placeholder="例如：微积分期末复习"
+            onChange={event=>setNewProjectName(event.target.value)}/>
+        </label>
+        <label>项目目的（可选）
+          <textarea rows={2} value={newProjectPurpose} maxLength={300} disabled={busy||sending}
+            placeholder="描述这个项目要完成的工作"
+            onChange={event=>setNewProjectPurpose(event.target.value)}/>
+        </label>
+        <button className="primary-button" type="submit" disabled={busy||sending}>
+          创建本机 AI 项目空间
+        </button>
+      </form>
+    </section>
+    <section className="panel ai-draft-panel">
       <div className="eyebrow">OPT-IN STRUCTURED PLANNING DRAFT</div>
       <h2>AI 学习时间草稿（不自动应用）</h2>
       <p className="privacy-note">只选择你愿意外传的任务。预览会完整展示实际发送内容；AI 结果只做格式与范围验证，不作为已确认时间块，也不自动查询课表。请不要勾选包含敏感信息的标题。</p>
@@ -290,20 +607,11 @@ export default function AIWorkspace(){
         <input type="date" value={planStart} min={new Date().toLocaleDateString("en-CA")}
           disabled={busy||sending||!!preview} onChange={event=>setPlanStart(event.target.value)}/>
       </label>
-      <div className="planner-candidates ai-draft-candidates" aria-label="允许发送的任务候选">
-        {tasks.filter(t=>t.visible&&!t.completed).slice(0,50).map(task=>
-          <label key={task.id} className="planner-select">
-            <input type="checkbox" disabled={busy||sending||!!preview}
-              checked={chosen.includes(task.id)}
-              onChange={event=>setChosen(v=>event.target.checked
-                ? v.length<8?[...v,task.id]:v : v.filter(id=>id!==task.id))}/>
-            <span>{task.title} · 截止 {task.dueDate??"未设置"} · {task.priority}</span>
-          </label>
-        )}
-      </div>
-      <p className="privacy-note">已选 {chosen.length}/8 项；隐藏或完成的任务不可选择，任务描述和来源 URL 不会发送。</p>
-      <button className="primary-button" disabled={busy||sending||!!preview||!status.connected||status.remainingToday===0||chosen.length===0}
-        onClick={()=>void preparePlan()}>预览选中任务的 AI 规划请求</button>
+      <p className="privacy-note">当前项目：{activeProject?.name??"未选择"} · 已选 {chosen.length}/8 项。
+        只有分别授予本地读取和模型服务端点发送权限的任务才可加入本次请求。</p>
+      <button className="primary-button" disabled={busy||sending||!!preview||!status.connected||
+        status.remainingToday===0||!activeProject||!planningAction?.enabled||chosen.length===0}
+        onClick={()=>void preparePlan()}>预览项目授权范围内的 AI 规划请求</button>
       {planDraft!==null&&<div className="ai-answer-list ai-draft-result" role="region" aria-label="AI 学习草稿">
         <h3>待人工核对的 AI 建议 · {planDraft.length} 段</h3>
         {planDraft.length===0?<p>模型未安排任何时间块。</p>:

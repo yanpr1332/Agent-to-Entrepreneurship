@@ -450,3 +450,8 @@ node node_modules/vitest/vitest.mjs run --pool=threads
 ### V0.2-03 可检查的本地神经 ONNX 环境
 
 知识库新增 **「检查本机 Python / ONNX CPU 环境」**。CLI 同样可运行 `npm run doctor:neural` 只读诊断 numpy/onnxruntime/transformers、Python 版本和 CPU Provider，不加载私人模型，不联网，也不会把本机 Python 路径暴露给 Renderer。用户可**自行决定**在线安装固定直接依赖：`npm run setup:neural:runtime -- --online`，或者从本机预先审核过的 wheels 离线安装：`npm run setup:neural:runtime -- --wheelhouse ABSOLUTE_DIRECTORY`。安装到当前用户专用虚拟环境，绝不由应用启动自动下载。真正的 E5/BGE ONNX 模型与权重仍须用户按许可自行准备，第三方 Python wheels/权重不内置于 Electron。详见 [62 安装与验收手册](docs/w5/62_V02_03_NEURAL_RUNTIME.md)。
+
+
+### V0.2-04 本机 AI 项目空间与权限
+
+AI 学习助手新增个人本机项目空间。可逐项授予个人任务的**本地读取**与**模型服务端点发送**权限，分别设置有效期并撤销；生成学习计划草稿还需单独开启动作许可。Main 在付费请求前后重新校验项目权限，审计只记录元数据，不记录提示词、任务正文或 API Key。当前仅支持个人任务和规划草稿；知识库、邮件、Canvas、文件和团队共享尚未统一接入，所有高影响 AI 写操作和外部工具仍禁止。详见 [63 本机 AI 项目权限与验收手册](docs/w5/63_V02_04_AI_PROJECT_PERMISSIONS.md)。

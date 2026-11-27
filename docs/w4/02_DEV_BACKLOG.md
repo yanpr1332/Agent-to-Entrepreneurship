@@ -241,3 +241,10 @@
 - 公共合同、数据库 Schema、权限模型、连接器核心接口的改动必须先提交设计说明并经相关模块复核。
 - 任何任务都不得直接修改另一模块的数据库表；通过模块 Port/事件契约协作。
 - 具体执行状态、负责人和证据链接应在 GitHub Issue/PR 中维护；本文件只保留任务定义和唯一 ID。
+
+
+## 2026-11-26：V0.2-04 本机 AI 项目与细粒度授权（单 PR）
+
+- 新增独立本机 AI 项目 SQLite：项目创建/重命名/归档；个人任务来源级本地读取与模型端点发送双许可；1/7/30 天或手动撤销；planning.propose 单独动作许可；默认拒绝 task/calendar/mail/file/tool 高影响动作；审计仅保留元数据且每项目最多 500 条。
+- AI 规划从 Renderer 直发通用 Prompt 改为 Main AIPlanningCoordinator 项目授权路径：先授权再读任务，预览后、AI Key 异步解析后和网络请求前复核授权，模型响应后再复核来源/动作/任务版本，只有通过现有 PlanningStore 验证才生成待审查草稿；不自动写入日历/任务。审批令牌与取消操作分 chat/mail/project-plan scope，避免通用 AI confirm/cancel IPC 绕过专用协调器；取消中的服务商请求结束前继续占用请求槽；只允许 source=null 的个人任务进入项目上下文。详见 [63](../w5/63_V02_04_AI_PROJECT_PERMISSIONS.md)。
+- **仍 Blocked/未覆盖**：知识库、邮件、Canvas、本地文件 ACL 的统一接入；团队/云端 AI 项目与 RLS；Agent/外部工具执行器；真实 Windows/macOS UI、重启和撤权竞态验收；真实第三方 API 费用和数据处理验收。CI 不代表以上验收完成。

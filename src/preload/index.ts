@@ -58,6 +58,11 @@ import type {
 } from "../shared/ai-model";
 
 import type { AIPlanPrepareInput, AIPlanAccepted } from "../shared/ai-plan-model";
+import type {
+  AIProject,AIProjectCreateInput,AIProjectRenameInput,
+  AIProjectSourceGrant,AIProjectSourceGrantInput,AIProjectSourceRevokeInput,
+  AIProjectActionGrant,AIProjectActionGrantInput,AIProjectAuditEvent,
+} from "../shared/ai-project-model";
 
 const desktopApi = Object.freeze({
   ping: () => ipcRenderer.invoke(IPC_CHANNELS.appPing) as Promise<{ ok: true }>,
@@ -228,6 +233,28 @@ const desktopApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.aiPlanPrepare,selection) as Promise<AIPreview>,
     planConfirm: (approvalId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.aiPlanConfirm,approvalId) as Promise<AIPlanAccepted>,
+    planCancel:()=>ipcRenderer.invoke(IPC_CHANNELS.aiPlanCancel) as Promise<{cancelled:true}>,
+    projects:Object.freeze({
+      list:()=>ipcRenderer.invoke(IPC_CHANNELS.aiProjectsList) as Promise<AIProject[]>,
+      create:(input:AIProjectCreateInput)=>
+        ipcRenderer.invoke(IPC_CHANNELS.aiProjectCreate,input) as Promise<AIProject>,
+      rename:(input:AIProjectRenameInput)=>
+        ipcRenderer.invoke(IPC_CHANNELS.aiProjectRename,input) as Promise<AIProject>,
+      archive:(id:string)=>
+        ipcRenderer.invoke(IPC_CHANNELS.aiProjectArchive,id) as Promise<AIProject>,
+      sourceGrants:(id:string)=>
+        ipcRenderer.invoke(IPC_CHANNELS.aiProjectSourceGrants,id) as Promise<AIProjectSourceGrant[]>,
+      setSourceGrant:(input:AIProjectSourceGrantInput)=>
+        ipcRenderer.invoke(IPC_CHANNELS.aiProjectSetSourceGrant,input) as Promise<AIProjectSourceGrant>,
+      revokeSourceGrant:(input:AIProjectSourceRevokeInput)=>
+        ipcRenderer.invoke(IPC_CHANNELS.aiProjectRevokeSourceGrant,input) as Promise<{revoked:boolean}>,
+      actionGrants:(id:string)=>
+        ipcRenderer.invoke(IPC_CHANNELS.aiProjectActionGrants,id) as Promise<AIProjectActionGrant[]>,
+      setActionGrant:(input:AIProjectActionGrantInput)=>
+        ipcRenderer.invoke(IPC_CHANNELS.aiProjectSetActionGrant,input) as Promise<AIProjectActionGrant>,
+      audit:(id:string)=>
+        ipcRenderer.invoke(IPC_CHANNELS.aiProjectAudit,id) as Promise<AIProjectAuditEvent[]>,
+    }),
   }),
   calendar: Object.freeze({
     list:()=>ipcRenderer.invoke(IPC_CHANNELS.fixedCalendarList) as Promise<CalendarDisplayEvent[]>,

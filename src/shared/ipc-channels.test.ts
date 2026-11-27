@@ -8,9 +8,20 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
       "ai:confirm",
       "ai:connect",
       "ai:disconnect",
+      "ai:plan-cancel",
       "ai:plan-confirm",
       "ai:plan-prepare",
       "ai:prepare",
+      "ai:project-action-grants",
+      "ai:project-archive",
+      "ai:project-audit",
+      "ai:project-create",
+      "ai:project-rename",
+      "ai:project-revoke-source-grant",
+      "ai:project-set-action-grant",
+      "ai:project-set-source-grant",
+      "ai:project-source-grants",
+      "ai:projects-list",
       "ai:status",
       "app:get-version",
       "app:ping",
@@ -181,7 +192,10 @@ describe("IPC allowlist integration: mail and shared cloud", () => {
   it("permits only explicit AI status, configuration, approval, cancel and disconnect calls",()=>{
     expect(Object.values(IPC_CHANNELS).filter(x=>x.startsWith("ai:"))).toEqual([
       "ai:status","ai:connect","ai:disconnect","ai:prepare","ai:confirm","ai:cancel",
-      "ai:plan-prepare","ai:plan-confirm",
+      "ai:plan-prepare","ai:plan-confirm","ai:plan-cancel",
+      "ai:projects-list","ai:project-create","ai:project-rename","ai:project-archive",
+      "ai:project-source-grants","ai:project-set-source-grant","ai:project-revoke-source-grant",
+      "ai:project-action-grants","ai:project-set-action-grant","ai:project-audit",
     ]);
   });
 

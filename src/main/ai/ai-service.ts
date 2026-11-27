@@ -10,9 +10,10 @@ import { AIKeyVault } from "./ai-vault";
 import { AIUsageLedger } from "./ai-usage";
 import { OpenAIResponsesClient } from "./openai-responses";
 
+export type AIApprovalScope="chat"|"mail"|"project-plan";
 type ActiveKey={settings:AIPrivateSettings;source:AIKeySource};
 type PendingIntent={
-  id:string;prompt:string;expires:number;generation:number;credentialFingerprint:string;
+  id:string;prompt:string;expires:number;generation:number;credentialFingerprint:string;scope:AIApprovalScope;
 };
 
 /** Explicit two-step approval. No background AI calls, task/calendar writes or telemetry. */
@@ -21,6 +22,7 @@ export class AIService {
   private configurationWarning:AIStatus["configurationWarning"]=null;
   private intent:PendingIntent|null=null;
   private inflight:AbortController|null=null;
+  private inflightScope:AIApprovalScope|null=null;
   private generation=0;
   constructor(
     private readonly vault:AIKeyVault,
@@ -97,11 +99,22 @@ export class AIService {
     };
   }
 
+  cancelScope(scope:AIApprovalScope):void{
+    if(this.intent?.scope===scope)this.intent=null;
+    if(this.inflight&&this.inflightScope===scope){
+      this.generation++;
+      // Keep the slot occupied until confirm() settles; otherwise a provider
+      // that ignores AbortSignal could overlap a second paid request.
+      this.inflight.abort();
+    }
+  }
+
+  /** Credential changes intentionally invalidate every approval domain. */
   cancel():void{
     this.generation++;
     this.intent=null;
+    // confirm() releases the in-flight slot in finally after the provider settles.
     this.inflight?.abort();
-    this.inflight=null;
   }
 
   async connect(input:unknown):Promise<AIStatus>{
@@ -124,7 +137,8 @@ export class AIService {
     return this.status();
   }
 
-  prepare(promptInput:unknown,now=new Date()):AIPreview {
+  prepare(promptInput:unknown,now=new Date(),scope:AIApprovalScope="chat"):AIPreview {
+    if(scope!=="chat"&&scope!=="mail"&&scope!=="project-plan")throw Error("Invalid AI approval scope");
     const prompt=parseAIPrompt(promptInput);
     if(!this.active)throw Error("Connect your own AI provider API key or set a supported API_KEY environment variable first");
     if(this.inflight)throw Error("An AI request is already in progress");
@@ -132,7 +146,7 @@ export class AIService {
     const id=randomUUID(),expires=now.getTime()+AI_PREVIEW_TTL_MS;
     this.intent={
       id,prompt,expires,generation:this.generation,
-      credentialFingerprint:this.fingerprint(this.active.settings),
+      credentialFingerprint:this.fingerprint(this.active.settings),scope,
     };
     return {approvalId:id,prompt,model:this.active.settings.model,
       provider:this.active.settings.provider,
@@ -142,17 +156,26 @@ export class AIService {
       expiresAt:new Date(expires).toISOString(),maxOutputTokens:AI_OUTPUT_TOKEN_CAP};
   }
 
-  async confirm(idInput:unknown,now=new Date()):Promise<AIAnswer>{
+  async confirm(idInput:unknown,now=new Date(),authorizeBeforeSend?:()=>void,
+    expectedScope:AIApprovalScope="chat"):Promise<AIAnswer>{
     const id=parseAIApprovalId(idInput);
     if(this.inflight)throw Error("An AI request is already in progress");
     const intent=this.intent;
-    this.intent=null; // One-time regardless of provider response.
-    if(!intent || intent.id!==id || intent.expires<now.getTime() ||
-       intent.generation!==this.generation || !this.active){
-      throw Error("AI preview expired or was replaced. Review the question again");
+    // A wrong/old approval ID invalidates the currently displayed one-time
+    // preview. A matching ID from another domain is different: reject it
+    // without consuming the rightful mail/project coordinator's token.
+    if(!intent || intent.id!==id){
+      this.intent=null;
+      throw Error("AI preview expired or was replaced. Review the request again");
     }
+    if(intent.scope!==expectedScope)
+      throw Error("AI preview scope mismatch. Use the matching approval flow");
+    this.intent=null; // Consume a correctly scoped one-time approval before I/O.
+    if(intent.expires<now.getTime() || intent.generation!==this.generation || !this.active)
+      throw Error("AI preview expired or was replaced. Review the request again");
     const controller=new AbortController();
     this.inflight=controller;
+    this.inflightScope=expectedScope;
     const generation=this.generation;
     try{
       const current=await this.resolveActiveKey();
@@ -163,6 +186,9 @@ export class AIService {
         throw Error("AI provider key changed or was removed; review the request again");
       }
       this.active=current;
+      // Domain coordinators can re-check revocable project permissions after
+      // async credential resolution and immediately before any paid network I/O.
+      authorizeBeforeSend?.();
       this.ledger.reserve(now); // Persist BEFORE making a potentially chargeable request.
       const result=await this.client.ask(current.settings,intent.prompt,controller.signal);
       if(controller.signal.aborted || generation!==this.generation)
@@ -170,7 +196,7 @@ export class AIService {
       this.ledger.recordTokens(now,result.usage.inputTokens,result.usage.outputTokens);
       return result;
     }finally{
-      if(this.inflight===controller)this.inflight=null;
+      if(this.inflight===controller){this.inflight=null;this.inflightScope=null;}
     }
   }
 }

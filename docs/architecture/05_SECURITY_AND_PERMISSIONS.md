@@ -21,3 +21,8 @@ Renderer 开启 contextIsolation、关闭 nodeIntegration、使用适当沙箱�
 
 ## 审计与可靠性
 最小审计字段 actor/workspace/resourceRef/action/purpose/destination/scope/requestId/time/result；不要记录 Token、全文邮件或课堂录音。账号/独立身份、可选 jAccount、设备、团队角色分别建模；换账号和注销须保住本地唯一原件。TLS、服务端静态加密、密钥管理属于安全基线；端到端加密范围与团队搜索的取舍仍待决，见 [风险](11_RISKS_AND_OPEN_QUESTIONS.md)。未经授权外传、越权共享、未经确认发信或失效的紧急退出都是 P0 发布阻塞项。
+
+
+## 2026-11-26 实现进展：本机 AI 项目授权 MVP
+
+已落地个人本机项目、任务级本地读取/云端推理双许可、期限/撤销、规划草稿动作许可和元数据审计。当前只接入个人任务摘要与 AI 学习计划草稿；知识库、邮件、Canvas、文件和团队项目 ACL 仍需后续接入。高影响动作和外部工具均保持 deny-by-default。详见 [V0.2-04 实施与验收](../w5/63_V02_04_AI_PROJECT_PERMISSIONS.md)。
