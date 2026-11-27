@@ -98,8 +98,10 @@ describe("paid AI requires explicit one-time approval",()=>{
     const canceled=service.confirm(mail.approvalId,new Date(),undefined,"mail");
     await vi.waitFor(()=>expect(resolveCanceled).toBeTypeOf("function"));
     service.cancelScope("mail");
+    expect(()=>service.prepare("Do not overlap")).toThrow("already in progress");
     resolveCanceled(answer);
     await expect(canceled).rejects.toThrow("canceled");
+    expect(()=>service.prepare("After cancellation settles")).not.toThrow();
     expect(ledger.today().used).toBe(2);
     ledger.close();
   });
